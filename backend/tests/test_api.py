@@ -89,6 +89,13 @@ def test_departures_by_bike(client):
     assert cycling[0]["stop"]["access_s"] < 300
 
 
+def test_departures_per_route(client):
+    params = {"lat": DELTA[0], "lon": DELTA[1], "time": "2026-10-12T08:15"}
+    resp = client.get("/api/departures", params={**params, "per_route": 1})
+    assert [c["trip_id"] for c in resp.json()] == ["tr:T_BUS"]
+    assert client.get("/api/departures", params={**params, "per_route": 0}).status_code == 422
+
+
 def test_departures_report_transfer_rules(client):
     resp = client.get(
         "/api/departures",

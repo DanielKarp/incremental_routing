@@ -1,4 +1,5 @@
 import type { PathMode, TransitCall } from '../api';
+import { TRIPS_PER_LINE, groupCalls } from '../callGroups';
 import { routeLabel } from '../plan/build';
 import type { TransferNote } from '../plan/transfers';
 import { formatDuration, formatTime } from '../time';
@@ -11,55 +12,95 @@ interface Props {
   access: PathMode;
   /** A heads-up about changing to or from the adjacent ride, if any. */
   noteFor?: (call: TransitCall) => TransferNote | null;
-  /** When set, each trip is a button that picks it. */
+  /** When set, each trip's time is a button that picks it. */
   onSelect?: (call: TransitCall) => void;
   disabled?: boolean;
 }
 
-/** Trips you could board (departures) or alight from (arrivals) near the frontier. */
+/**
+ * Lines you could board (departures) or alight from (arrivals) near the frontier: one row per
+ * route, headsign and stop, with a time for each of its next (or last) few trips.
+ */
 export function CallList({ calls, direction, access, noteFor, onSelect, disabled }: Props) {
   if (!calls.length) return <p className="muted">No trips found in this window.</p>;
+  const timeOf = (c: TransitCall) =>
+    formatTime(direction === 'departures' ? c.departure : c.arrival);
   return (
-    <ul className="calls">
-      {calls.map((call) => {
-        const time = direction === 'departures' ? call.departure : call.arrival;
-        const note = noteFor?.(call);
-        const content = (
-          <>
-            <span className="call-time">{formatTime(time)}</span>
-            <RouteBadge
-              name={routeLabel(call.route)}
-              color={call.route.color}
-              textColor={call.route.text_color}
-            />
-            <span className="call-headsign">
-              {call.headsign ?? ''} {call.bikes_allowed === 2 && <NoBikesBadge />}
-            </span>
-            <span className="call-stop muted">
-              {call.route.agency ? `${call.route.agency} · ` : ''}
-              {call.stop.name} · {formatDuration(call.stop.access_s)}{' '}
-              {access === 'bike' ? 'by bike' : 'walk'}
-            </span>
-            {note && <span className={`call-note issue-${note.level}`}>{note.text}</span>}
-          </>
-        );
-        return (
-          <li key={`${call.trip_id}@${call.service_date}`}>
-            {onSelect ? (
-              <button
-                type="button"
-                className="call call-button"
-                disabled={disabled}
-                onClick={() => onSelect(call)}
-              >
-                {content}
-              </button>
-            ) : (
-              <div className="call">{content}</div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      <p className="muted">
+        {direction === 'departures' ? 'The next' : 'The last'} {TRIPS_PER_LINE} trips of each
+        line. Pick a time.
+      </p>
+      <ul className="calls">
+        {groupCalls(calls, direction).map(({ key, calls: trips }) => {
+          const { route, headsign, stop } = trips[0];
+          const noBikes = trips.filter((c) => c.bikes_allowed === 2).length;
+          const notes = trips.flatMap((c) => {
+            const note = noteFor?.(c);
+            return note ? [{ call: c, note }] : [];
+          });
+          return (
+            <li key={key} className="call-group">
+              <div className="call-line">
+                <RouteBadge
+                  name={routeLabel(route)}
+                  color={route.color}
+                  textColor={route.text_color}
+                />
+                <span className="call-headsign">{headsign ?? ''}</span>
+                {noBikes > 0 && <NoBikesBadge />}
+              </div>
+              <span className="call-stop muted">
+                {route.agency ? `${route.agency} · ` : ''}
+                {stop.name} · {formatDuration(stop.access_s)}{' '}
+                {access === 'bike' ? 'by bike' : 'walk'}
+              </span>
+              <div className="call-times">
+                {trips.map((c) => {
+                  const level = notes.find((n) => n.call === c)?.note.level;
+                  // Marked only when the line mixes trips that take bikes with ones that don't.
+                  const bikeless = noBikes < trips.length && c.bikes_allowed === 2;
+                  const className = [
+                    'call-time-button',
+                    level && `has-${level}`,
+                    bikeless && 'no-bikes-trip',
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
+                  const label = timeOf(c);
+                  const id = `${c.trip_id}@${c.service_date}`;
+                  return onSelect ? (
+                    <button
+                      key={id}
+                      type="button"
+                      className={className}
+                      disabled={disabled}
+                      title={bikeless ? 'No bikes on this trip' : undefined}
+                      aria-label={`${label}: ${routeLabel(route)} ${headsign ?? ''}`.trim()}
+                      onClick={() => onSelect(c)}
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    <span key={id} className={className}>
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+              {notes.map(({ call, note }) => (
+                <span
+                  key={`${call.trip_id}@${call.service_date}`}
+                  className={`call-note issue-${note.level}`}
+                >
+                  {trips.length > 1 ? `${timeOf(call)}: ` : ''}
+                  {note.text}
+                </span>
+              ))}
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }

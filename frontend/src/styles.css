@@ -522,6 +522,49 @@ button.link {
   font-size: 0.8rem;
 }
 
+/* One line in the departure (or arrival) list: route, where you'd catch it, a button per trip. */
+.call-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 4px;
+}
+
+.call-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button.call-time-button {
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+button.call-time-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.call-time-button.has-warning {
+  border-color: var(--warning-fg);
+  color: var(--warning-fg);
+}
+
+.call-time-button.no-bikes-trip {
+  border-style: dashed;
+}
+
 .call-note.issue-info {
   color: var(--muted);
 }

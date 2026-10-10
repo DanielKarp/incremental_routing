@@ -210,6 +210,16 @@ function addOverlayLayers(m: maplibregl.Map) {
       'circle-stroke-width': 2,
     },
   });
+  // A dark edge under each ride, so pale route colours (Caltrain's grey locals, BART's yellow)
+  // still stand out from the map.
+  m.addLayer({
+    id: 'legs-transit-casing',
+    type: 'line',
+    source: 'legs',
+    filter: ['all', isLine, ['==', ['get', 'mode'], 'transit']],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#1f2937', 'line-width': 8, 'line-opacity': 0.8 },
+  });
   m.addLayer({
     id: 'legs-transit',
     type: 'line',

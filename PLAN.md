@@ -253,7 +253,7 @@ fix them automatically.
 | M3 ✅ | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
 | M4 ✅ | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
 | M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
-| M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. |
+| M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. Departures listed by line. |
 
 M1 must come first because real feeds always surprise you. Everything after it is UI work on
 top of the existing API.
@@ -307,6 +307,18 @@ top of the existing API.
 - **Map picture.** Opening *Summary & export* fits the map to the plan and captures it as an
   image. The image appears in the summary and on the printed page. The plan's start and end
   are drawn into the map itself so they show in the picture.
+- **Pale route colours.** Rides get a dark edge on the map. Without it, routes in pale
+  colours barely showed against the map: Caltrain's grey locals (`dcddde`), its Limited and
+  BART's yellow.
+- **Departures by line** (decision 8). With every operator loaded, a 500 m radius downtown
+  takes in hundreds of trips an hour. A list cut at 40 trips covered only the next 10 minutes
+  at Powell, mostly Muni.
+  - The API's `per_route` option keeps the first few trips of each route, headsign and stop
+    before applying the overall limit. The app asks for 3 per line, up to 500 in all.
+  - The list shows one row per line with a button for each time. Transfer notes sit under
+    the row, with the time they apply to.
+  - At Powell this gives 61 lines and 172 trips, covering the whole hour. Even at 3 km,
+    downtown stays under 400 trips.
 - **Transfer warnings.** When you extend the plan from a transit leg, the departure (or
   arrival) list shows the agency's `transfers.txt` rule for each candidate:
   - a warning when the connection is shorter than the minimum, or when the agency rules the
@@ -433,6 +445,10 @@ top of the existing API.
    and arrival lists only. Choosing a warned connection is allowed.
 7. **Schedules only.** The tool plans future trips, so live data would add complexity
    without helping. Only static GTFS schedules are used.
+8. **Departures by line.** The departure and arrival lists show each line nearby (a route,
+   headsign and stop) once, with its next three trips, or its last three arrivals when
+   planning backwards. Busy lines can't crowd out the rest; a line's later trips are left
+   out.
 
 **Risks:**
 
@@ -441,9 +457,6 @@ top of the existing API.
 - **Cross-agency transfers.** At Millbrae, Diridon and Mountain View each agency has its own
   stop IDs, 100–300 m apart. The connector walk covers this. Neither the agency feeds nor the
   511 regional feed describe transfers between agencies, so there are no warnings for them.
-- **Busy stops with every operator.** Downtown, a 500 m radius takes in hundreds of
-  departures an hour. The list shows the first 40, which at Powell is only the next 10
-  minutes. Filtering by agency or grouping by route would fix this; it's still to decide.
 - **Free services without an SLA** (ORS, FOSSGIS, OpenFreeMap). The provider interface and the
   style URL make each one swappable.
 

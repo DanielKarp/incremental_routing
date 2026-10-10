@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -101,14 +101,16 @@ class GtfsStore:
         limit: int,
         access: PathMode = "walk",
         transfer: TransferContext | None = None,
+        per_route: int | None = None,
     ) -> list[TransitCall]:
         """Trips you could reach (on foot or by bike) and board within window_s after `when`.
 
         With `transfer`, the leg you'd be changing from: each call carries the matching
-        transfers.txt rule, if any.
+        transfers.txt rule, if any. With `per_route`, only the first that many trips of each
+        route, headsign and stop, so a busy line can't crowd the others out of the limit.
         """
         return self._calls(
-            lat, lon, when, radius_m, window_s, limit, access, transfer, forward=True
+            lat, lon, when, radius_m, window_s, limit, access, transfer, per_route, forward=True
         )
 
     def arrivals(
@@ -121,13 +123,15 @@ class GtfsStore:
         limit: int,
         access: PathMode = "walk",
         transfer: TransferContext | None = None,
+        per_route: int | None = None,
     ) -> list[TransitCall]:
         """Trips you could alight from and get to (lat, lon) from within window_s before `when`.
 
         With `transfer`, the leg you'd be changing to: each call carries the matching rule.
+        With `per_route`, only the last that many arrivals of each route, headsign and stop.
         """
         return self._calls(
-            lat, lon, when, radius_m, window_s, limit, access, transfer, forward=False
+            lat, lon, when, radius_m, window_s, limit, access, transfer, per_route, forward=False
         )
 
     def trip(self, trip_id: str, service_date: dt.date) -> TripDetail:
@@ -216,6 +220,7 @@ class GtfsStore:
         limit: int,
         access: PathMode,
         transfer: TransferContext | None,
+        per_route: int | None,
         *,
         forward: bool,
     ) -> list[TransitCall]:
@@ -279,9 +284,12 @@ class GtfsStore:
                         )
 
             if forward:
-                calls = sorted(best.values(), key=lambda c: c.departure)[:limit]
+                calls = sorted(best.values(), key=lambda c: c.departure)
             else:
-                calls = sorted(best.values(), key=lambda c: c.arrival, reverse=True)[:limit]
+                calls = sorted(best.values(), key=lambda c: c.arrival, reverse=True)
+            if per_route is not None:
+                calls = _first_per_route(calls, per_route)
+            calls = calls[:limit]
             if transfer is not None:
                 _attach_transfer_rules(conn, calls, transfer, forward=forward)
         return calls
@@ -375,6 +383,18 @@ def _transfer_rule(
     if best is None:
         return None
     return TransferRule(type=best["transfer_type"], min_transfer_s=best["min_transfer_s"])
+
+
+def _first_per_route(calls: list[TransitCall], n: int) -> list[TransitCall]:
+    """The first n calls, in the given order, of each route, headsign and stop."""
+    seen: Counter[tuple[str, str | None, str]] = Counter()
+    kept = []
+    for call in calls:
+        key = (call.route.route_id, call.headsign, call.stop.stop_id)
+        seen[key] += 1
+        if seen[key] <= n:
+            kept.append(call)
+    return kept
 
 
 def agency_coverage(conn: sqlite3.Connection) -> dict[str, list[AgencyCoverage]]:

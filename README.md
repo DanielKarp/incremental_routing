@@ -74,8 +74,9 @@ Set `ROUTING_PROVIDER=straight-line` to work fully offline.
    start* to plan backwards, then a mode:
    - **Transit:** pick how you'll reach the stop: *Get to the stop by Walking* or *Bike*
      (when planning backwards, how you'll leave it). Then *Find departures* (or *Find
-     arrivals*), choose a trip, and choose the stop where you get off (or on). The walk or
-     bike ride to or from the stop, and any wait, are added for you.
+     arrivals*). Each line nearby gets a row with its next three departures (or, backwards,
+     its last three arrivals). Pick a time, then the stop where you get off (or on). The walk
+     or bike ride to or from the stop, and any wait, are added for you.
 
      When you change from another ride, the list notes the agency's transfer rules. It warns
      when a connection is shorter than the agency's minimum, or when the agency says the

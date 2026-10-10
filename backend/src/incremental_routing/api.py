@@ -29,7 +29,11 @@ Lat = Annotated[float, Query(ge=-90, le=90)]
 Lon = Annotated[float, Query(ge=-180, le=180)]
 Radius = Annotated[float, Query(gt=0, le=3000, description="Search radius in metres")]
 WindowMin = Annotated[int, Query(gt=0, le=360, description="Search window in minutes")]
-Limit = Annotated[int, Query(gt=0, le=200)]
+Limit = Annotated[int, Query(gt=0, le=500)]
+PerRoute = Annotated[
+    int | None,
+    Query(ge=1, le=20, description="At most this many trips per route, headsign and stop"),
+]
 Access = Annotated[
     PathMode, Query(description="How you get between the point and the stop: walk or bike")
 ]
@@ -93,6 +97,7 @@ def create_app(
         access: Access = "walk",
         transfer_stop: TransferStop = None,
         transfer_trip: TransferTrip = None,
+        per_route: PerRoute = None,
     ) -> list[TransitCall]:
         """Trips boardable near (lat, lon) after `time`, allowing for getting to the stop.
 
@@ -101,7 +106,15 @@ def create_app(
         """
         transfer = TransferContext(transfer_stop, transfer_trip) if transfer_stop else None
         return store.departures(
-            lat, lon, localize(time), radius_m, window_min * 60, limit, access, transfer
+            lat,
+            lon,
+            localize(time),
+            radius_m,
+            window_min * 60,
+            limit,
+            access,
+            transfer,
+            per_route,
         )
 
     @app.get("/api/arrivals")
@@ -115,6 +128,7 @@ def create_app(
         access: Access = "walk",
         transfer_stop: TransferStop = None,
         transfer_trip: TransferTrip = None,
+        per_route: PerRoute = None,
     ) -> list[TransitCall]:
         """Trips you could ride to near (lat, lon), arriving before `time` (backward planning).
 
@@ -123,7 +137,15 @@ def create_app(
         """
         transfer = TransferContext(transfer_stop, transfer_trip) if transfer_stop else None
         return store.arrivals(
-            lat, lon, localize(time), radius_m, window_min * 60, limit, access, transfer
+            lat,
+            lon,
+            localize(time),
+            radius_m,
+            window_min * 60,
+            limit,
+            access,
+            transfer,
+            per_route,
         )
 
     @app.get("/api/trip")

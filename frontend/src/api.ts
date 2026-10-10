@@ -121,6 +121,10 @@ export interface CallQuery {
   access?: PathMode;
   /** The transit leg you'd change from (forwards) or to (backwards), for transfer rules. */
   transfer?: { stopId: string; tripId?: string };
+  /** At most this many trips of each route, headsign and stop. */
+  perRoute?: number;
+  /** At most this many trips in all (the backend allows up to 500). */
+  limit?: number;
 }
 
 export class ApiError extends Error {
@@ -149,6 +153,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 function callParams(q: CallQuery): string {
   const { point, time, radiusM = 500, windowMin = 60, access = 'walk', transfer } = q;
+  const { perRoute, limit } = q;
   return new URLSearchParams({
     lat: String(point.lat),
     lon: String(point.lon),
@@ -158,6 +163,8 @@ function callParams(q: CallQuery): string {
     access,
     ...(transfer && { transfer_stop: transfer.stopId }),
     ...(transfer?.tripId && { transfer_trip: transfer.tripId }),
+    ...(perRoute && { per_route: String(perRoute) }),
+    ...(limit && { limit: String(limit) }),
   }).toString();
 }
 

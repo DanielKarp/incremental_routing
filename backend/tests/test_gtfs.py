@@ -144,6 +144,21 @@ def test_no_departures_at_a_trips_last_stop(store):
     assert [c.trip_id for c in calls] == ["tr:T_BUS", "tr:T_BUS2"]
 
 
+def test_departures_can_keep_only_the_first_trips_of_each_route(store):
+    calls = store.departures(*DELTA, at(MONDAY, 8, 15), 500, 3600, 10, per_route=1)
+    assert [c.trip_id for c in calls] == ["tr:T_BUS"]  # T_BUS2 runs the same route later
+
+
+def test_arrivals_keep_the_last_trips_of_each_route(store):
+    echo = (37.43, -122.09)
+    assert [c.trip_id for c in store.arrivals(*echo, at(MONDAY, 9, 0), 500, 3600, 10)] == [
+        "tr:T_BUS2",
+        "tr:T_BUS",
+    ]
+    calls = store.arrivals(*echo, at(MONDAY, 9, 0), 500, 3600, 10, per_route=1)
+    assert [c.trip_id for c in calls] == ["tr:T_BUS2"]  # the latest, nearest the plan's start
+
+
 def test_departure_times_on_dst_change_day(store):
     calls = store.departures(*ALPHA, at(DST_END, 7, 30), 500, 3600, 10)
     assert [c.departure for c in calls] == [at(DST_END, 8, 0)]

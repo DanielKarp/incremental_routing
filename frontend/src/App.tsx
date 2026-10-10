@@ -8,6 +8,7 @@ import {
   type RouteResult,
   type TransitCall,
 } from './api';
+import { TRIPS_PER_LINE } from './callGroups';
 import { Itinerary } from './components/Itinerary';
 import { type MapHandle, MapView, type TripPreview } from './components/MapView';
 import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
@@ -53,6 +54,9 @@ import { localInputToIso, nowLocalInput, toLocalInput } from './time';
 const NO_LEGS: Leg[] = [];
 const RADIUS_MIN_M = 50;
 const RADIUS_MAX_M = 3000; // The backend's limit.
+// The backend's maximum too. With a few trips per line it holds every line downtown, even
+// within 3 km (about 360 trips at Civic Center).
+const CALL_LIMIT = 500;
 
 async function nearestStop(point: LatLon) {
   try {
@@ -288,6 +292,8 @@ export function App() {
         radiusM: Math.min(RADIUS_MAX_M, Math.max(RADIUS_MIN_M, radiusM || 500)),
         access,
         transfer: transferContext(ride, direction),
+        perRoute: TRIPS_PER_LINE,
+        limit: CALL_LIMIT,
       };
       const found = await (forward ? api.departures(query) : api.arrivals(query));
       // Don't offer the trip you're already on at this end of the plan.
