@@ -35,7 +35,7 @@ class GtfsStore:
             raise GtfsUnavailable(
                 f"No GTFS database at {self.db_path}. Run `uv run ir-load-gtfs` in backend/."
             )
-        conn = sqlite3.connect(f"{self.db_path.as_uri()}?mode=ro", uri=True)
+        conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
             yield conn

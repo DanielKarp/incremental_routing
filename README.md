@@ -19,7 +19,7 @@ and bike legs of your own come next (M3), then planning backwards (M4).
 # Backend
 cd backend
 uv sync
-cp .env.example .env        # optional: add a free ORS_API_KEY for walk/bike routing
+cp .env.example .env        # optional: add a free ORS_API_KEY (Windows cmd: use `copy`)
 uv run ir-load-gtfs         # downloads Caltrain, BART and VTA, then builds data/gtfs.sqlite
 uv run uvicorn --factory incremental_routing.api:create_app --reload   # http://127.0.0.1:8000
 
