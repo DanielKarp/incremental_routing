@@ -8,6 +8,7 @@
   --warning-fg: #8a5a00;
   --hover: #f3f5f9;
   --error: #b42318;
+  --bike: #15803d;
   font-family:
     system-ui,
     -apple-system,
@@ -27,6 +28,7 @@
     --warning-fg: #f3c969;
     --hover: #1f232b;
     --error: #ff8a80;
+    --bike: #16a34a;
   }
 }
 
@@ -583,4 +585,30 @@ button.call-time-button:hover:not(:disabled) {
     max-height: 11cm;
     margin-bottom: 8px;
   }
+}
+
+/* A hilly bike ride's height profile: a 2px line over a 10% wash, nothing else. */
+.hill-profile {
+  display: block;
+  margin-top: 4px;
+}
+
+.hill-line {
+  fill: none;
+  stroke: var(--bike);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.hill-area {
+  fill: var(--bike);
+  fill-opacity: 0.1;
+}
+
+.hills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
 }

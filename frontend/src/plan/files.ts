@@ -1,6 +1,7 @@
 // Plan files: JSON to save and load, CSV for spreadsheets, iCalendar for calendar apps.
 
 import { formatDuration, formatLocalDateTime, formatTime } from '../time';
+import { hillNotes, hillProfile } from './hills';
 import { legDurationS, planStart, withWaits } from './plan';
 import type { Leg, Place, Plan } from './types';
 
@@ -39,6 +40,7 @@ export function legNotes(leg: Leg): string[] {
   }
   if (leg.path) {
     notes.push(`${(leg.path.distanceM / 1000).toFixed(1)} km`);
+    if (leg.mode === 'bike') notes.push(...hillNotes(hillProfile(leg.path)));
     if (leg.path.provider === 'estimate') notes.push('estimated');
     if (Math.abs(legDurationS(leg) - leg.path.routedDurationS) >= 30) {
       notes.push(`edited, routed ${formatDuration(leg.path.routedDurationS)}`);
@@ -145,8 +147,20 @@ function pathProblem(p: unknown): string | null {
     isStr(p.provider) &&
     isNum(p.distanceM) &&
     isNum(p.routedDurationS) &&
-    isCoords(p.geometry);
+    isCoords(p.geometry) &&
+    (p.elevation === undefined || isElevation(p.elevation));
   return ok ? null : 'an invalid path';
+}
+
+function isElevation(e: unknown): boolean {
+  return (
+    isObject(e) &&
+    isNum(e.intervalM) &&
+    e.intervalM > 0 &&
+    Array.isArray(e.heightsM) &&
+    e.heightsM.length > 1 &&
+    e.heightsM.every(isNum)
+  );
 }
 
 function legProblem(v: unknown): string | null {

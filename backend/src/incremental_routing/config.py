@@ -32,9 +32,7 @@ class Settings:
         )
     )
     valhalla_api_key: str | None = field(default_factory=lambda: _env("VALHALLA_API_KEY"))
-    # Which transit data ir-load-gtfs builds: "agencies" (Caltrain, BART and VTA feeds) or
-    # "511" (the 511.org regional feed covering every Bay Area operator; needs API_511_KEY).
-    gtfs_source: str = field(default_factory=lambda: (_env("GTFS_SOURCE") or "agencies").lower())
+    # For downloading the 511.org regional GTFS feed (ir-load-gtfs).
     api_511_key: str | None = field(default_factory=lambda: _env("API_511_KEY"))
     default_timezone: ZoneInfo = field(
         default_factory=lambda: ZoneInfo(_env("DEFAULT_TIMEZONE") or "America/Los_Angeles")

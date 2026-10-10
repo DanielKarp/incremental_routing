@@ -70,6 +70,10 @@ export function pathInfo(route: RouteResult, durationS: number = pathDurationS(r
     distanceM: route.distance_m,
     routedDurationS: durationS,
     geometry: route.geometry,
+    // A profile needs two heights or more; saved plans are checked for the same.
+    ...(route.elevation_m && route.elevation_m.length > 1 && route.elevation_interval_m
+      ? { elevation: { intervalM: route.elevation_interval_m, heightsM: route.elevation_m } }
+      : {}),
   };
 }
 

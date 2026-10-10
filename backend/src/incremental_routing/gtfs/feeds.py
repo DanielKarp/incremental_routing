@@ -1,8 +1,7 @@
-"""The GTFS schedule feeds the planner knows about.
+"""The GTFS schedule feed the planner uses: 511.org's regional feed for every Bay Area operator.
 
-Two sources: the agencies' own feeds (one entry each in FEEDS; adding an agency is one more
-entry), or 511.org's consolidated regional feed covering every Bay Area operator, which
-needs a free API key. Don't mix them: the regional feed already contains the agencies.
+Downloading it needs a free API key (API_511_KEY), which is added at download time and never
+logged.
 """
 
 from __future__ import annotations
@@ -17,24 +16,9 @@ class Feed:
     url: str
 
 
-FEEDS: dict[str, Feed] = {
-    feed.feed_id: feed
-    for feed in [
-        Feed(
-            "caltrain",
-            "Caltrain",
-            "https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip",
-        ),
-        Feed("bart", "BART", "https://www.bart.gov/dev/schedules/google_transit.zip"),
-        Feed("vta", "VTA", "https://gtfs.vta.org/gtfs_vta.zip"),
-    ]
-}
-
-# operator_id=RG is the regional feed; the API key is added at download time, never logged.
+# operator_id=RG is the consolidated regional feed.
 REGIONAL_511 = Feed(
     "bayarea",
     "511 SF Bay regional feed",
     "https://api.511.org/transit/datafeeds?operator_id=RG",
 )
-
-SOURCES = ("agencies", "511")

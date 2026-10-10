@@ -5,6 +5,7 @@ import {
   boardingLegs,
   estimatedRoute,
   needsConnector,
+  pathInfo,
   pathLeg,
   pathLegArriving,
   pinName,
@@ -234,6 +235,21 @@ describe('transit lines from shapes.txt', () => {
       [-122.1, 37.41],
       [-122.1, 37.42],
     ]);
+  });
+});
+
+describe('heights along bike routes', () => {
+  it('keeps them on the leg when the router sends them', () => {
+    const hilly: RouteResult = {
+      ...walkOf(300),
+      mode: 'bike',
+      elevation_m: [4, 30],
+      elevation_interval_m: 30,
+    };
+    expect(pathInfo(hilly).elevation).toEqual({ intervalM: 30, heightsM: [4, 30] });
+    expect(pathInfo(walkOf(300)).elevation).toBeUndefined();
+    expect(pathInfo({ ...hilly, elevation_m: [] }).elevation).toBeUndefined();
+    expect(pathInfo({ ...hilly, elevation_m: [4] }).elevation).toBeUndefined();
   });
 });
 

@@ -48,6 +48,8 @@ export interface PathInfo {
   routedDurationS: number;
   /** [lon, lat] pairs. */
   geometry: [number, number][];
+  /** Bike routes: heights in metres from the start, one every intervalM (the last at the end). */
+  elevation?: { intervalM: number; heightsM: number[] };
 }
 
 export interface Leg {

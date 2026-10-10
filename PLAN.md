@@ -1,11 +1,11 @@
-# Incremental Routing: MVP plan
+# Incremental Routing: plan
 
 A route planner for building a multi-leg trip **one leg at a time**, mixing public transit with
 cycling and walking. Instead of asking a journey planner for "the best route", you choose
 every leg yourself and the app keeps the itinerary consistent in space and time.
 
-This document scopes the MVP, records the data-source decisions, and lays out the milestones.
-The scaffold in this repository implements milestone M0.
+This document describes the planner as built (the MVP plus two rounds of refinements), the
+data sources and decisions behind it, and what might come next.
 
 ---
 
@@ -23,24 +23,30 @@ Because a plan has two frontiers, you can plan forwards from the anchor, backwar
 both. For example, "I must be at the office at 9:00, and I'm leaving home on my bike" can be
 built from either end.
 
-## 2. MVP scope
+## 2. Scope
 
 **In scope**
 
 - One local user, on a laptop, in a browser.
-- Transit schedules for **Caltrain, BART and VTA** (static GTFS).
+- Transit schedules for every Bay Area operator, from the **511 SF Bay regional feed** (static
+  GTFS; decisions 7 and 9).
 - Leg types: transit, walk, bike, wait (waits inserted automatically, or added by hand).
 - Forward and backward planning from an anchor picked on the map.
-- Walk/bike routes from a hosted routing API, with a manual override for the duration.
-- A final itinerary listing every leg with start and end time and place, exportable.
+- Walk and bike routes from Valhalla, with editable times, and a height profile for hilly bike
+  rides (decision 10).
+- A final itinerary listing every leg with start and end time and place. It can be printed
+  with a map, or exported as CSV, a calendar file or a JSON plan.
 
-**Out of scope for MVP** (see §10)
+**Out of scope**
 
-- Other Bay Area agencies (since added through the 511 regional feed; see M6) and automatic
-  "best route" search.
-- Accounts, sharing and multiple devices.
-- Address search. You pick points on the map; stations can be found by name from GTFS.
-- Enforcing bike-on-board rules. The data is shown but not enforced.
+- Automatic "best route" search. A "Suggest" button is a possible later addition (§10).
+- Accounts, saved-plan lists, shareable links and bike share. Plans move as JSON files
+  (decision 12).
+- Place and address search. You pick points on the map (on hold, §10).
+- Live data: delays, cancellations and alerts (decision 7).
+- Enforcing bike-on-board rules. The data is shown but not enforced (decision 4).
+- Transfer rules between agencies. No feed describes them, so the rider judges those
+  connections (decision 11).
 
 ## 3. User flow
 
@@ -48,13 +54,14 @@ built from either end.
 
 1. Click the map and set a time. That's the anchor, and it becomes the frontier.
 2. Choose a mode for the next leg:
-   - **Transit**: see departures from stops near the frontier after its time. Only trips you
-     can still walk to are shown. Pick one, then pick the stop to get off at from that trip's
-     remaining stops.
-     - If the boarding stop isn't at the frontier, the app inserts a walk to the stop. The walk
-       starts right away, and a wait fills any time left before the departure.
-   - **Walk / Bike**: click the destination. The router returns a path and duration, and
-     you can edit the duration.
+   - **Transit**: see departures from stops near the frontier after its time, grouped by line
+     (decision 8). Only trips you can still reach on foot or by bike are shown. Pick one, then
+     pick the stop to get off at from that trip's remaining stops.
+     - If the boarding stop isn't at the frontier, the app inserts a walk or bike ride to the
+       stop. It starts right away, and a wait fills any time left before the departure.
+   - **Walk / Bike**: click the destination. The router returns a path and duration. You can
+     edit when the leg leaves or arrives, or how long it takes, and a hilly bike ride shows a
+     height profile.
    - **Wait**: stay put for N minutes, e.g. a coffee stop.
 3. The new leg's end becomes the frontier, and step 2 repeats.
 4. Any time gap between two legs is filled with an automatic **wait** leg. For example, a bike
@@ -63,8 +70,8 @@ built from either end.
 ### Backward
 
 This is the same flow mirrored. You see **arrivals** at stops near the frontier before its time,
-pick a trip, then pick where you got on from its earlier stops. The walk from the stop to the
-frontier leaves as soon as you get off, and any spare time becomes a wait at the frontier
+pick a trip, then pick where you got on from its earlier stops. The walk or bike ride from the
+stop to the frontier leaves as soon as you get off, and any spare time becomes a wait at the frontier
 (decision 1, mirrored). Walk, bike and wait legs you add keep their **end** time fixed and
 compute the start time.
 
@@ -73,7 +80,7 @@ compute the start time.
 | Mode | Start / end chosen by | Times come from | Editable |
 | --- | --- | --- | --- |
 | Transit | Departure (or arrival) list, then a stop on that trip | Timetable | No: fixed by the schedule |
-| Walk, Bike | Frontier, then a map click | Routing API | Duration (end moves forward, start moves backward) |
+| Walk, Bike | Frontier, then a map click | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2) |
 | Wait | Same place at both ends | Gap between legs, or manual | Manual waits only |
 
 ## 4. Data model
@@ -86,8 +93,11 @@ interface Leg {
   start: Waypoint;
   end: Waypoint;
   auto?: boolean;                 // derived (waits), rebuilt on every change
-  transit?: { tripId; serviceDate; routeName; headsign; color; stops: [...] };
-  path?: { provider; distanceM; routedDurationS; geometry };
+  fixed?: 'start' | 'end';        // the end the leg was planned from
+  transit?: { tripId; serviceDate; routeName; headsign; agency; color; textColor;
+              bikesAllowed; stops: [...]; geometry? /* the ridden part of the shape */ };
+  path?: { provider; distanceM; routedDurationS; geometry;
+           elevation?: { intervalM; heightsM } /* bike routes */ };
 }
 interface Plan { anchor: Waypoint; legs: Leg[] }
 ```
@@ -99,8 +109,8 @@ The real definitions are in `frontend/src/plan/types.ts`.
 1. Legs are chronological.
 2. **Continuous in time.** A gap between legs becomes an automatic wait leg. An **overlap**
    (the next leg starts before the previous one ends) is a *missed connection*. Nothing is
-   ever silently re-timed, because transit times can't move. Duration edits that would cause
-   an overlap are refused (§9, decision 2), and `findIssues` still reports any overlap as a
+   ever silently re-timed, because transit times can't move. Edits that would cause an
+   overlap are refused (§9, decision 2), and `findIssues` still reports any overlap as a
    safety net.
 3. **Continuous in space.** Each leg starts within 75 m of where the previous one ended.
    Otherwise the plan reports a `location-gap` issue.
@@ -114,63 +124,73 @@ the plan rules pure functions that are easy to test.
 
 ## 5. Data sources
 
-### 5.1 Transit: GTFS schedule feeds
+### 5.1 Transit: the 511 regional GTFS feed
 
-| Agency | Static GTFS URL | Key | Notes |
-| --- | --- | --- | --- |
-| Caltrain | `https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip` | No | Hosted by Trillium for Caltrain |
-| BART | `https://www.bart.gov/dev/schedules/google_transit.zip` | No | Covered by BART's developer license agreement. Stations are modeled as parent stations with platforms. |
-| VTA | `https://gtfs.vta.org/gtfs_vta.zip` | No | Bus and light rail; by far the largest feed |
+The **511 SF Bay regional feed** is the source of truth (decision 9). It is one consolidated
+GTFS feed for every Bay Area operator, from the [511 SF Bay open data
+API](https://511.org/open-data/transit) (`operator_id=RG`). On 2026-10-10 it held 41 agencies,
+21,627 stops, 90,168 trips and 3.1 million stop times. It needs a free API key
+(`API_511_KEY`).
 
-These URLs live in `backend/src/incremental_routing/gtfs/feeds.py`. `uv run ir-load-gtfs`
-downloads them and builds one SQLite file.
+`uv run ir-load-gtfs` downloads it (about 60 MB) and builds one SQLite file (about 620 MB) in
+about a minute. The feed is defined in `backend/src/incremental_routing/gtfs/feeds.py`. The
+agencies' own Caltrain, BART and VTA feeds were used until M6, and are no longer supported.
 
-**Alternative: 511.org.** With one free API key, the [511 SF Bay open data
-API](https://511.org/open-data/transit) serves the same per-agency feeds (`operator_id=…`) and a
-consolidated **regional feed** for every Bay Area operator (`operator_id=RG`). The direct
-agency URLs remain the default because they need no key. Set
-`GTFS_SOURCE=511` and `API_511_KEY` to load the regional feed instead (see M6 notes).
+**Freshness.** Each agency's schedule in the feed ends on its own date, and 511 republishes the
+feed as agencies update. The feed's overall date range (2021–2099) says nothing, so dates are
+tracked per agency:
+- the loader lists agencies whose schedules end within 30 days, and flags expired ones;
+- the UI names any agency whose schedule doesn't cover the day being planned.
 
-**Freshness.** Agencies publish new feeds at service changes, several times a year. Mirrored
-copies on the Mobility Database showed date ranges that had already ended, so always fetch from
-the source. The loader prints each feed's date range and flags expired feeds, and the UI warns
-when the selected date falls outside a feed's range. Re-run the loader monthly.
+Re-run the loader monthly. In October 2026, VTA's schedule ends on 2026-10-25.
 
-The date range comes from the service calendar, not from `feed_info.txt`. BART's August 2026
-feed still declared an end date of 2026-08-30, while its calendar ran to 2027-01-10.
+Dates come from the service calendars, not from `feed_info.txt`, which publishers forget to
+update. BART's own August 2026 feed still declared an end date of 2026-08-30, while its
+calendar ran to 2027-01-10.
 
-**GTFS details the loader and queries already handle:**
+**GTFS details the loader and queries handle:**
 
 - Times past `24:00:00` for trips that run past midnight. Every query checks yesterday's
   service day too.
 - The service day begins at "noon minus 12 h", which is not midnight on daylight-saving change
   days.
 - Service days come from `calendar.txt` plus `calendar_dates.txt` exceptions (holidays).
-- Parent stations versus boardable platforms.
+- Parent stations versus boardable platforms. Station nodes and entrances are never offered as
+  stops.
 - Stops without a scheduled time are interpolated between scheduled timepoints.
-- ID collisions between feeds: every ID is prefixed with its feed, e.g. `bart:…`.
+- Every ID is prefixed with its feed (`bayarea:…`).
 - No boarding at a trip's last stop, or where `pickup_type=1`. The same applies to alighting.
-- Zips with files nested in a folder. Stray macOS `__MACOSX/` entries are ignored; VTA's zip
-  has them.
-- Not handled yet: `frequencies.txt` (headway-based trips). The loader warns if a feed uses it.
-  Caltrain ships the file with a header only, and none of the three feeds uses it today.
+- Shapes (`shapes.txt`) and transfer rules (`transfers.txt`); see the M6 notes.
+- Zips with files nested in a folder. Stray macOS `__MACOSX/` entries are ignored.
+- Not handled: `frequencies.txt` (headway-based trips). The loader warns if a feed uses it, and
+  the 511 feed doesn't.
 
 ### 5.2 Walking and cycling routes
 
 | Option | Free usage | Key | Fit |
 | --- | --- | --- | --- |
-| **OpenRouteService** (recommended) | Free plan: 2,000 directions requests/day, 40/min | Free signup | `foot-walking`, `cycling-regular`, plus `cycling-road`, `cycling-electric` and `cycling-mountain`. Returns GeoJSON path, distance and duration. |
-| **Valhalla, FOSSGIS public server** | Free under a fair-use policy, rate-limited | None | `pedestrian` and `bicycle` costing. This is the zero-config default for development. |
+| **Valhalla, FOSSGIS public server** (used) | Free under a fair-use policy, rate-limited | None | `pedestrian` and `bicycle` costing. Bike speeds follow the road's grade, and routes can come with heights along them. |
+| OpenRouteService | Free plan: 2,000 directions requests/day, 40/min | Free signup | `foot-walking`, `cycling-regular` and others. On the hosted service, hills add distance but don't change bike times. |
 | Stadia Maps (hosted Valhalla) | Free tier for non-commercial use (check current limits) | Yes | Same API as FOSSGIS, so the same provider class works with a different URL and key. |
 | Google Routes API | Monthly free usage, then pay-as-you-go | Key + billing account | Its terms restrict showing results on non-Google maps and caching them. Poor fit here. |
 | Mapbox Directions | Monthly free allowance | Key + account | Its terms tie results to Mapbox maps. |
 | Self-hosted Valhalla, GraphHopper or OSRM | Unlimited | None | Docker plus a Northern California OSM extract, needing about 2–4 GB RAM. The upgrade path after the MVP. |
 
-**Decision:** use OpenRouteService when `ORS_API_KEY` is set, and otherwise the public Valhalla
-server. Both sit behind one `RoutingProvider` interface (`backend/src/incremental_routing/routing/`),
-selected by `ROUTING_PROVIDER`. A `straight-line` provider exists for offline development and
-tests. One user making one request per walk or bike leg is far below the ORS daily quota. Cache
-results by mode and rounded coordinates if that ever changes.
+**Decision:** the public Valhalla server (decision 10). Its bike times already slow for climbs
+and speed up on descents, so they are used as they are. Bike routes are requested with
+`elevation_interval` = 30 m, and Valhalla returns the heights along the route for the height
+profile, interpolated across bridges and tunnels.
+
+All providers sit behind one `RoutingProvider` interface
+(`backend/src/incremental_routing/routing/`), selected by `ROUTING_PROVIDER`:
+- `valhalla` (the default): the FOSSGIS server, or any Valhalla endpoint such as Stadia Maps.
+- `ors` (needs `ORS_API_KEY`): openrouteservice. Its hosted bike times ignore hills, and it
+  returns no heights, so there are no profiles.
+- `straight-line`: an estimate for offline development and tests. It is also the fallback when
+  the router fails, labelled "(estimated)".
+
+One user making one request per walk or bike leg is well within fair use. Quotas are fine for
+now, and self-hosted routing is on hold (§10).
 
 Router speeds are generic. Typical defaults are about 5 km/h walking and roughly 15–20 km/h cycling.
 That's one reason duration overrides are a core feature rather than an extra.
@@ -181,10 +201,10 @@ MapLibre GL JS with **OpenFreeMap** vector tiles: free, no key, OpenStreetMap da
 ever becomes unreliable, switch the style URL in `MapView.tsx` to MapTiler or Stadia (free tiers
 with keys), or to a self-hosted Protomaps file of the Bay Area.
 
-### 5.4 Place search (after MVP)
+### 5.4 Place search (on hold)
 
-Searching stop names from GTFS covers stations. For addresses, use ORS geocoding (same key) or
-Photon/Nominatim (fair use).
+Not planned for now (§10). If it comes back, searching stop names in the GTFS data would cover
+stations, and Photon or Nominatim (fair use) could cover addresses.
 
 ## 6. Architecture
 
@@ -195,19 +215,19 @@ Browser: React + MapLibre                       Backend: FastAPI (Python)
 │ components/  map, lists,     │ ─ departures ─▶│                       ▲              │
 │   leg builder, itinerary     │   arrivals     │ ir-load-gtfs ─────────┘ (download +  │
 │ localStorage + JSON export   │   trip         │                         build)       │
-│                              │   POST /route ▶│ routing/ ─▶ ORS | Valhalla | straight│
+│                              │   POST /route ▶│ routing/ ─▶ Valhalla | ORS | straight│
 └──────────────────────────────┘                └──────────────────────────────────────┘
 ```
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /api/health` | Whether GTFS data is loaded, and the active routing provider |
-| `GET /api/feeds` | Loaded feeds and their valid date ranges |
-| `GET /api/stops/nearby?lat&lon&radius_m` | Boardable stops near a point |
-| `GET /api/departures?lat&lon&time&radius_m&window_min` | Trips you can walk to and board after `time` (forward) |
-| `GET /api/arrivals?lat&lon&time&…` | Trips you can ride to arrive before `time` (backward) |
-| `GET /api/trip?trip_id&service_date` | A trip's full stop list with times and board/alight flags |
-| `POST /api/route {mode, origin, destination}` | Walk or bike path, distance and duration |
+| `GET /api/health` | Whether GTFS data is loaded (and if not, why), and the routing provider |
+| `GET /api/feeds` | Loaded feeds, with each agency's schedule dates |
+| `GET /api/stops/nearby?lat&lon&radius_m&access` | Boardable stops near a point, with the time to reach them on foot or by bike |
+| `GET /api/departures?lat&lon&time&radius_m&window_min&limit&access&per_route&transfer_stop&transfer_trip` | Trips you can reach and board after `time` (forward), each with any transfer rule |
+| `GET /api/arrivals?…` (same parameters) | Trips you can ride to arrive before `time` (backward) |
+| `GET /api/trip?trip_id&service_date` | A trip's stops with times and board/alight flags, and its shape |
+| `POST /api/route {mode, origin, destination}` | Walk or bike path, distance and duration, with heights along bike routes |
 
 Times without an offset are read as Bay Area local time, and responses carry the offset
 (`-07:00` or `-08:00`). The UI always shows Bay Area time, whatever time zone your laptop is in.
@@ -225,19 +245,25 @@ fast to iterate on and easy to unit-test.
    distance.
 2. For each feed, and for service days *yesterday* and *today*: work out the active
    `service_id`s, then run a time-window query on stop times.
-3. Drop departures you can't reach on foot: straight-line distance × 1.3 detour factor ÷
-   1.3 m/s walking speed.
-4. Keep one entry per trip, at its nearest stop, sorted by time.
+3. Drop departures you can't reach in time: straight-line distance × 1.3 detour factor, at
+   1.3 m/s on foot or 4.5 m/s by bike, rounded up to whole minutes.
+4. Keep one entry per trip, at its nearest stop, sorted by time. With `per_route`, keep only
+   the first few trips of each route, headsign and stop before the overall limit.
 
-Arrivals are the mirror image: alighting allowed, arriving at least the walk time before the
+Arrivals are the mirror image: alighting allowed, arriving at least the access time before the
 query time.
 
 **Choosing where to get off:** `/api/trip` returns every stop with absolute times. The UI lists
 stops after the boarding stop where `can_alight` is true (forward), or stops before the alighting
 stop where `can_board` is true (backward).
 
-**Connector walks:** when the chosen stop isn't at the frontier, the UI requests a walk route
-from the frontier to the stop and adds it as a leg. `withWaits` then fills the remaining time.
+**Connector walks:** when the chosen stop isn't at the frontier, the UI requests a walk or bike
+route from the frontier to the stop and adds it as a leg. `withWaits` then fills the remaining time.
+
+**Hill profiles** (`frontend/src/plan/hills.ts`): a bike ride gets a profile when it climbs or
+descends at least 20 m between any two of its points, in riding order. Gentle rises don't count:
+Palo Alto Caltrain to Stanford rises 15 m over 3.4 km. Total climb and descent ignore wobbles
+under 2 m. The chart draws heights to one scale up to a 100 m span, so a small hill looks small.
 
 **Normalization:** after every edit, `withWaits` rebuilds the wait legs and `findIssues`
 reports overlaps, gaps in space and negative durations. The UI marks those legs and doesn't
@@ -248,15 +274,34 @@ fix them automatically.
 | # | Milestone | Done when |
 | --- | --- | --- |
 | M0 ✅ | Scaffold | GTFS loader and queries, routing providers, API, map page listing departures and arrivals, plan model. Unit tests for all of it. |
-| M1 🟡 | Real-data check | All three feeds load. Departures at Millbrae, San Jose Diridon and Mountain View match the published timetables. Query latency measured. Feed quirks fixed. *Mostly done; see below.* |
+| M1 ✅ | Real-data check | Feeds load. Query latency measured. Feed quirks fixed. Live walk and bike routing works. No hand-check against printed timetables is needed, because 511 is the source of truth (decision 9). |
 | M2 ✅ | Forward transit legs | Pick a departure, then a stop to get off at, and the leg (with connector walk and wait) is added. Transit legs are drawn on the map, and an itinerary panel lists the legs. You can build home → Caltrain → BART by clicking. |
 | M3 ✅ | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
 | M4 ✅ | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
 | M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
 | M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. Departures listed by line. |
+| M7 ✅ | Simplify and finish | 511 is the only transit source. Valhalla is the router, and its times are used as they are. Hilly bike rides show a height profile. The plan is brought up to date. |
 
-M1 must come first because real feeds always surprise you. Everything after it is UI work on
-top of the existing API.
+### M7 notes
+
+- **511 only.** `ir-load-gtfs` downloads the regional feed (it needs `API_511_KEY`) and builds
+  from it, and `--skip-download` rebuilds from the downloaded copy. The agency feed list,
+  `GTFS_SOURCE` and the per-feed arguments are gone. `--source 511` is still accepted, so older
+  instructions keep working.
+- **Valhalla by default.** An `ORS_API_KEY` alone no longer switches the router; ORS needs
+  `ROUTING_PROVIDER=ors`.
+- **Height profiles.**
+  - Valhalla returns heights every 30 m along bike routes. They are stored with the leg, so
+    they survive autosave, Save plan and Open plan.
+  - A ride with a significant hill (§7) shows a small silhouette and its climb and descent, in
+    the preview and the itinerary. "climbs 100 m · descends 8 m" also appears in the summary,
+    the printout, the CSV and the calendar file.
+  - Walks get no profile, and switching a ride to walking removes it.
+  - Checked against the live server: Embarcadero to Nob Hill rises from 4 to 106 m (climbs
+    100 m, descends 8 m), and Castro to Twin Peaks from 37 to 255 m. Palo Alto Caltrain to
+    Stanford goes from 19 to 34 m and shows no profile.
+- **JSON plans** (from M5) are the way to keep and share plans (decision 12). A saved,
+  cleared and reopened plan keeps its bike heights, shapes and agency names.
 
 ### M6 notes
 
@@ -272,11 +317,9 @@ top of the existing API.
     message gives the routed time.
 - **Editing times.** Walk and bike legs have *Leave*, *Arrive* and *Minutes* fields. Manual
   waits have *From*, *Until* and *Minutes*. See decision 2 for what can move.
-- **511 regional feed.** `GTFS_SOURCE=511` (or `ir-load-gtfs --source 511`) builds the
-  database from 511.org's consolidated feed for every Bay Area operator, using `API_511_KEY`.
+- **511 regional feed.** Added alongside the agencies' own feeds; in M7 it became the only
+  source.
   - The key is sent as a request parameter and never printed, including in error messages.
-  - The two sources are never loaded together, because the regional feed already contains the
-    agencies.
   - Routes carry their agency's name, shown in lists, the itinerary, the summary and the CSV.
   - Checked on the real feed (2026-10-10): 41 agencies, 21,627 stops, 90,168 trips and
     3.1 million stop times. Downloading and building took 62 s, giving a 619 MB database.
@@ -326,14 +369,13 @@ top of the existing API.
   - a note for timed transfers.
 
   Rules can be for a platform or its parent station, and limited to routes or trips; the most
-  specific matching rule wins. The agency feeds have few rules:
+  specific matching rule wins. The 511 feed has few rules, and none between agencies
+  (decision 11):
   - Caltrain's timed transfers at San Jose Diridon.
   - BART's platform rules at 12 stations. Most are 0 minutes. Coliseum ↔ the Oakland
     Airport line is 4 minutes, and some route pairs at Warm Springs and Union City are 1
     minute.
-
-  The 511 feed has the same rules, plus a few timed transfers for WestCat and FAST. None of
-  its rules are between agencies.
+  - A few timed transfers for WestCat and FAST.
 - **Database version.** The database records its schema version. After an update that changes
   the tables, the app says to rebuild (`uv run ir-load-gtfs --skip-download`) instead of
   failing.
@@ -371,21 +413,20 @@ top of the existing API.
     15-minute wait.
   - Also checked: duration limits, Remove and Undo, the summary, all three downloads, the
     print layout, reloading and re-opening the file.
-  - Walk and bike legs used the straight-line estimate, because the routing hosts are blocked
-    in the cloud sandbox.
+  - At the time, walk and bike legs used the straight-line estimate, because the routing hosts
+    were blocked in the cloud sandbox.
 
 ### M2 notes
 
 - If the walking router fails, connector walks fall back to the straight-line estimate and are
-  labelled "(estimated)". This is what happens in the cloud sandbox, where the routing hosts
-  are blocked.
+  labelled "(estimated)".
 - Same-station changes need no walk leg when the platforms are within 75 m. Millbrae's
   Caltrain platform and BART's "Caltrain Transfer Platform" are an example.
 - The departure list leaves out the trip you have just got off.
-- Searches start exactly at the frontier time, so a 0-minute change can be offered.
-  Minimum transfer times (`transfers.txt`) remain a later refinement.
+- Searches start exactly at the frontier time, so a 0-minute change can be offered. Transfer
+  warnings followed in M6.
 
-### M1 findings (feeds downloaded 2026-10-10)
+### M1 findings (the agencies' own feeds, downloaded 2026-10-10)
 
 - **Loading.** Downloading and building all three feeds takes about 10 s and produces a 50 MB
   SQLite file.
@@ -411,10 +452,9 @@ top of the existing API.
   - BART's stale `feed_info.txt` caused a false "expired" warning.
   - MapLibre v6 couldn't find its worker once Vite bundled it, so the map showed only its
     background colour. Fixed with `setWorkerUrl`.
-- **Still to do.**
-  - Compare a few stations against the agencies' published timetables by hand.
-  - Exercise live walk/bike routing. `api.openrouteservice.org` and
-    `valhalla1.openstreetmap.de` are still blocked in the cloud sandbox.
+- **Closed.** No hand-check against published timetables is needed, because 511 is the
+  source of truth (decision 9). Live walk and bike routing works, on your machine and in the
+  cloud sandbox since Valhalla was allowed there.
 
 ## 9. Decisions and risks
 
@@ -437,8 +477,9 @@ top of the existing API.
 3. **Search radius is configurable.** It defaults to 500 m, and the UI offers 100 m to 3 km.
 4. **Bikes are informational only.** A transit leg on a trip with `bikes_allowed = 2` (not
    allowed) shows a warning and nothing else changes. Riders may have a folding bike or
-   scooter, may park, or may use bikeshare, and modelling any of that is out of scope. In
-   today's feeds this affects 66 VTA bus trips. Every Caltrain and BART trip allows bikes.
+   scooter, may park, or may use bikeshare, and modelling any of that is out of scope. In the
+   511 feed (October 2026) this affects 1,339 trips: every SFO AirTrain trip, 66 VTA bus
+   trips and 5 LAVTA school trips.
 5. **Connections to stops can be by bike** (added after testing). This is chosen while
    planning a transit leg, and any walk or bike leg can be switched later.
 6. **Transfer rules are advice.** `transfers.txt` minimums show as warnings in the departure
@@ -449,21 +490,41 @@ top of the existing API.
    headsign and stop) once, with its next three trips, or its last three arrivals when
    planning backwards. Busy lines can't crowd out the rest; a line's later trips are left
    out.
+9. **511 is the source of truth.** The regional feed is the only transit data, and the
+   agencies' own feeds are retired. Departures aren't checked by hand against printed
+   timetables.
+10. **Valhalla's times are used as they are.** They already allow for hills. Hilly bike rides
+    get a simple height profile, shown only for a climb or descent of at least 20 m.
+11. **Changes between agencies are up to the rider.** At Millbrae, Diridon and Mountain View
+    each agency has its own stops, 100–300 m apart, and no feed gives transfer rules between
+    agencies. The connector walk covers the distance; the rider judges the time.
+12. **Plans move as JSON files.** No accounts, saved-plan lists, shareable links or bike
+    share. *Save plan (.json)* and *Open plan…* cover keeping a plan and sending it to
+    someone.
 
 **Risks:**
 
-- **Feed URLs move or expire.** Mitigated by the loader's expiry check and UI warnings.
-  The 511.org fallback covers every agency.
-- **Cross-agency transfers.** At Millbrae, Diridon and Mountain View each agency has its own
-  stop IDs, 100–300 m apart. The connector walk covers this. Neither the agency feeds nor the
-  511 regional feed describe transfers between agencies, so there are no warnings for them.
-- **Free services without an SLA** (ORS, FOSSGIS, OpenFreeMap). The provider interface and the
-  style URL make each one swappable.
+- **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (VTA's on
+  2026-10-25). The loader and the app flag it, and re-running `ir-load-gtfs` fixes it once the
+  agency has published a new one.
+- **Free services without an SLA** (511.org, FOSSGIS Valhalla, OpenFreeMap). Their quotas are
+  fine for one user. The provider interface and the style URL make the router and the map
+  swappable.
 
-## 10. After the MVP
+## 10. What's next
+
+**On hold**
+
+- Place search: stations by name, and addresses (§5.4).
+- Self-hosted walk and bike routing, to remove quotas. The public server's limits are fine for
+  now.
+
+**Not decided**
 
 - A "Suggest" button that asks a full journey planner (OpenTripPlanner or MOTIS, self-hosted)
   for the next leg or two.
-- Elevation profiles for bike legs.
-- Bike share, multiple saved plans, shareable links.
-- Self-hosted routing to remove quotas entirely.
+
+**Declined**
+
+- Bike share, saved-plan lists and shareable links (decision 12).
+- Live data (decision 7).

@@ -119,3 +119,7 @@ class RouteResult(BaseModel):
     duration_s: float
     # [lon, lat] pairs, GeoJSON order.
     geometry: list[tuple[float, float]]
+    # Bike routes from Valhalla: heights in metres, from the start and then one every
+    # elevation_interval_m along the route (the last at its end).
+    elevation_m: list[float] | None = None
+    elevation_interval_m: float | None = None

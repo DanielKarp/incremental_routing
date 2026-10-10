@@ -96,6 +96,55 @@ async def test_valhalla_request_and_response():
     assert result.geometry[0] == pytest.approx((-12.02, 3.85))
 
 
+def valhalla_trip(leg: dict) -> dict:
+    return {
+        "trip": {
+            "summary": {"length": 0.1, "time": 30.0},
+            "legs": [{"shape": GOOGLE_EXAMPLE, **leg}],
+        }
+    }
+
+
+@pytest.mark.anyio
+async def test_valhalla_bike_routes_come_with_elevation():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json=valhalla_trip({"elevation_interval": 30.0, "elevation": [3.9, 4.04, 12.0, 30.5]}),
+        )
+
+    provider = ValhallaProvider("https://example.test/route", None, mock_client(handler))
+    result = await provider.route("bike", ORIGIN, DEST)
+    assert seen["body"]["elevation_interval"] == 30.0
+    assert result.elevation_m == [3.9, 4.0, 12.0, 30.5]
+    assert result.elevation_interval_m == 30.0
+
+    walk = await provider.route("walk", ORIGIN, DEST)
+    assert "elevation_interval" not in seen["body"]
+    assert walk.elevation_m is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "leg",
+    [
+        {},  # a server without elevation tiles
+        {"elevation_interval": 30.0, "elevation": []},
+        {"elevation_interval": 30.0, "elevation": [4.0]},  # too short for a profile
+        {"elevation_interval": 30.0, "elevation": [4.0, None, 6.0]},
+        {"elevation_interval": 30.0, "elevation": [4.0, -32768, 6.0]},  # no-data value
+    ],
+)
+async def test_valhalla_elevation_left_out_when_unusable(leg):
+    handler = lambda request: httpx.Response(200, json=valhalla_trip(leg))  # noqa: E731
+    provider = ValhallaProvider("https://example.test/route", None, mock_client(handler))
+    result = await provider.route("bike", ORIGIN, DEST)
+    assert (result.elevation_m, result.elevation_interval_m) == (None, None)
+
+
 @pytest.mark.anyio
 async def test_provider_http_error_becomes_routing_error():
     provider = OrsProvider("bad", mock_client(lambda r: httpx.Response(403, text="quota")))
@@ -118,7 +167,8 @@ def test_make_provider_defaults(tmp_path):
         )
 
     assert make_provider(settings()).name == "valhalla"
-    assert make_provider(settings(ors_api_key="k")).name == "ors"
-    assert make_provider(settings(ors_api_key="k", routing_provider="valhalla")).name == "valhalla"
+    # An ORS key alone doesn't switch providers: Valhalla's bike times allow for hills.
+    assert make_provider(settings(ors_api_key="k")).name == "valhalla"
+    assert make_provider(settings(ors_api_key="k", routing_provider="ors")).name == "ors"
     with pytest.raises(ValueError):
         make_provider(settings(routing_provider="ors"))

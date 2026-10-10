@@ -1,10 +1,12 @@
 import type { PathMode, RouteResult, TransitCall, TripDetail } from '../api';
-import { pathDurationS } from '../plan/build';
+import { pathDurationS, pathInfo } from '../plan/build';
+import { hillNotes, hillProfile } from '../plan/hills';
 import { addSeconds } from '../plan/plan';
 import type { TransferNote } from '../plan/transfers';
 import type { Direction, LegMode, Place, Waypoint } from '../plan/types';
 import { formatDuration, formatTime } from '../time';
 import { CallList } from './CallList';
+import { HillProfile } from './HillProfile';
 import { TripStops } from './TripStops';
 
 /** A walk or bike leg being set up: the picked point and its route, not yet added. */
@@ -174,6 +176,7 @@ function PathPanel(p: Props) {
   }
   const { route, place } = p.pending;
   const seconds = pathDurationS(route);
+  const hills = p.mode === 'bike' ? hillProfile(pathInfo(route)) : null;
   const other = addSeconds(p.frontier.time, forward ? seconds : -seconds);
   return (
     <div className="pending">
@@ -186,6 +189,12 @@ function PathPanel(p: Props) {
         {route.provider === 'estimate' && ' (estimated)'} ·{' '}
         {forward ? `arrive ${formatTime(other)}` : `leave ${formatTime(other)}`}
       </p>
+      {hills && (
+        <div className="hills">
+          <HillProfile profile={hills} />
+          <span className="muted">{hillNotes(hills).join(' · ')}</span>
+        </div>
+      )}
       <div className="row">
         <button type="button" disabled={p.busy} onClick={p.onAddPending}>
           Add {p.mode} leg

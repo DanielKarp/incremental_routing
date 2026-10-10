@@ -21,8 +21,8 @@ __all__ = [
 
 
 def make_provider(settings: Settings, client: httpx.AsyncClient | None = None) -> RoutingProvider:
-    """ROUTING_PROVIDER wins; otherwise ORS when a key is configured, else public Valhalla."""
-    choice = (settings.routing_provider or ("ors" if settings.ors_api_key else "valhalla")).lower()
+    """Valhalla (the public FOSSGIS server by default) unless ROUTING_PROVIDER says otherwise."""
+    choice = (settings.routing_provider or "valhalla").lower()
     if choice == "ors":
         if not settings.ors_api_key:
             raise ValueError("ROUTING_PROVIDER=ors requires ORS_API_KEY")

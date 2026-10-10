@@ -109,6 +109,9 @@ export interface RouteResult {
   duration_s: number;
   /** [lon, lat] pairs. */
   geometry: [number, number][];
+  /** Bike routes: heights in metres from the start, one every elevation_interval_m. */
+  elevation_m?: number[] | null;
+  elevation_interval_m?: number | null;
 }
 
 export interface CallQuery {

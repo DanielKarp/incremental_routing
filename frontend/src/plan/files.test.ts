@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { legTitle, parsePlanJson, planFileName, planToCsv, planToIcs, planToJson } from './files';
+import {
+  legNotes,
+  legTitle,
+  parsePlanJson,
+  planFileName,
+  planToCsv,
+  planToIcs,
+  planToJson,
+} from './files';
 import { appendLegs } from './plan';
 import type { Leg, Place, Plan } from './types';
 
@@ -73,6 +81,30 @@ describe('JSON plan files', () => {
       ok: false,
       reason: 'The plan is damaged: two legs share an id.',
     });
+  });
+});
+
+describe('hilly bike rides', () => {
+  const bike: Leg = {
+    ...walk,
+    id: 'bike-1',
+    mode: 'bike',
+    path: { ...walk.path!, provider: 'valhalla', elevation: { intervalM: 30, heightsM: [4, 30, 60, 106] } },
+  };
+  const file = (legs: unknown[]) =>
+    JSON.stringify({ format: 'incremental-routing-plan', version: 1, plan: { anchor: bike.start, legs } });
+
+  it('mention the climb in their notes; walks do not', () => {
+    expect(legNotes(bike)).toContain('climbs 102 m');
+    expect(legNotes({ ...bike, mode: 'walk' })).not.toContain('climbs 102 m');
+  });
+
+  it('keep their heights in a saved plan, and damaged heights are refused', () => {
+    const hilly = appendLegs({ anchor: bike.start, legs: [] }, [bike]);
+    expect(parsePlanJson(planToJson(hilly))).toEqual({ ok: true, plan: hilly });
+    const damaged = (elevation: unknown) => ({ ...bike, path: { ...bike.path, elevation } });
+    expect(parsePlanJson(file([damaged({ intervalM: 0, heightsM: [1, 2] })])).ok).toBe(false);
+    expect(parsePlanJson(file([damaged({ intervalM: 30, heightsM: ['high', 2] })])).ok).toBe(false);
   });
 });
 

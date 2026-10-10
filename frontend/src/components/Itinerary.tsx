@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useState } from 'react';
 import { legNotes, legTitle, placeName } from '../plan/files';
+import { hillProfile } from '../plan/hills';
 import {
   type LegBounds,
   departureWindow,
@@ -14,6 +15,7 @@ import {
 } from '../plan/plan';
 import type { Leg, Place, Plan, PlanIssue } from '../plan/types';
 import { atLocalTime, formatClock, formatDuration, formatTime, formatTimeOnDay } from '../time';
+import { HillProfile } from './HillProfile';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
 
 /** Each edit returns an error message if it was refused. */
@@ -160,11 +162,15 @@ function LegSummary({ leg }: { leg: Leg }) {
     );
   }
   const notes = legNotes(leg).filter((n) => !n.startsWith('edited'));
+  const hills = leg.mode === 'bike' && leg.path ? hillProfile(leg.path) : null;
   return (
-    <p>
-      {legTitle(leg)}
-      <span className="muted"> · {notes.join(' · ')}</span>
-    </p>
+    <>
+      <p>
+        {legTitle(leg)}
+        <span className="muted"> · {notes.join(' · ')}</span>
+      </p>
+      {hills && <HillProfile profile={hills} />}
+    </>
   );
 }
 
