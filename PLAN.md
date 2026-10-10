@@ -28,7 +28,7 @@ built from either end.
 **In scope**
 
 - One local user, on a laptop, in a browser.
-- Transit schedules for **Caltrain, BART and VTA** (static GTFS, no real-time).
+- Transit schedules for **Caltrain, BART and VTA** (static GTFS).
 - Leg types: transit, walk, bike, wait (waits inserted automatically, or added by hand).
 - Forward and backward planning from an anchor picked on the map.
 - Walk/bike routes from a hosted routing API, with a manual override for the duration.
@@ -36,7 +36,8 @@ built from either end.
 
 **Out of scope for MVP** (see §10)
 
-- Real-time delays (GTFS-Realtime), other Bay Area agencies, and automatic "best route" search.
+- Other Bay Area agencies (since added through the 511 regional feed; see M6) and automatic
+  "best route" search.
 - Accounts, sharing and multiple devices.
 - Address search. You pick points on the map; stations can be found by name from GTFS.
 - Enforcing bike-on-board rules. The data is shown but not enforced.
@@ -126,8 +127,8 @@ downloads them and builds one SQLite file.
 
 **Alternative: 511.org.** With one free API key, the [511 SF Bay open data
 API](https://511.org/open-data/transit) serves the same per-agency feeds (`operator_id=…`) and a
-consolidated **regional feed** for every Bay Area operator (`operator_id=RG`), plus matching
-GTFS-Realtime. The direct agency URLs remain the default because they need no key. Set
+consolidated **regional feed** for every Bay Area operator (`operator_id=RG`). The direct
+agency URLs remain the default because they need no key. Set
 `GTFS_SOURCE=511` and `API_511_KEY` to load the regional feed instead (see M6 notes).
 
 **Freshness.** Agencies publish new feeds at service changes, several times a year. Mirrored
@@ -430,12 +431,13 @@ top of the existing API.
    planning a transit leg, and any walk or bike leg can be switched later.
 6. **Transfer rules are advice.** `transfers.txt` minimums show as warnings in the departure
    and arrival lists only. Choosing a warned connection is allowed.
+7. **Schedules only.** The tool plans future trips, so live data would add complexity
+   without helping. Only static GTFS schedules are used.
 
 **Risks:**
 
 - **Feed URLs move or expire.** Mitigated by the loader's expiry check and UI warnings.
   The 511.org fallback covers every agency.
-- **Schedule-only data.** Real trips run late. GTFS-Realtime through 511 is the follow-up.
 - **Cross-agency transfers.** At Millbrae, Diridon and Mountain View each agency has its own
   stop IDs, 100–300 m apart. The connector walk covers this. Neither the agency feeds nor the
   511 regional feed describe transfers between agencies, so there are no warnings for them.
@@ -447,7 +449,6 @@ top of the existing API.
 
 ## 10. After the MVP
 
-- Real-time delays and alerts (511 GTFS-Realtime, with the same API key).
 - A "Suggest" button that asks a full journey planner (OpenTripPlanner or MOTIS, self-hosted)
   for the next leg or two.
 - Elevation profiles for bike legs.
