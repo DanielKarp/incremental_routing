@@ -471,3 +471,73 @@ button.link {
     border-bottom-color: #ccc;
   }
 }
+
+/* Leave / Arrive / Minutes for walk, bike and wait legs. */
+.times-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.times-editor .field {
+  font-size: 0.75rem;
+  gap: 2px;
+}
+
+.times-editor input[type='time'] {
+  width: 7.5em;
+}
+
+.times-editor input[type='number'] {
+  width: 4.5em;
+}
+
+.leg-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.places summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.places[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.places .field {
+  font-size: 0.75rem;
+}
+
+/* Transfer heads-ups in the departure list. */
+.call-note {
+  grid-column: 2 / -1;
+  font-size: 0.8rem;
+}
+
+.call-note.issue-info {
+  color: var(--muted);
+}
+
+.plan-map {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+@media print {
+  .print-only .plan-map {
+    max-height: 11cm;
+    margin-bottom: 8px;
+  }
+}

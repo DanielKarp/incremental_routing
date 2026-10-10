@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type Ref, type RefObject, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { LatLon, NearbyStop } from '../api';
 import type { Leg, Place } from '../plan/types';
 
@@ -14,6 +14,9 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const BAY_AREA: [number, number] = [-122.05, 37.5];
 const ACCENT = '#2563eb';
 const PENDING = '#7c3aed';
+const START = '#d1495b';
+const END = '#15803d';
+const SNAPSHOT_TIMEOUT_MS = 10_000;
 
 export interface PreviewStop {
   lat: number;
@@ -21,15 +24,26 @@ export interface PreviewStop {
   name: string;
 }
 
+/** The trip being chosen: its stops, and the line to draw (following its shape if known). */
+export interface TripPreview {
+  stops: PreviewStop[];
+  line: [number, number][];
+}
+
+export interface MapHandle {
+  /** A PNG data URL of the map fitted to the whole plan, or null if it can't be captured. */
+  snapshot(): Promise<string | null>;
+}
+
 interface Props {
+  ref?: Ref<MapHandle>;
   /** Where the plan begins (before any legs: the point it is planned from). */
   start: Place | null;
   /** Where the plan ends, once it has legs. */
   end: Place | null;
   /** Stops of the departures or arrivals being listed. */
   stops: NearbyStop[];
-  /** Stops of the trip being chosen. */
-  tripPreview: PreviewStop[] | null;
+  tripPreview: TripPreview | null;
   /** A walk or bike leg being set up: its picked point and route. */
   pendingPoint: Place | null;
   pendingRoute: [number, number][] | null;
@@ -40,7 +54,7 @@ interface Props {
 }
 
 export function MapView(props: Props) {
-  const { start, end, stops, tripPreview, pendingPoint, pendingRoute, picking, legs, onPick } =
+  const { ref, start, end, stops, tripPreview, pendingPoint, pendingRoute, picking, legs, onPick } =
     props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -58,6 +72,8 @@ export function MapView(props: Props) {
       style: MAP_STYLE,
       center: BAY_AREA,
       zoom: 9.5,
+      // Keeps the last frame readable, so the plan can be captured for printing.
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
     m.on('click', (e) => onPickRef.current({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
@@ -75,8 +91,34 @@ export function MapView(props: Props) {
     };
   }, []);
 
-  useMarker(map, start, '#d1495b');
-  useMarker(map, end, '#15803d');
+  useImperativeHandle(
+    ref,
+    () => ({
+      async snapshot() {
+        const m = map.current;
+        const bounds = planBounds(legs);
+        if (!m || !bounds) return null;
+        m.fitBounds(bounds, { padding: 40, maxZoom: 15, animate: false });
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, SNAPSHOT_TIMEOUT_MS);
+          m.once('idle', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+          m.triggerRepaint();
+        });
+        try {
+          return m.getCanvas().toDataURL('image/png');
+        } catch {
+          return null; // A tainted canvas (cross-origin tiles without CORS) can't be read.
+        }
+      },
+    }),
+    [legs],
+  );
+
+  useMarker(map, start, START);
+  useMarker(map, end, END);
   useMarker(map, pendingPoint, PENDING);
 
   useEffect(() => {
@@ -86,19 +128,7 @@ export function MapView(props: Props) {
   useEffect(() => {
     const source = map.current?.getSource<maplibregl.GeoJSONSource>('pending');
     if (!styleReady || !source) return;
-    source.setData({
-      type: 'FeatureCollection',
-      features:
-        pendingRoute && pendingRoute.length > 1
-          ? [
-              {
-                type: 'Feature',
-                properties: {},
-                geometry: { type: 'LineString', coordinates: pendingRoute },
-              },
-            ]
-          : [],
-    });
+    source.setData(lines(pendingRoute && pendingRoute.length > 1 ? [pendingRoute] : []));
   }, [styleReady, pendingRoute]);
 
   // Markers rather than style layers, so they work before (or without) the style loading.
@@ -122,24 +152,18 @@ export function MapView(props: Props) {
 
   // Show the whole plan whenever it changes.
   useEffect(() => {
-    if (!map.current || !legs.length) return;
-    const bounds = new maplibregl.LngLatBounds();
-    for (const leg of legs) {
-      bounds.extend([leg.start.place.lon, leg.start.place.lat]);
-      bounds.extend([leg.end.place.lon, leg.end.place.lat]);
-      leg.transit?.stops.forEach((s) => bounds.extend([s.lon, s.lat]));
-    }
-    map.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
+    const bounds = planBounds(legs);
+    if (map.current && bounds) map.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
   }, [legs]);
 
   useEffect(() => {
     const m = map.current;
     const source = m?.getSource<maplibregl.GeoJSONSource>('trip-preview');
     if (!m || !styleReady || !source) return;
-    source.setData(previewFeatures(tripPreview ?? []));
-    if (tripPreview && tripPreview.length > 1) {
+    source.setData(previewFeatures(tripPreview));
+    if (tripPreview && tripPreview.line.length > 1) {
       const bounds = new maplibregl.LngLatBounds();
-      tripPreview.forEach((s) => bounds.extend([s.lon, s.lat]));
+      tripPreview.line.forEach((c) => bounds.extend(c));
       m.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
   }, [styleReady, tripPreview]);
@@ -147,11 +171,7 @@ export function MapView(props: Props) {
   return <div ref={container} className="map" data-testid="map" />;
 }
 
-function useMarker(
-  map: RefObject<maplibregl.Map | null>,
-  place: Place | null,
-  color: string,
-) {
+function useMarker(map: RefObject<maplibregl.Map | null>, place: Place | null, color: string) {
   const lat = place?.lat;
   const lon = place?.lon;
   useEffect(() => {
@@ -164,6 +184,8 @@ function useMarker(
 }
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+const isLine: maplibregl.ExpressionSpecification = ['==', ['geometry-type'], 'LineString'];
+const isPoint: maplibregl.ExpressionSpecification = ['==', ['geometry-type'], 'Point'];
 
 function addOverlayLayers(m: maplibregl.Map) {
   m.addSource('trip-preview', { type: 'geojson', data: EMPTY });
@@ -173,14 +195,14 @@ function addOverlayLayers(m: maplibregl.Map) {
     id: 'trip-preview-line',
     type: 'line',
     source: 'trip-preview',
-    filter: ['==', ['geometry-type'], 'LineString'],
+    filter: isLine,
     paint: { 'line-color': ACCENT, 'line-width': 3, 'line-opacity': 0.5 },
   });
   m.addLayer({
     id: 'trip-preview-stops',
     type: 'circle',
     source: 'trip-preview',
-    filter: ['==', ['geometry-type'], 'Point'],
+    filter: isPoint,
     paint: {
       'circle-radius': 5,
       'circle-color': '#ffffff',
@@ -192,7 +214,7 @@ function addOverlayLayers(m: maplibregl.Map) {
     id: 'legs-transit',
     type: 'line',
     source: 'legs',
-    filter: ['==', ['get', 'mode'], 'transit'],
+    filter: ['all', isLine, ['==', ['get', 'mode'], 'transit']],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': ['coalesce', ['get', 'color'], ACCENT], 'line-width': 5 },
   });
@@ -200,12 +222,25 @@ function addOverlayLayers(m: maplibregl.Map) {
     id: 'legs-path',
     type: 'line',
     source: 'legs',
-    filter: ['!=', ['get', 'mode'], 'transit'],
+    filter: ['all', isLine, ['!=', ['get', 'mode'], 'transit']],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': ['match', ['get', 'mode'], 'bike', '#15803d', '#374151'],
       'line-width': 3,
       'line-dasharray': [1, 2],
+    },
+  });
+  // The plan's start and end, drawn into the map (unlike the markers) so snapshots show them.
+  m.addLayer({
+    id: 'legs-ends',
+    type: 'circle',
+    source: 'legs',
+    filter: isPoint,
+    paint: {
+      'circle-radius': 7,
+      'circle-color': ['match', ['get', 'end'], 'start', START, END],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 2,
     },
   });
   m.addLayer({
@@ -217,37 +252,68 @@ function addOverlayLayers(m: maplibregl.Map) {
   });
 }
 
-function legFeatures(legs: Leg[]): FeatureCollection<LineString> {
-  const features: Feature<LineString>[] = [];
+/** A transit leg follows its shape when the feed has one, else runs stop to stop. */
+function legLine(leg: Leg): [number, number][] | null {
+  if (leg.transit) {
+    if (leg.transit.geometry && leg.transit.geometry.length > 1) return leg.transit.geometry;
+    return leg.transit.stops.map((s) => [s.lon, s.lat]);
+  }
+  if (leg.path && leg.path.geometry.length > 1) return leg.path.geometry;
+  return null;
+}
+
+function planBounds(legs: Leg[]): maplibregl.LngLatBounds | null {
+  if (!legs.length) return null;
+  const bounds = new maplibregl.LngLatBounds();
   for (const leg of legs) {
-    let coordinates: [number, number][];
-    if (leg.transit) {
-      // Stop to stop; shapes.txt would follow the track more closely (PLAN.md §10).
-      coordinates = leg.transit.stops.map((s) => [s.lon, s.lat]);
-    } else if (leg.path && leg.path.geometry.length > 1) {
-      coordinates = leg.path.geometry;
-    } else {
-      continue;
-    }
+    bounds.extend([leg.start.place.lon, leg.start.place.lat]);
+    bounds.extend([leg.end.place.lon, leg.end.place.lat]);
+    legLine(leg)?.forEach((c) => bounds.extend(c));
+  }
+  return bounds;
+}
+
+function legFeatures(legs: Leg[]): FeatureCollection<LineString | Point> {
+  const features: Feature<LineString | Point>[] = [];
+  for (const leg of legs) {
+    const coordinates = legLine(leg);
+    if (!coordinates) continue;
     features.push({
       type: 'Feature',
       properties: { mode: leg.mode, color: leg.transit?.color ? `#${leg.transit.color}` : null },
       geometry: { type: 'LineString', coordinates },
     });
   }
+  if (legs.length) {
+    const first = legs[0].start.place;
+    const last = legs[legs.length - 1].end.place;
+    features.push(point(first, { end: 'start' }), point(last, { end: 'end' }));
+  }
   return { type: 'FeatureCollection', features };
 }
 
-function previewFeatures(stops: PreviewStop[]): FeatureCollection<LineString | Point> {
-  const points: Feature<Point>[] = stops.map((s) => ({
-    type: 'Feature',
-    properties: { name: s.name },
-    geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-  }));
-  const line: Feature<LineString> = {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates: stops.map((s) => [s.lon, s.lat]) },
+function previewFeatures(preview: TripPreview | null): FeatureCollection<LineString | Point> {
+  if (!preview) return { type: 'FeatureCollection', features: [] };
+  return {
+    type: 'FeatureCollection',
+    features: [
+      ...lines(preview.line.length > 1 ? [preview.line] : []).features,
+      ...preview.stops.map((s) => point(s, { name: s.name })),
+    ],
   };
-  return { type: 'FeatureCollection', features: stops.length > 1 ? [line, ...points] : points };
+}
+
+function lines(coords: [number, number][][]): FeatureCollection<LineString> {
+  return {
+    type: 'FeatureCollection',
+    features: coords.map((coordinates) => ({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates },
+    })),
+  };
+}
+
+function point(p: { lat: number; lon: number }, properties: Record<string, string>): Feature<Point> {
+  return { type: 'Feature', properties, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } };
 }

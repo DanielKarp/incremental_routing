@@ -34,6 +34,10 @@ export interface TransitInfo {
   bikesAllowed: boolean | null;
   /** Stops ridden, boarding to alighting inclusive. */
   stops: { stopId: string; name: string; lat: number; lon: number; time: string }[];
+  /** Operating agency, when the feed names it. Absent in plans saved before it existed. */
+  agency?: string | null;
+  /** The ridden part of the trip's shape as [lon, lat] pairs, when the feed has shapes. */
+  geometry?: [number, number][];
 }
 
 export interface PathInfo {

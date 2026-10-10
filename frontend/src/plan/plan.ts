@@ -1,6 +1,7 @@
 // Pure plan operations. The UI calls these; nothing here touches the network or React.
 
-import type { Leg, Plan, PlanIssue, Waypoint } from './types';
+import { formatDuration, formatTime } from '../time';
+import type { FixedEnd, Leg, PathInfo, Place, Plan, PlanIssue, Waypoint } from './types';
 
 /** Consecutive legs whose endpoints are closer than this are treated as the same place. */
 export const SAME_PLACE_M = 75;
@@ -65,47 +66,211 @@ function userNeighbours(plan: Plan, legId: string) {
   return { leg: userLegs[i], prev: userLegs[i - 1], next: userLegs[i + 1] };
 }
 
-/**
- * The longest a leg may become, keeping its fixed end in place, without running into the leg
- * on the side it grows towards (PLAN.md §9, decision 2). Null when that side of the plan is
- * open. Automatic waits in between don't count: they shrink to make room.
- */
-export function maxDurationS(plan: Plan, legId: string): number | null {
-  const { leg, prev, next } = userNeighbours(plan, legId);
-  if (!leg) throw new Error(`No leg ${legId}`);
-  if ((leg.fixed ?? 'start') === 'start') {
-    return next ? (toMs(next.start.time) - toMs(leg.start.time)) / 1000 : null;
-  }
-  return prev ? (toMs(leg.end.time) - toMs(prev.end.time)) / 1000 : null;
+/** How far a walk, bike or wait leg's times may move (PLAN.md §9, decision 2). */
+export interface LegBounds {
+  /** False when the leg meets a transit leg directly on that side: that end can't move. */
+  startFree: boolean;
+  endFree: boolean;
+  /** Limits set by the neighbouring legs you chose; null where the plan is open. */
+  earliestStart: string | null;
+  latestEnd: string | null;
+}
+
+export function legBounds(plan: Plan, legId: string): LegBounds {
+  const i = plan.legs.findIndex((l) => l.id === legId);
+  if (i < 0) throw new Error(`No leg ${legId}`);
+  const { prev, next } = userNeighbours(plan, legId);
+  return {
+    // Automatic waits in between don't lock anything: they shrink or grow to make room.
+    startFree: plan.legs[i - 1]?.mode !== 'transit',
+    endFree: plan.legs[i + 1]?.mode !== 'transit',
+    earliestStart: prev ? prev.end.time : null,
+    latestEnd: next ? next.start.time : null,
+  };
 }
 
 /**
- * Manually override a walk, bike or wait leg's duration. Its fixed end stays put: the start
- * for legs planned forwards (you leave at a known time), the end for legs planned backwards
- * (you must arrive by then). Shortening always works and opens a wait; lengthening into a
- * neighbour is refused.
+ * Which end stays put when only the duration changes: an end locked to a transit leg, else
+ * the end the leg was planned from (its departure when planned forwards).
+ */
+export function durationAnchor(plan: Plan, legId: string): FixedEnd {
+  const bounds = legBounds(plan, legId);
+  if (!bounds.startFree) return 'start';
+  if (!bounds.endFree) return 'end';
+  return userNeighbours(plan, legId).leg?.fixed ?? 'start';
+}
+
+/**
+ * The longest a leg may become while its anchored end stays put, without running into the
+ * leg on the other side. Null when that side of the plan is open.
+ */
+export function maxDurationS(plan: Plan, legId: string): number | null {
+  const { leg } = userNeighbours(plan, legId);
+  if (!leg) throw new Error(`No leg ${legId}`);
+  const bounds = legBounds(plan, legId);
+  if (durationAnchor(plan, legId) === 'start') {
+    return bounds.latestEnd ? (toMs(bounds.latestEnd) - toMs(leg.start.time)) / 1000 : null;
+  }
+  return bounds.earliestStart ? (toMs(leg.end.time) - toMs(bounds.earliestStart)) / 1000 : null;
+}
+
+/** The range of departure times a leg can be moved to while keeping its duration. */
+export function departureWindow(plan: Plan, legId: string): { earliest: string | null; latest: string | null } {
+  const { leg } = userNeighbours(plan, legId);
+  const bounds = legBounds(plan, legId);
+  if (!leg || !bounds.startFree || !bounds.endFree) return { earliest: null, latest: null };
+  return {
+    earliest: bounds.earliestStart,
+    latest: bounds.latestEnd ? addSeconds(bounds.latestEnd, -legDurationS(leg)) : null,
+  };
+}
+
+function editable(plan: Plan, legId: string): Leg | string {
+  const { leg } = userNeighbours(plan, legId);
+  if (!leg) return 'That leg is no longer in the plan.';
+  if (leg.mode === 'transit') return 'Transit times come from the timetable.';
+  return leg;
+}
+
+/** Apply new times to a leg if they stay within its neighbours. */
+function retimed(plan: Plan, leg: Leg, start: string, end: string, extra: Partial<Leg> = {}): EditResult {
+  const bounds = legBounds(plan, leg.id);
+  if (toMs(end) < toMs(start)) return { ok: false, reason: 'It would end before it starts.' };
+  if (bounds.earliestStart && toMs(start) < toMs(bounds.earliestStart)) {
+    return {
+      ok: false,
+      reason: `Leave at ${formatTime(bounds.earliestStart)} or later: the previous leg ends then.`,
+    };
+  }
+  if (bounds.latestEnd && toMs(end) > toMs(bounds.latestEnd)) {
+    return { ok: false, reason: `Arrive by ${formatTime(bounds.latestEnd)}: the next leg starts then.` };
+  }
+  const legs = plan.legs.map((l) =>
+    l.id === leg.id
+      ? { ...l, ...extra, start: { ...l.start, time: start }, end: { ...l.end, time: end } }
+      : l,
+  );
+  return { ok: true, plan: { ...plan, legs: withWaits(legs) } };
+}
+
+/**
+ * Change a walk, bike or wait leg's duration. The anchored end (see durationAnchor) stays put;
+ * shortening always works and opens a wait, lengthening into a neighbour is refused.
  */
 export function setLegDuration(plan: Plan, legId: string, durationS: number): EditResult {
-  const { leg } = userNeighbours(plan, legId);
-  if (!leg) return { ok: false, reason: 'That leg is no longer in the plan.' };
-  if (leg.mode === 'transit') return { ok: false, reason: 'Transit times come from the timetable.' };
+  const leg = editable(plan, legId);
+  if (typeof leg === 'string') return { ok: false, reason: leg };
   if (!(durationS >= 0)) return { ok: false, reason: 'Enter a duration of 0 or more.' };
-  const fixed = leg.fixed ?? 'start';
+  const anchor = durationAnchor(plan, legId);
   const max = maxDurationS(plan, legId);
   if (max !== null && durationS > max) {
-    const neighbour = fixed === 'start' ? 'next' : 'previous';
+    const neighbour = anchor === 'start' ? 'next' : 'previous';
     return {
       ok: false,
       reason: `At most ${Math.floor(max / 60)} min. Any longer runs into the ${neighbour} leg.`,
     };
   }
-  const legs = plan.legs.map((l) => {
-    if (l.id !== legId) return l;
-    return fixed === 'start'
-      ? { ...l, end: { ...l.end, time: addSeconds(l.start.time, durationS) } }
-      : { ...l, start: { ...l.start, time: addSeconds(l.end.time, -durationS) } };
-  });
-  return { ok: true, plan: { ...plan, legs: withWaits(legs) } };
+  return anchor === 'start'
+    ? retimed(plan, leg, leg.start.time, addSeconds(leg.start.time, durationS))
+    : retimed(plan, leg, addSeconds(leg.end.time, -durationS), leg.end.time);
+}
+
+/**
+ * Move a leg's departure. It keeps its duration (the arrival moves too) unless the arrival
+ * is locked to a transit leg, in which case the duration changes instead.
+ */
+export function setLegStart(plan: Plan, legId: string, start: string): EditResult {
+  const leg = editable(plan, legId);
+  if (typeof leg === 'string') return { ok: false, reason: leg };
+  const bounds = legBounds(plan, legId);
+  if (!bounds.startFree) return { ok: false, reason: 'It leaves as soon as the ride before it arrives.' };
+  if (!bounds.endFree) {
+    if (toMs(start) > toMs(leg.end.time)) {
+      return { ok: false, reason: `Leave by ${formatTime(leg.end.time)}: the ride after it leaves then.` };
+    }
+    return retimed(plan, leg, start, leg.end.time);
+  }
+  const end = addSeconds(start, legDurationS(leg));
+  if (bounds.latestEnd && toMs(end) > toMs(bounds.latestEnd)) {
+    const latest = addSeconds(bounds.latestEnd, -legDurationS(leg));
+    return { ok: false, reason: `Leave by ${formatTime(latest)} to make the next leg.` };
+  }
+  return retimed(plan, leg, start, end);
+}
+
+/**
+ * Move a leg's arrival. It keeps its duration (the departure moves too) unless the departure
+ * is locked to a transit leg, in which case the duration changes instead.
+ */
+export function setLegEnd(plan: Plan, legId: string, end: string): EditResult {
+  const leg = editable(plan, legId);
+  if (typeof leg === 'string') return { ok: false, reason: leg };
+  const bounds = legBounds(plan, legId);
+  if (!bounds.endFree) return { ok: false, reason: 'It arrives just as the ride after it leaves.' };
+  if (!bounds.startFree) {
+    if (toMs(end) < toMs(leg.start.time)) {
+      return {
+        ok: false,
+        reason: `Arrive at ${formatTime(leg.start.time)} or later: it leaves when the ride before it arrives.`,
+      };
+    }
+    return retimed(plan, leg, leg.start.time, end);
+  }
+  const start = addSeconds(end, -legDurationS(leg));
+  if (bounds.earliestStart && toMs(start) < toMs(bounds.earliestStart)) {
+    const earliest = addSeconds(bounds.earliestStart, legDurationS(leg));
+    return { ok: false, reason: `Arrive at ${formatTime(earliest)} or later: the previous leg ends first.` };
+  }
+  return retimed(plan, leg, start, end);
+}
+
+/**
+ * Swap a walk or bike leg's route, e.g. to cycle instead of walk. Its anchored end stays put
+ * if the new duration fits there; otherwise the other end, if free, is kept instead.
+ */
+export function setLegPath(plan: Plan, legId: string, mode: 'walk' | 'bike', path: PathInfo): EditResult {
+  const leg = editable(plan, legId);
+  if (typeof leg === 'string') return { ok: false, reason: leg };
+  const bounds = legBounds(plan, legId);
+  const durationS = path.routedDurationS;
+  const preferred = durationAnchor(plan, legId);
+  const other: FixedEnd = preferred === 'start' ? 'end' : 'start';
+  const anchors = [preferred, ...((other === 'start' ? bounds.startFree : bounds.endFree) ? [other] : [])];
+  for (const anchor of anchors) {
+    const start = anchor === 'start' ? leg.start.time : addSeconds(leg.end.time, -durationS);
+    const end = anchor === 'start' ? addSeconds(leg.start.time, durationS) : leg.end.time;
+    const result = retimed(plan, leg, start, end, { mode, path });
+    if (result.ok) return result;
+  }
+  return {
+    ok: false,
+    reason: `${mode === 'bike' ? 'Cycling' : 'Walking'} takes ${formatDuration(durationS)}, which doesn't fit between the legs around it.`,
+  };
+}
+
+const samePlace = (a: Place, b: Place) =>
+  a.lat === b.lat && a.lon === b.lon && (a.stopId ?? null) === (b.stopId ?? null);
+
+/** Every distinct place in the plan, in travel order. */
+export function planPlaces(plan: Plan): Place[] {
+  const places: Place[] = [];
+  const waypoints = plan.legs.length
+    ? plan.legs.flatMap((l) => [l.start, l.end])
+    : [plan.anchor];
+  for (const { place } of waypoints) {
+    if (!places.some((p) => samePlace(p, place))) places.push(place);
+  }
+  return places;
+}
+
+/** Rename a place everywhere it appears in the plan. */
+export function renamePlace(plan: Plan, place: Place, name: string): Plan {
+  const rename = (w: Waypoint): Waypoint =>
+    samePlace(w.place, place) ? { ...w, place: { ...w.place, name } } : w;
+  return {
+    anchor: rename(plan.anchor),
+    legs: withWaits(plan.legs.map((l) => ({ ...l, start: rename(l.start), end: rename(l.end) }))),
+  };
 }
 
 /** Drop derived legs and insert a wait wherever one leg ends before the next begins. */

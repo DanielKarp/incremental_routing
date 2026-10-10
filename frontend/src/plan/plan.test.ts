@@ -30,11 +30,12 @@ const bike = leg('bike', 'bike', HOME, '07:40', STATION, '07:50');
 const train = leg('train', 'transit', STATION, '08:00', CITY, '08:45');
 const walk = leg('walk', 'walk', CITY, '08:45', OFFICE, '08:55');
 const commute = appendLegs(emptyPlan, [bike, train, walk]);
-// The same trip, planned backwards from the office: walk and bike keep their end fixed.
+// The same trip, planned backwards from the office: walk and bike keep their end fixed. The
+// walk starts two minutes after the train arrives, so its start isn't locked to the train.
 const commuteBackwards = appendLegs(emptyPlan, [
   { ...bike, fixed: 'end' },
   train,
-  { ...walk, fixed: 'end' },
+  { ...walk, fixed: 'end', start: { ...walk.start, time: t('08:47') } },
 ]);
 
 function edited(result: ReturnType<typeof setLegDuration>): Plan {

@@ -1,15 +1,33 @@
-import { useState } from 'react';
-import { legNotes, legTitle } from '../plan/files';
-import { isEndLeg, legDurationS, maxDurationS, planEnd, planStart } from '../plan/plan';
-import type { Leg, Plan, PlanIssue } from '../plan/types';
-import { formatDuration, formatTimeOnDay } from '../time';
+import { type KeyboardEvent, useState } from 'react';
+import { legNotes, legTitle, placeName } from '../plan/files';
+import {
+  type LegBounds,
+  departureWindow,
+  durationAnchor,
+  isEndLeg,
+  legBounds,
+  legDurationS,
+  maxDurationS,
+  planEnd,
+  planPlaces,
+  planStart,
+} from '../plan/plan';
+import type { Leg, Place, Plan, PlanIssue } from '../plan/types';
+import { atLocalTime, formatClock, formatDuration, formatTime, formatTimeOnDay } from '../time';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
 
-interface Props {
+/** Each edit returns an error message if it was refused. */
+export interface LegEdits {
+  onSetDuration: (legId: string, seconds: number) => string | null;
+  onSetStart: (legId: string, time: string) => string | null;
+  onSetEnd: (legId: string, time: string) => string | null;
+}
+
+interface Props extends LegEdits {
   plan: Plan;
   issues: PlanIssue[];
-  /** Returns an error message if the edit was refused. */
-  onSetDuration: (legId: string, seconds: number) => string | null;
+  onSwitchMode: (legId: string) => void;
+  onRename: (place: Place, name: string) => void;
   onRemove: (legId: string) => void;
   onUndo: () => void;
   canUndo: boolean;
@@ -37,11 +55,11 @@ export function Itinerary(props: Props) {
             <div className="leg-body">
               <LegSummary leg={leg} />
               {editable(leg) && (
-                <DurationEditor
-                  key={`${leg.id}:${leg.start.time}:${leg.end.time}`}
+                <LegTimesEditor
+                  key={`${leg.id}:${leg.mode}:${leg.start.time}:${leg.end.time}`}
+                  plan={plan}
                   leg={leg}
-                  maxS={maxDurationS(plan, leg.id)}
-                  onCommit={(s) => props.onSetDuration(leg.id, s)}
+                  edits={props}
                   disabled={props.disabled}
                 />
               )}
@@ -53,17 +71,29 @@ export function Itinerary(props: Props) {
                   </p>
                 ))}
             </div>
-            {!leg.auto && isEndLeg(plan, leg.id) && (
-              <button
-                type="button"
-                className="link remove"
-                disabled={props.disabled}
-                aria-label={`Remove: ${legTitle(leg)}`}
-                onClick={() => props.onRemove(leg.id)}
-              >
-                Remove
-              </button>
-            )}
+            <div className="leg-actions">
+              {(leg.mode === 'walk' || leg.mode === 'bike') && (
+                <button
+                  type="button"
+                  className="link"
+                  disabled={props.disabled}
+                  onClick={() => props.onSwitchMode(leg.id)}
+                >
+                  {leg.mode === 'walk' ? 'Switch to bike' : 'Switch to walk'}
+                </button>
+              )}
+              {!leg.auto && isEndLeg(plan, leg.id) && (
+                <button
+                  type="button"
+                  className="link remove"
+                  disabled={props.disabled}
+                  aria-label={`Remove: ${legTitle(leg)}`}
+                  onClick={() => props.onRemove(leg.id)}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </li>
         ))}
       </ol>
@@ -71,6 +101,17 @@ export function Itinerary(props: Props) {
         Total {formatDuration((Date.parse(end.time) - Date.parse(start.time)) / 1000)}, from{' '}
         {formatTimeOnDay(start.time, start.time)} to {formatTimeOnDay(end.time, start.time)}
       </p>
+      <details className="places">
+        <summary>Rename places</summary>
+        {planPlaces(plan).map((place) => (
+          <PlaceName
+            key={`${place.lat},${place.lon},${place.stopId ?? ''}:${place.name ?? ''}`}
+            place={place}
+            disabled={props.disabled}
+            onRename={(name) => props.onRename(place, name)}
+          />
+        ))}
+      </details>
       <div className="row wrap">
         <button type="button" onClick={props.onSummary}>
           Summary &amp; export
@@ -104,6 +145,7 @@ function LegSummary({ leg }: { leg: Leg }) {
         {t.bikesAllowed === false && <NoBikesBadge />}
         <br />
         <span className="muted">
+          {t.agency ? `${t.agency} · ` : ''}
           {leg.start.place.name} → {leg.end.place.name} · {legNotes(leg)[0]} · {duration}
         </span>
       </p>
@@ -127,47 +169,130 @@ function LegSummary({ leg }: { leg: Leg }) {
 }
 
 interface EditorProps {
+  plan: Plan;
   leg: Leg;
-  maxS: number | null;
-  onCommit: (seconds: number) => string | null;
+  edits: LegEdits;
   disabled?: boolean;
 }
 
-/** Minutes field for walk, bike and manual wait legs. Edits past maxS are refused. */
-function DurationEditor({ leg, maxS, onCommit, disabled }: EditorProps) {
-  const current = Math.round(legDurationS(leg) / 60);
-  const [draft, setDraft] = useState(String(current));
+/**
+ * Departure, arrival and duration of a walk, bike or manual wait leg. An end that meets a ride
+ * is fixed; moving a free end shifts the leg, or stretches it if the other end is fixed.
+ */
+function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
+  const bounds = legBounds(plan, leg.id);
+  const maxS = maxDurationS(plan, leg.id);
+  const minutes = Math.round(legDurationS(leg) / 60);
+  const [start, setStart] = useState(formatClock(leg.start.time));
+  const [end, setEnd] = useState(formatClock(leg.end.time));
+  const [duration, setDuration] = useState(String(minutes));
   const [error, setError] = useState<string | null>(null);
-  const keeps = (leg.fixed ?? 'start') === 'start' ? 'departure' : 'arrival';
+  const isWait = leg.mode === 'wait';
 
-  function commit() {
-    const minutes = Number(draft);
-    if (draft === '' || minutes === current) return;
-    const refusal = onCommit(minutes * 60);
+  function commit(refusal: string | null) {
     setError(refusal);
-    if (refusal) setDraft(String(current));
+    if (refusal) {
+      setStart(formatClock(leg.start.time));
+      setEnd(formatClock(leg.end.time));
+      setDuration(String(minutes));
+    }
   }
+  const commitStart = () =>
+    start && start !== formatClock(leg.start.time) &&
+    commit(edits.onSetStart(leg.id, atLocalTime(leg.start.time, start)));
+  const commitEnd = () =>
+    end && end !== formatClock(leg.end.time) &&
+    commit(edits.onSetEnd(leg.id, atLocalTime(leg.end.time, end)));
+  const commitDuration = () =>
+    duration !== '' && Number(duration) !== minutes &&
+    commit(edits.onSetDuration(leg.id, Number(duration) * 60));
+  const onEnter = (save: () => unknown) => (e: KeyboardEvent) => e.key === 'Enter' && save();
 
   return (
-    <div className="duration">
-      <label title={`Changing the duration keeps the ${keeps} time`}>
-        <input
-          type="number"
-          min={0}
-          max={maxS === null ? undefined : Math.floor(maxS / 60)}
-          value={draft}
-          disabled={disabled}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === 'Enter' && commit()}
-          aria-label="Duration in minutes"
-        />{' '}
-        min
-      </label>
-      <span className="muted">
-        {maxS !== null && ` up to ${Math.floor(maxS / 60)}`} · keeps {keeps}
-      </span>
+    <div className="times-editor">
+      <div className="row wrap align-end">
+        <label className="field">
+          {isWait ? 'From' : 'Leave'}
+          <input
+            type="time"
+            value={start}
+            disabled={disabled || !bounds.startFree}
+            title={bounds.startFree ? undefined : 'Fixed: it leaves as the ride before it arrives'}
+            onChange={(e) => setStart(e.target.value)}
+            onBlur={commitStart}
+            onKeyDown={onEnter(commitStart)}
+          />
+        </label>
+        <label className="field">
+          {isWait ? 'Until' : 'Arrive'}
+          <input
+            type="time"
+            value={end}
+            disabled={disabled || !bounds.endFree}
+            title={bounds.endFree ? undefined : 'Fixed: it arrives as the ride after it leaves'}
+            onChange={(e) => setEnd(e.target.value)}
+            onBlur={commitEnd}
+            onKeyDown={onEnter(commitEnd)}
+          />
+        </label>
+        <label className="field">
+          Minutes
+          <input
+            type="number"
+            min={0}
+            max={maxS === null ? undefined : Math.floor(maxS / 60)}
+            value={duration}
+            disabled={disabled}
+            onChange={(e) => setDuration(e.target.value)}
+            onBlur={commitDuration}
+            onKeyDown={onEnter(commitDuration)}
+            aria-label="Duration in minutes"
+          />
+        </label>
+      </div>
+      <p className="muted">{hint(plan, leg, bounds, maxS)}</p>
       {error && <p className="issue issue-error">{error}</p>}
     </div>
+  );
+}
+
+/** What can move, in a few words: "can leave until 8:35 · up to 22 min, keeping departure". */
+function hint(plan: Plan, leg: Leg, bounds: LegBounds, maxS: number | null): string {
+  const parts: string[] = [];
+  const { earliest, latest } = departureWindow(plan, leg.id);
+  if (earliest && latest) parts.push(`can leave ${formatTime(earliest)}–${formatTime(latest)}`);
+  else if (latest) parts.push(`can leave until ${formatTime(latest)}`);
+  else if (earliest) parts.push(`can leave from ${formatTime(earliest)}`);
+  if (!bounds.startFree) parts.push('leaves as the ride arrives');
+  if (!bounds.endFree) parts.push('arrives as the ride leaves');
+  const keeps = durationAnchor(plan, leg.id) === 'start' ? 'departure' : 'arrival';
+  parts.push(`${maxS === null ? '' : `up to ${Math.floor(maxS / 60)} min, `}keeping ${keeps}`);
+  return parts.join(' · ');
+}
+
+/** One place's name, renamed everywhere it appears when you finish editing. */
+function PlaceName({
+  place,
+  disabled,
+  onRename,
+}: {
+  place: Place;
+  disabled?: boolean;
+  onRename: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState(place.name ?? '');
+  const save = () => draft.trim() !== (place.name ?? '') && onRename(draft.trim());
+  return (
+    <label className="field">
+      <span className="muted">{place.stopId ? 'Stop' : 'Place'}</span>
+      <input
+        value={draft}
+        placeholder={placeName({ ...place, name: undefined })}
+        disabled={disabled}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => e.key === 'Enter' && save()}
+      />
+    </label>
   );
 }

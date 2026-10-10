@@ -1,8 +1,18 @@
 // Turn API results into plan legs. Pure functions; the UI does the fetching.
 
-import type { NearbyStop, PathMode, RouteInfo, RouteResult, Stop, TripDetail } from '../api';
+import type {
+  NearbyStop,
+  PathMode,
+  RouteInfo,
+  RouteResult,
+  Stop,
+  TripDetail,
+  TripStop,
+} from '../api';
 import { SAME_PLACE_M, addSeconds, distanceM, newLegId, toMs } from './plan';
 import type { Direction, Leg, PathInfo, Place, Waypoint } from './types';
+
+const ACCESS_WORDS: Record<PathMode, string> = { walk: 'walk', bike: 'bike ride' };
 
 // Mirror backend/src/incremental_routing/geo.py, for when the router is unavailable.
 const DETOUR_FACTOR = 1.3;
@@ -53,7 +63,8 @@ export function pathDurationS(route: RouteResult): number {
   return Math.ceil(route.duration_s / 60) * 60;
 }
 
-function pathInfo(route: RouteResult, durationS: number): PathInfo {
+/** Path info for a leg; also used when swapping a leg between walking and cycling. */
+export function pathInfo(route: RouteResult, durationS: number = pathDurationS(route)): PathInfo {
   return {
     provider: route.provider,
     distanceM: route.distance_m,
@@ -121,6 +132,7 @@ export function transitLeg(trip: TripDetail, boardSeq: number, alightSeq: number
   const ridden = trip.stops.filter(
     (s) => s.stop_sequence >= boardSeq && s.stop_sequence <= alightSeq,
   );
+  const geometry = shapeBetween(trip, board, alight);
   return {
     id: newLegId(),
     mode: 'transit',
@@ -134,6 +146,8 @@ export function transitLeg(trip: TripDetail, boardSeq: number, alightSeq: number
       color: trip.route.color,
       textColor: trip.route.text_color,
       bikesAllowed: trip.bikes_allowed === 1 ? true : trip.bikes_allowed === 2 ? false : null,
+      agency: trip.route.agency ?? null,
+      ...(geometry && { geometry }),
       stops: ridden.map((s) => ({
         stopId: s.stop.stop_id,
         name: s.stop.name,
@@ -145,33 +159,62 @@ export function transitLeg(trip: TripDetail, boardSeq: number, alightSeq: number
   };
 }
 
+/**
+ * The trip's shape from one stop to another, starting and ending exactly at the stops. Null
+ * when the feed has no shape for the trip.
+ */
+export function shapeBetween(
+  trip: TripDetail,
+  from: TripStop,
+  to: TripStop,
+): [number, number][] | null {
+  if (!trip.shape || from.shape_index == null || to.shape_index == null) return null;
+  return [
+    [from.stop.lon, from.stop.lat],
+    ...trip.shape.slice(from.shape_index, to.shape_index + 1),
+    [to.stop.lon, to.stop.lat],
+  ];
+}
+
+/** The line to preview while choosing where to get off (forwards) or on (backwards). */
+export function previewLine(trip: TripDetail, stopSequence: number, direction: Direction) {
+  const at = trip.stops.find((s) => s.stop_sequence === stopSequence);
+  const first = trip.stops[0];
+  const last = trip.stops[trip.stops.length - 1];
+  const shaped = at && (direction === 'forward' ? shapeBetween(trip, at, last) : shapeBetween(trip, first, at));
+  if (shaped) return shaped;
+  return trip.stops
+    .filter((s) => (direction === 'forward' ? s.stop_sequence >= stopSequence : s.stop_sequence <= stopSequence))
+    .map((s): [number, number] => [s.stop.lon, s.stop.lat]);
+}
+
 export type LegsResult = { ok: true; legs: Leg[] } | { ok: false; reason: string };
 
 /**
  * Planning forwards: the legs that take you from the frontier (the plan's end) onto `trip` and
- * off at alightSeq. A walk to the boarding stop comes first when it isn't at the frontier.
- * Waits are added by withWaits. Pass the walk route whenever needsConnector says so.
+ * off at alightSeq. A walk or bike ride to the boarding stop comes first when it isn't at the
+ * frontier. Waits are added by withWaits. Pass that route whenever needsConnector says so.
  */
 export function boardingLegs(
   frontier: Waypoint,
   trip: TripDetail,
   boardSeq: number,
   alightSeq: number,
-  walk: RouteResult | null,
+  access: RouteResult | null,
 ): LegsResult {
   const ride = transitLeg(trip, boardSeq, alightSeq);
   if (toMs(ride.start.time) < toMs(frontier.time)) {
     return { ok: false, reason: 'That departure is before the end of your plan.' };
   }
   if (!needsConnector(frontier.place, ride.start.place)) return { ok: true, legs: [ride] };
-  if (!walk) throw new Error('boardingLegs needs a walk route to reach the stop');
+  if (!access) throw new Error('boardingLegs needs a route to reach the stop');
 
-  const connector = pathLeg(frontier, ride.start.place, walk);
+  const connector = pathLeg(frontier, ride.start.place, access);
   if (toMs(connector.end.time) > toMs(ride.start.time)) {
-    const minutes = Math.ceil(walk.duration_s / 60);
+    const minutes = Math.ceil(access.duration_s / 60);
     return {
       ok: false,
-      reason: `The ${minutes}-min walk to ${ride.start.place.name} arrives after this departure.`,
+      reason: `The ${minutes}-min ${ACCESS_WORDS[access.mode]} to ${ride.start.place.name} arrives after this departure.`,
     };
   }
   return { ok: true, legs: [connector, ride] };
@@ -179,29 +222,29 @@ export function boardingLegs(
 
 /**
  * Planning backwards: the legs that bring you from boardSeq on `trip` to the frontier (the
- * plan's start). A walk from the alighting stop comes last when it isn't at the frontier; it
- * leaves as soon as you get off and any spare time becomes a wait at the frontier.
+ * plan's start). A walk or bike ride from the alighting stop comes last when it isn't at the
+ * frontier; it leaves as soon as you get off and spare time becomes a wait at the frontier.
  */
 export function alightingLegs(
   frontier: Waypoint,
   trip: TripDetail,
   boardSeq: number,
   alightSeq: number,
-  walk: RouteResult | null,
+  access: RouteResult | null,
 ): LegsResult {
   const ride = transitLeg(trip, boardSeq, alightSeq);
   if (toMs(ride.end.time) > toMs(frontier.time)) {
     return { ok: false, reason: 'That trip arrives after the start of your plan.' };
   }
   if (!needsConnector(ride.end.place, frontier.place)) return { ok: true, legs: [ride] };
-  if (!walk) throw new Error('alightingLegs needs a walk route from the stop');
+  if (!access) throw new Error('alightingLegs needs a route from the stop');
 
-  const connector = pathLeg(ride.end, frontier.place, walk);
+  const connector = pathLeg(ride.end, frontier.place, access);
   if (toMs(connector.end.time) > toMs(frontier.time)) {
-    const minutes = Math.ceil(walk.duration_s / 60);
+    const minutes = Math.ceil(access.duration_s / 60);
     return {
       ok: false,
-      reason: `The ${minutes}-min walk from ${ride.end.place.name} doesn't get you there in time.`,
+      reason: `The ${minutes}-min ${ACCESS_WORDS[access.mode]} from ${ride.end.place.name} doesn't get you there in time.`,
     };
   }
   return { ok: true, legs: [ride, connector] };

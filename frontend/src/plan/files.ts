@@ -120,6 +120,8 @@ function transitProblem(t: unknown): string | null {
     !isStrOrNull(t.color) ||
     !(t.textColor === undefined || isStrOrNull(t.textColor)) ||
     !(t.bikesAllowed === null || typeof t.bikesAllowed === 'boolean') ||
+    !(t.agency === undefined || isStrOrNull(t.agency)) ||
+    !(t.geometry === undefined || isCoords(t.geometry)) ||
     !Array.isArray(t.stops)
   ) {
     return 'incomplete transit details';
@@ -130,14 +132,20 @@ function transitProblem(t: unknown): string | null {
   return stopsOk ? null : 'a transit stop is incomplete';
 }
 
+function isCoords(v: unknown): boolean {
+  return (
+    Array.isArray(v) &&
+    v.every((c) => Array.isArray(c) && c.length === 2 && isNum(c[0]) && isNum(c[1]))
+  );
+}
+
 function pathProblem(p: unknown): string | null {
   const ok =
     isObject(p) &&
     isStr(p.provider) &&
     isNum(p.distanceM) &&
     isNum(p.routedDurationS) &&
-    Array.isArray(p.geometry) &&
-    p.geometry.every((c) => Array.isArray(c) && c.length === 2 && isNum(c[0]) && isNum(c[1]));
+    isCoords(p.geometry);
   return ok ? null : 'an invalid path';
 }
 
@@ -177,6 +185,7 @@ const CSV_HEADER = [
   'to',
   'arrive',
   'duration_min',
+  'agency',
   'route',
   'headsign',
   'notes',
@@ -196,6 +205,7 @@ export function planToCsv(plan: Plan): string {
     text(placeName(leg.end.place)),
     formatLocalDateTime(leg.end.time),
     (legDurationS(leg) / 60).toFixed(1),
+    text(leg.transit?.agency ?? ''),
     text(leg.transit?.routeName ?? ''),
     text(leg.transit?.headsign ?? ''),
     text(legNotes(leg).join('; ')),

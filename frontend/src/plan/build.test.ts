@@ -8,6 +8,7 @@ import {
   pathLeg,
   pathLegArriving,
   pinName,
+  previewLine,
   transitLeg,
   waitLeg,
 } from './build';
@@ -183,5 +184,60 @@ describe('estimatedRoute and pinName', () => {
       '37.44000, -122.16000',
     );
     expect(pinName({ lat: 37.44, lon: -122.16 }, null)).toBe('37.44000, -122.16000');
+  });
+});
+
+describe('transit lines from shapes.txt', () => {
+  const shaped: TripDetail = {
+    ...trip,
+    route: { ...trip.route, agency: 'Test Rail' },
+    shape: [
+      [-122.1, 37.4],
+      [-122.1001, 37.405],
+      [-122.1, 37.41],
+      [-122.1002, 37.415],
+      [-122.1, 37.42],
+    ],
+    stops: trip.stops.map((s, i) => ({ ...s, shape_index: i * 2 })),
+  };
+
+  it('stores the ridden part of the shape, from stop to stop', () => {
+    const leg = transitLeg(shaped, 1, 2);
+    expect(leg.transit?.geometry).toEqual([
+      [-122.1, 37.4],
+      [-122.1, 37.4],
+      [-122.1001, 37.405],
+      [-122.1, 37.41],
+      [-122.1, 37.41],
+    ]);
+    expect(leg.transit?.agency).toBe('Test Rail');
+  });
+
+  it('leaves geometry out when the feed has no shape', () => {
+    expect(transitLeg(trip, 1, 2).transit?.geometry).toBeUndefined();
+  });
+
+  it('previews the rest of the line forwards, or the part before the stop backwards', () => {
+    expect(previewLine(shaped, 2, 'forward')).toHaveLength(5); // Bravo .. Charlie: 3 points + 2 stops
+    expect(previewLine(shaped, 2, 'backward')).toHaveLength(5);
+    expect(previewLine(trip, 2, 'forward')).toEqual([
+      [-122.1, 37.41],
+      [-122.1, 37.42],
+    ]);
+  });
+});
+
+describe('getting to the stop by bike', () => {
+  it('names the mode when the connection is too slow', () => {
+    const slow = { ...walkOf(15 * 60), mode: 'bike' as const };
+    expect(boardingLegs(nearAlpha, trip, 1, 3, slow)).toEqual({
+      ok: false,
+      reason: 'The 15-min bike ride to Alpha arrives after this departure.',
+    });
+  });
+
+  it('adds a bike leg to the stop', () => {
+    const result = boardingLegs(nearAlpha, trip, 1, 3, { ...walkOf(120), mode: 'bike' });
+    expect(result.ok && result.legs.map((l) => l.mode)).toEqual(['bike', 'transit']);
   });
 });

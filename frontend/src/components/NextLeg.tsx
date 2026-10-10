@@ -1,6 +1,7 @@
 import type { PathMode, RouteResult, TransitCall, TripDetail } from '../api';
 import { pathDurationS } from '../plan/build';
 import { addSeconds } from '../plan/plan';
+import type { TransferNote } from '../plan/transfers';
 import type { Direction, LegMode, Place, Waypoint } from '../plan/types';
 import { formatDuration, formatTime } from '../time';
 import { CallList } from './CallList';
@@ -29,8 +30,12 @@ interface Props {
 
   radiusM: number;
   onRadius: (metres: number) => void;
+  /** How you get between the frontier and the stop: walking or cycling. */
+  access: PathMode;
+  onAccess: (access: PathMode) => void;
   onSearch: () => void;
   calls: TransitCall[] | null;
+  noteFor: (call: TransitCall) => TransferNote | null;
   selection: TripSelection | null;
   onChooseCall: (call: TransitCall) => void;
   onChooseStop: (stopSequence: number) => void;
@@ -109,6 +114,21 @@ function TransitPanel(p: Props) {
   }
   return (
     <>
+      <div className="field">
+        {forward ? 'Get to the stop by' : 'Leave the stop by'}
+        <div className="toggle" role="group" aria-label="Getting to or from the stop">
+          {(['walk', 'bike'] as const).map((a) => (
+            <button
+              key={a}
+              type="button"
+              aria-pressed={p.access === a}
+              onClick={() => p.onAccess(a)}
+            >
+              {a === 'walk' ? 'Walking' : 'Bike'}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="row align-end">
         <label className="field grow">
           Search radius (m)
@@ -131,6 +151,8 @@ function TransitPanel(p: Props) {
           <CallList
             calls={p.calls}
             direction={forward ? 'departures' : 'arrivals'}
+            access={p.access}
+            noteFor={p.noteFor}
             onSelect={p.onChooseCall}
             disabled={p.busy}
           />

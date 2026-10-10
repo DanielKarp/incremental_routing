@@ -8,6 +8,8 @@ export interface LatLon {
 export interface Health {
   status: string;
   gtfs_loaded: boolean;
+  /** Why the transit data can't be used (missing, or needs rebuilding). */
+  gtfs_problem: string | null;
   routing_provider: string;
 }
 
@@ -27,6 +29,7 @@ export interface RouteInfo {
   route_type: number;
   color: string | null;
   text_color: string | null;
+  agency?: string | null;
 }
 
 export interface Stop {
@@ -40,7 +43,17 @@ export interface Stop {
 
 export interface NearbyStop extends Stop {
   distance_m: number;
-  walk_s: number;
+  /** Estimated time between the queried point and the stop, walking or cycling. */
+  access_s: number;
+}
+
+/**
+ * What the feed's transfers.txt says about changing between two trips at these stops.
+ * type: 0 recommended, 1 timed (the vehicle waits), 2 needs min_transfer_s, 3 not possible.
+ */
+export interface TransferRule {
+  type: number;
+  min_transfer_s: number | null;
 }
 
 export interface TransitCall {
@@ -53,6 +66,8 @@ export interface TransitCall {
   arrival: string;
   departure: string;
   bikes_allowed: number | null;
+  /** The rule for changing to (or from) the adjacent transit leg, when one was asked for. */
+  transfer?: TransferRule | null;
 }
 
 export interface TripStop {
@@ -62,6 +77,8 @@ export interface TripStop {
   departure: string;
   can_board: boolean;
   can_alight: boolean;
+  /** Where the stop falls on TripDetail.shape. */
+  shape_index?: number | null;
 }
 
 export interface TripDetail {
@@ -71,6 +88,8 @@ export interface TripDetail {
   headsign: string | null;
   bikes_allowed: number | null;
   stops: TripStop[];
+  /** The trip's path as [lon, lat] pairs, from the feed's shapes.txt. */
+  shape?: [number, number][] | null;
 }
 
 export type PathMode = 'walk' | 'bike';
@@ -90,6 +109,10 @@ export interface CallQuery {
   time: string;
   radiusM?: number;
   windowMin?: number;
+  /** How you get between the point and the stop; decides which trips are reachable. */
+  access?: PathMode;
+  /** The transit leg you'd change from (forwards) or to (backwards), for transfer rules. */
+  transfer?: { stopId: string; tripId?: string };
 }
 
 export class ApiError extends Error {
@@ -116,13 +139,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function callParams({ point, time, radiusM = 500, windowMin = 60 }: CallQuery): string {
+function callParams(q: CallQuery): string {
+  const { point, time, radiusM = 500, windowMin = 60, access = 'walk', transfer } = q;
   return new URLSearchParams({
     lat: String(point.lat),
     lon: String(point.lon),
     time,
     radius_m: String(radiusM),
     window_min: String(windowMin),
+    access,
+    ...(transfer && { transfer_stop: transfer.stopId }),
+    ...(transfer?.tripId && { transfer_trip: transfer.tripId }),
   }).toString();
 }
 

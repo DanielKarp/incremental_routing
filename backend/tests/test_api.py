@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from conftest import ALPHA
+from conftest import ALPHA, DELTA, SOUTH_OF_ALPHA
 from fastapi.testclient import TestClient
 
 from incremental_routing.api import create_app
@@ -19,6 +19,7 @@ def test_health(client):
     assert client.get("/api/health").json() == {
         "status": "ok",
         "gtfs_loaded": True,
+        "gtfs_problem": None,
         "routing_provider": "straight-line",
     }
 
@@ -67,3 +68,40 @@ def test_missing_database_is_a_clear_503(tmp_path):
         )
     assert resp.status_code == 503
     assert "ir-load-gtfs" in resp.json()["detail"]
+
+
+def test_departures_by_bike(client):
+    params = {"lat": SOUTH_OF_ALPHA[0], "lon": SOUTH_OF_ALPHA[1], "time": "2026-10-12T07:50"}
+    walking = client.get("/api/departures", params={**params, "radius_m": 1000}).json()
+    cycling = client.get(
+        "/api/departures", params={**params, "radius_m": 1000, "access": "bike"}
+    ).json()
+    assert walking == []
+    assert [c["trip_id"] for c in cycling] == ["tr:T_MORNING"]
+    assert cycling[0]["stop"]["access_s"] < 300
+
+
+def test_departures_report_transfer_rules(client):
+    resp = client.get(
+        "/api/departures",
+        params={
+            "lat": DELTA[0],
+            "lon": DELTA[1],
+            "time": "2026-10-12T08:20",
+            "transfer_stop": "tr:DELTA_1",
+            "transfer_trip": "tr:T_MORNING",
+        },
+    )
+    rules = {c["trip_id"]: c["transfer"] for c in resp.json()}
+    assert rules == {
+        "tr:T_BUS": {"type": 2, "min_transfer_s": 120},
+        "tr:T_BUS2": {"type": 3, "min_transfer_s": None},
+    }
+
+
+def test_trip_endpoint_includes_the_shape(client):
+    trip = client.get(
+        "/api/trip", params={"trip_id": "tr:T_MORNING", "service_date": "2026-10-12"}
+    ).json()
+    assert len(trip["shape"]) == 13
+    assert [s["shape_index"] for s in trip["stops"]] == [0, 4, 8, 12]

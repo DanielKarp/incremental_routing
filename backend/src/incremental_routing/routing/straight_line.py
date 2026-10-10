@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from ..geo import DETOUR_FACTOR, WALK_SPEED_MPS, haversine_m
+from ..geo import DETOUR_FACTOR, SPEEDS_MPS, haversine_m
 from ..models import LatLon, PathMode, RouteResult
 from .base import RoutingProvider
-
-SPEEDS_MPS: dict[PathMode, float] = {"walk": WALK_SPEED_MPS, "bike": 4.5}
 
 
 class StraightLineProvider(RoutingProvider):

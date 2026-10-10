@@ -9,7 +9,7 @@ import {
   type TransitCall,
 } from './api';
 import { Itinerary } from './components/Itinerary';
-import { MapView, type PreviewStop } from './components/MapView';
+import { type MapHandle, MapView, type TripPreview } from './components/MapView';
 import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
@@ -21,22 +21,30 @@ import {
   boardingLegs,
   estimatedRoute,
   needsConnector,
+  pathInfo,
   pathLeg,
   pathLegArriving,
   pinName,
+  previewLine,
   stopPlace,
   waitLeg,
 } from './plan/build';
 import { parsePlanJson } from './plan/files';
 import {
+  type EditResult,
   appendLegs,
   findIssues,
   planEnd,
   planStart,
   prependLegs,
   removeLeg,
+  renamePlace,
   setLegDuration,
+  setLegEnd,
+  setLegPath,
+  setLegStart,
 } from './plan/plan';
+import { adjacentRide, transferContext, transferNote } from './plan/transfers';
 import type { Direction, Leg, LegMode, Place, Plan } from './plan/types';
 import { loadSession, saveSession } from './storage';
 import { localInputToIso, nowLocalInput, toLocalInput } from './time';
@@ -70,6 +78,8 @@ export function App() {
   const [direction, setDirection] = useState<Direction>('forward');
   const [mode, setMode] = useState<LegMode>('transit');
   const [radiusM, setRadiusM] = useState(500);
+  // How you get to (or from) the stop for a transit leg.
+  const [access, setAccess] = useState<PathMode>('walk');
   const [calls, setCalls] = useState<TransitCall[] | null>(null);
   const [selection, setSelection] = useState<TripSelection | null>(null);
   const [pending, setPending] = useState<PendingPath | null>(null);
@@ -79,7 +89,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showSummary, setShowSummary] = useState(false);
+  // A picture of the map for the summary and print: undefined while drawing, null if none.
+  const [mapImage, setMapImage] = useState<string | null | undefined>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const mapRef = useRef<MapHandle>(null);
 
   useEffect(() => {
     api
@@ -93,7 +106,18 @@ export function App() {
 
   useEffect(() => {
     saveSession({ anchor: anchorPlace, timeInput, plan: committed });
+    setMapImage(null); // Any earlier picture of the plan is out of date.
   }, [anchorPlace, timeInput, committed]);
+
+  useEffect(() => {
+    if (!showSummary) return;
+    setMapImage(undefined);
+    let current = true;
+    mapRef.current?.snapshot().then((image) => current && setMapImage(image));
+    return () => {
+      current = false;
+    };
+  }, [showSummary]);
 
   const anchorTime = useMemo(() => {
     try {
@@ -128,13 +152,19 @@ export function App() {
     return [...byId.values()];
   }, [calls, selection]);
 
-  const tripPreview: PreviewStop[] | null = useMemo(() => {
+  const tripPreview: TripPreview | null = useMemo(() => {
     if (!selection) return null;
     const seq = selection.call.stop_sequence;
-    return selection.trip.stops
-      .filter((s) => (direction === 'forward' ? s.stop_sequence >= seq : s.stop_sequence <= seq))
-      .map((s) => ({ lat: s.stop.lat, lon: s.stop.lon, name: s.stop.name }));
+    return {
+      stops: selection.trip.stops
+        .filter((s) => (direction === 'forward' ? s.stop_sequence >= seq : s.stop_sequence <= seq))
+        .map((s) => ({ lat: s.stop.lat, lon: s.stop.lon, name: s.stop.name })),
+      line: previewLine(selection.trip, seq, direction),
+    };
   }, [selection, direction]);
+
+  // The ride you'd change from (forwards) or to (backwards), for transfer rules.
+  const ride = plan ? adjacentRide(plan, direction) : null;
 
   const closeSummary = useCallback(() => setShowSummary(false), []);
 
@@ -257,13 +287,15 @@ export function App() {
         point: frontier.place,
         time: frontier.time,
         radiusM: Math.min(RADIUS_MAX_M, Math.max(RADIUS_MIN_M, radiusM || 500)),
+        access,
+        transfer: transferContext(ride, direction),
       };
       const found = await (forward ? api.departures(query) : api.arrivals(query));
       // Don't offer the trip you're already on at this end of the plan.
-      const adjacent = forward ? plan.legs[plan.legs.length - 1]?.transit : plan.legs[0]?.transit;
+      const onIt = ride?.transit;
       setCalls(
         found.filter(
-          (c) => !adjacent || c.trip_id !== adjacent.tripId || c.service_date !== adjacent.serviceDate,
+          (c) => !onIt || c.trip_id !== onIt.tripId || c.service_date !== onIt.serviceDate,
         ),
       );
     });
@@ -281,28 +313,43 @@ export function App() {
       let result: LegsResult;
       if (forward) {
         const from = planEnd(plan);
-        const walk = needsConnector(from.place, callStop)
-          ? await routeOrEstimate('walk', from.place, callStop)
+        const toStop = needsConnector(from.place, callStop)
+          ? await routeOrEstimate(access, from.place, callStop)
           : null;
-        result = boardingLegs(from, trip, call.stop_sequence, stopSequence, walk);
+        result = boardingLegs(from, trip, call.stop_sequence, stopSequence, toStop);
         if (result.ok) commit(appendLegs(plan, result.legs));
       } else {
         const to = planStart(plan);
-        const walk = needsConnector(callStop, to.place)
-          ? await routeOrEstimate('walk', callStop, to.place)
+        const fromStop = needsConnector(callStop, to.place)
+          ? await routeOrEstimate(access, callStop, to.place)
           : null;
-        result = alightingLegs(to, trip, stopSequence, call.stop_sequence, walk);
+        result = alightingLegs(to, trip, stopSequence, call.stop_sequence, fromStop);
         if (result.ok) commit(prependLegs(plan, result.legs));
       }
       if (!result.ok) setError(result.reason);
     });
 
-  function setDuration(legId: string, seconds: number): string | null {
-    if (!plan) return null;
-    const result = setLegDuration(plan, legId, seconds);
+  /** Commit an edit to a leg, or return why it was refused. */
+  function applyEdit(result: EditResult): string | null {
     if (!result.ok) return result.reason;
     commit(result.plan);
     return null;
+  }
+
+  /** Re-route a walk or bike leg the other way: walk <-> bike, keeping its place in the plan. */
+  const switchMode = (legId: string) =>
+    run(async () => {
+      const leg = plan?.legs.find((l) => l.id === legId);
+      if (!plan || !leg || (leg.mode !== 'walk' && leg.mode !== 'bike')) return;
+      const other = leg.mode === 'walk' ? 'bike' : 'walk';
+      const route = await routeOrEstimate(other, leg.start.place, leg.end.place);
+      const refusal = applyEdit(setLegPath(plan, legId, other, pathInfo(route)));
+      if (refusal) setError(refusal);
+    });
+
+  function openSummary() {
+    resetBuilder(); // Clear previews so the map picture shows just the plan.
+    setShowSummary(true);
   }
 
   async function openPlanFile(e: ChangeEvent<HTMLInputElement>) {
@@ -344,8 +391,7 @@ export function App() {
 
           {health && !health.gtfs_loaded && (
             <p className="warning">
-              No transit data loaded. Run <code>uv run ir-load-gtfs</code> in{' '}
-              <code>backend/</code>.
+              {health.gtfs_problem ?? 'No transit data loaded. Run uv run ir-load-gtfs in backend/.'}
             </p>
           )}
           {uncoveredFeeds.length > 0 && (
@@ -372,12 +418,16 @@ export function App() {
             <Itinerary
               plan={committed}
               issues={issues}
-              onSetDuration={setDuration}
+              onSetDuration={(legId, s) => applyEdit(setLegDuration(committed, legId, s))}
+              onSetStart={(legId, time) => applyEdit(setLegStart(committed, legId, time))}
+              onSetEnd={(legId, time) => applyEdit(setLegEnd(committed, legId, time))}
+              onSwitchMode={switchMode}
+              onRename={(place, name) => commit(renamePlace(committed, place, name))}
               onRemove={(legId) => commit(removeLeg(committed, legId))}
               onUndo={undo}
               canUndo={history.length > 0}
               onClear={clear}
-              onSummary={() => setShowSummary(true)}
+              onSummary={openSummary}
               disabled={busy}
             />
           )}
@@ -414,8 +464,14 @@ export function App() {
               }}
               radiusM={radiusM}
               onRadius={setRadiusM}
+              access={access}
+              onAccess={(a) => {
+                setAccess(a);
+                setCalls(null); // Which trips are reachable depends on it.
+              }}
               onSearch={search}
               calls={calls}
+              noteFor={(call) => transferNote(call, ride, direction)}
               selection={selection}
               onChooseCall={chooseCall}
               onChooseStop={chooseStop}
@@ -438,6 +494,7 @@ export function App() {
           </footer>
         </aside>
         <MapView
+          ref={mapRef}
           start={committed ? planStart(committed).place : anchorPlace}
           end={committed ? planEnd(committed).place : null}
           stops={callStops}
@@ -450,11 +507,17 @@ export function App() {
         />
       </div>
       {showSummary && committed && (
-        <PlanSummary plan={committed} issues={issues} onClose={closeSummary} />
+        <PlanSummary
+          plan={committed}
+          issues={issues}
+          mapImage={mapImage}
+          onClose={closeSummary}
+        />
       )}
       {committed && (
         <div className="print-only">
           <h1>Trip plan</h1>
+          {mapImage && <img className="plan-map" src={mapImage} alt="Map of the whole trip" />}
           <PlanTable plan={committed} issues={issues} />
         </div>
       )}

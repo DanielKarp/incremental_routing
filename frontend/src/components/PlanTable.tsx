@@ -54,6 +54,7 @@ export function PlanTable({ plan, issues }: Props) {
               <td>
                 {leg.transit && (
                   <>
+                    {leg.transit.agency && `${leg.transit.agency} · `}
                     <RouteBadge
                       name={leg.transit.routeName}
                       color={leg.transit.color}

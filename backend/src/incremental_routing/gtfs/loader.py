@@ -20,7 +20,14 @@ from .timeutil import parse_gtfs_date, parse_gtfs_time
 
 log = logging.getLogger(__name__)
 
+# Bump when the tables change; the API then asks for a rebuild instead of failing obscurely.
+SCHEMA_VERSION = 2
+
 SCHEMA = """
+CREATE TABLE meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 CREATE TABLE feeds (
     feed_id TEXT PRIMARY KEY,
     timezone TEXT NOT NULL,
@@ -32,6 +39,7 @@ CREATE TABLE feeds (
 CREATE TABLE routes (
     route_id TEXT PRIMARY KEY,
     feed_id TEXT NOT NULL,
+    agency_name TEXT,
     short_name TEXT,
     long_name TEXT,
     route_type INTEGER NOT NULL,
@@ -55,6 +63,7 @@ CREATE TABLE trips (
     headsign TEXT,
     direction_id INTEGER,
     bikes_allowed INTEGER,
+    shape_id TEXT,
     first_seq INTEGER,
     last_seq INTEGER
 );
@@ -66,8 +75,28 @@ CREATE TABLE stop_times (
     departure_s INTEGER,
     pickup_type INTEGER NOT NULL DEFAULT 0,
     drop_off_type INTEGER NOT NULL DEFAULT 0,
+    shape_dist REAL,
     PRIMARY KEY (trip_id, stop_sequence)
 ) WITHOUT ROWID;
+CREATE TABLE shapes (
+    shape_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    lat REAL NOT NULL,
+    lon REAL NOT NULL,
+    dist REAL,
+    PRIMARY KEY (shape_id, seq)
+) WITHOUT ROWID;
+CREATE TABLE transfers (
+    feed_id TEXT NOT NULL,
+    from_stop TEXT NOT NULL,
+    to_stop TEXT NOT NULL,
+    transfer_type INTEGER NOT NULL,
+    min_transfer_s INTEGER,
+    from_route TEXT,
+    to_route TEXT,
+    from_trip TEXT,
+    to_trip TEXT
+);
 CREATE TABLE calendar (
     service_id TEXT PRIMARY KEY,
     feed_id TEXT NOT NULL,
@@ -95,6 +124,7 @@ CREATE INDEX stops_lat ON stops (lat);
 CREATE INDEX stop_times_departure ON stop_times (stop_id, departure_s);
 CREATE INDEX stop_times_arrival ON stop_times (stop_id, arrival_s);
 CREATE INDEX calendar_dates_lookup ON calendar_dates (feed_id, date);
+CREATE INDEX transfers_stops ON transfers (from_stop, to_stop);
 """
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -111,6 +141,7 @@ def build_database(db_path: Path, feeds: Iterable[tuple[str, Path]]) -> None:
         conn.execute("PRAGMA journal_mode = OFF")
         conn.execute("PRAGMA synchronous = OFF")
         conn.executescript(SCHEMA)
+        conn.execute("INSERT INTO meta VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
         for feed_id, zip_path in feeds:
             load_feed(conn, feed_id, zip_path)
         conn.executescript(INDEXES)
@@ -126,6 +157,9 @@ def load_feed(conn: sqlite3.Connection, feed_id: str, zip_path: Path) -> None:
     def p(value: str) -> str:
         return f"{feed_id}:{value}"
 
+    def p_or_none(value: str | None) -> str | None:
+        return p(value) if value else None
+
     with zipfile.ZipFile(zip_path) as zf:
         members = _index_members(zf)
         missing = [name for name in REQUIRED_FILES if name not in members]
@@ -137,17 +171,21 @@ def load_feed(conn: sqlite3.Connection, feed_id: str, zip_path: Path) -> None:
         def read(name: str) -> Iterator[dict[str, str]]:
             return _read_csv(zf, members.get(name))
 
-        agency = next(read("agency.txt"), None)
-        timezone = agency.get("agency_timezone") if agency else None
+        agencies = list(read("agency.txt"))
+        timezone = agencies[0].get("agency_timezone") if agencies else None
         if not timezone:
             raise ValueError(f"{zip_path}: agency.txt has no agency_timezone")
+        agency_names = {a.get("agency_id", ""): a.get("agency_name") or None for a in agencies}
+        # With a single agency, routes.txt may leave agency_id out.
+        only_agency = agencies[0].get("agency_name") or None if len(agencies) == 1 else None
 
         conn.executemany(
-            "INSERT INTO routes VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO routes VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 (
                     p(r["route_id"]),
                     feed_id,
+                    agency_names.get(r.get("agency_id", "")) or only_agency,
                     r.get("route_short_name") or None,
                     r.get("route_long_name") or None,
                     int(r["route_type"]),
@@ -173,7 +211,7 @@ def load_feed(conn: sqlite3.Connection, feed_id: str, zip_path: Path) -> None:
             ),
         )
         conn.executemany(
-            "INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
+            "INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
             (
                 (
                     p(r["trip_id"]),
@@ -183,13 +221,47 @@ def load_feed(conn: sqlite3.Connection, feed_id: str, zip_path: Path) -> None:
                     r.get("trip_headsign") or None,
                     _int(r.get("direction_id")),
                     _int(r.get("bikes_allowed")),
+                    p_or_none(r.get("shape_id")),
                 )
                 for r in read("trips.txt")
             ),
         )
         conn.executemany(
-            "INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (_stop_time_row(r, p) for r in read("stop_times.txt")),
+        )
+        conn.executemany(
+            # OR IGNORE: a repeated point in a sloppy feed shouldn't stop the whole load.
+            "INSERT OR IGNORE INTO shapes VALUES (?, ?, ?, ?, ?)",
+            (
+                (
+                    p(r["shape_id"]),
+                    int(r["shape_pt_sequence"]),
+                    float(r["shape_pt_lat"]),
+                    float(r["shape_pt_lon"]),
+                    _float(r.get("shape_dist_traveled")),
+                )
+                for r in read("shapes.txt")
+            ),
+        )
+        conn.executemany(
+            "INSERT INTO transfers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                (
+                    feed_id,
+                    p(r["from_stop_id"]),
+                    p(r["to_stop_id"]),
+                    _int(r.get("transfer_type")) or 0,
+                    _seconds(r.get("min_transfer_time")),
+                    p_or_none(r.get("from_route_id")),
+                    p_or_none(r.get("to_route_id")),
+                    p_or_none(r.get("from_trip_id")),
+                    p_or_none(r.get("to_trip_id")),
+                )
+                for r in read("transfers.txt")
+                # Stop-less rows (in-seat transfers between trips) don't affect changing here.
+                if r.get("from_stop_id") and r.get("to_stop_id")
+            ),
         )
         conn.executemany(
             "INSERT INTO calendar VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -263,6 +335,7 @@ def _stop_time_row(r: dict[str, str], p) -> tuple:
         departure,
         _int(r.get("pickup_type")) or 0,
         _int(r.get("drop_off_type")) or 0,
+        _float(r.get("shape_dist_traveled")),
     )
 
 
@@ -361,3 +434,8 @@ def _int(value: str | None) -> int | None:
 
 def _float(value: str | None) -> float | None:
     return float(value) if value else None
+
+
+def _seconds(value: str | None) -> int | None:
+    """Durations sometimes come as "120.0"."""
+    return round(float(value)) if value else None

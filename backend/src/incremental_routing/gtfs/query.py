@@ -7,37 +7,71 @@ import sqlite3
 from collections import defaultdict
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from ..geo import bbox_deltas, estimate_walk_s, haversine_m
-from ..models import FeedInfo, NearbyStop, RouteInfo, Stop, TransitCall, TripDetail, TripStop
-from .loader import WEEKDAYS
+from ..geo import bbox_deltas, estimate_access_s, haversine_m
+from ..models import (
+    FeedInfo,
+    NearbyStop,
+    PathMode,
+    RouteInfo,
+    Stop,
+    TransferRule,
+    TransitCall,
+    TripDetail,
+    TripStop,
+)
+from .loader import SCHEMA_VERSION, WEEKDAYS
+from .shapes import stop_indices
 from .timeutil import gtfs_to_datetime, seconds_since_origin
 
-ROUTE_COLUMNS = "r.route_id, r.short_name, r.long_name, r.route_type, r.color, r.text_color"
+ROUTE_COLUMNS = (
+    "r.route_id, r.agency_name, r.short_name, r.long_name, r.route_type, r.color, r.text_color"
+)
+REBUILD = "Run `uv run ir-load-gtfs` in backend/ (add --skip-download to reuse downloaded feeds)."
 
 
 class GtfsUnavailable(RuntimeError):
-    """The GTFS database has not been built yet."""
+    """The GTFS database is missing, or was built by an older version of the app."""
+
+
+@dataclass(frozen=True)
+class TransferContext:
+    """The transit leg next to the one being chosen, for looking up transfer rules."""
+
+    stop_id: str
+    trip_id: str | None = None
 
 
 class GtfsStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
 
-    def available(self) -> bool:
-        return self.db_path.exists()
+    def problem(self) -> str | None:
+        """Why the database can't be used, or None when it's ready."""
+        try:
+            with self._connect():
+                return None
+        except GtfsUnavailable as exc:
+            return str(exc)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         if not self.db_path.exists():
-            raise GtfsUnavailable(
-                f"No GTFS database at {self.db_path}. Run `uv run ir-load-gtfs` in backend/."
-            )
+            raise GtfsUnavailable(f"No GTFS database at {self.db_path}. {REBUILD}")
         conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
+            try:
+                row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+            except sqlite3.OperationalError:
+                row = None
+            if row is None or row[0] != str(SCHEMA_VERSION):
+                raise GtfsUnavailable(
+                    f"The transit database was built by an older version of the app. {REBUILD}"
+                )
             yield conn
         finally:
             conn.close()
@@ -49,27 +83,56 @@ class GtfsStore:
                 for row in conn.execute("SELECT * FROM feeds ORDER BY feed_id")
             ]
 
-    def nearby_stops(self, lat: float, lon: float, radius_m: float) -> list[NearbyStop]:
+    def nearby_stops(
+        self, lat: float, lon: float, radius_m: float, access: PathMode = "walk"
+    ) -> list[NearbyStop]:
         with self._connect() as conn:
-            return _nearby_stops(conn, lat, lon, radius_m)
+            return _nearby_stops(conn, lat, lon, radius_m, access)
 
     def departures(
-        self, lat: float, lon: float, when: dt.datetime, radius_m: float, window_s: int, limit: int
+        self,
+        lat: float,
+        lon: float,
+        when: dt.datetime,
+        radius_m: float,
+        window_s: int,
+        limit: int,
+        access: PathMode = "walk",
+        transfer: TransferContext | None = None,
     ) -> list[TransitCall]:
-        """Trips you could walk to and board from (lat, lon) within window_s after `when`."""
-        return self._calls(lat, lon, when, radius_m, window_s, limit, forward=True)
+        """Trips you could reach (on foot or by bike) and board within window_s after `when`.
+
+        With `transfer`, the leg you'd be changing from: each call carries the matching
+        transfers.txt rule, if any.
+        """
+        return self._calls(
+            lat, lon, when, radius_m, window_s, limit, access, transfer, forward=True
+        )
 
     def arrivals(
-        self, lat: float, lon: float, when: dt.datetime, radius_m: float, window_s: int, limit: int
+        self,
+        lat: float,
+        lon: float,
+        when: dt.datetime,
+        radius_m: float,
+        window_s: int,
+        limit: int,
+        access: PathMode = "walk",
+        transfer: TransferContext | None = None,
     ) -> list[TransitCall]:
-        """Trips you could alight from and walk to (lat, lon) within window_s before `when`."""
-        return self._calls(lat, lon, when, radius_m, window_s, limit, forward=False)
+        """Trips you could alight from and get to (lat, lon) from within window_s before `when`.
+
+        With `transfer`, the leg you'd be changing to: each call carries the matching rule.
+        """
+        return self._calls(
+            lat, lon, when, radius_m, window_s, limit, access, transfer, forward=False
+        )
 
     def trip(self, trip_id: str, service_date: dt.date) -> TripDetail:
         with self._connect() as conn:
             row = conn.execute(
                 f"""
-                SELECT t.feed_id, t.service_id, t.headsign, t.bikes_allowed,
+                SELECT t.feed_id, t.service_id, t.headsign, t.bikes_allowed, t.shape_id,
                        t.first_seq, t.last_seq, {ROUTE_COLUMNS}
                 FROM trips t JOIN routes r ON r.route_id = t.route_id
                 WHERE t.trip_id = ?
@@ -81,42 +144,65 @@ class GtfsStore:
             if row["service_id"] not in _active_service_ids(conn, row["feed_id"], service_date):
                 raise LookupError(f"Trip {trip_id!r} does not run on {service_date}")
             tz = _timezones(conn)[row["feed_id"]]
-            stops = [
-                TripStop(
-                    stop=Stop(
-                        stop_id=s["stop_id"],
-                        feed_id=s["feed_id"],
-                        name=s["name"],
-                        lat=s["lat"],
-                        lon=s["lon"],
-                        parent_station=s["parent_station"],
-                    ),
-                    stop_sequence=s["stop_sequence"],
-                    arrival=gtfs_to_datetime(service_date, s["arrival_s"], tz),
-                    departure=gtfs_to_datetime(service_date, s["departure_s"], tz),
-                    can_board=s["pickup_type"] != 1 and s["stop_sequence"] != row["last_seq"],
-                    can_alight=s["drop_off_type"] != 1 and s["stop_sequence"] != row["first_seq"],
-                )
-                for s in conn.execute(
-                    """
-                    SELECT st.stop_sequence, st.arrival_s, st.departure_s, st.pickup_type,
-                           st.drop_off_type, s.stop_id, s.feed_id, s.name, s.lat, s.lon,
-                           s.parent_station
-                    FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
-                    WHERE st.trip_id = ? AND st.arrival_s IS NOT NULL
-                    ORDER BY st.stop_sequence
-                    """,
-                    (trip_id,),
-                )
-            ]
-            return TripDetail(
-                trip_id=trip_id,
-                service_date=service_date,
-                route=_route_info(row),
-                headsign=row["headsign"],
-                bikes_allowed=row["bikes_allowed"],
-                stops=stops,
+            stop_rows = conn.execute(
+                """
+                SELECT st.stop_sequence, st.arrival_s, st.departure_s, st.pickup_type,
+                       st.drop_off_type, st.shape_dist, s.stop_id, s.feed_id, s.name, s.lat,
+                       s.lon, s.parent_station
+                FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
+                WHERE st.trip_id = ? AND st.arrival_s IS NOT NULL
+                ORDER BY st.stop_sequence
+                """,
+                (trip_id,),
+            ).fetchall()
+            shape_rows = (
+                conn.execute(
+                    "SELECT lat, lon, dist FROM shapes WHERE shape_id = ? ORDER BY seq",
+                    (row["shape_id"],),
+                ).fetchall()
+                if row["shape_id"]
+                else []
             )
+
+        indices: list[int | None] = [None] * len(stop_rows)
+        shape = None
+        if len(shape_rows) > 1:
+            indices = list(
+                stop_indices(
+                    [(p["lat"], p["lon"], p["dist"]) for p in shape_rows],
+                    [(s["lat"], s["lon"], s["shape_dist"]) for s in stop_rows],
+                )
+            )
+            shape = [(round(p["lon"], 6), round(p["lat"], 6)) for p in shape_rows]
+
+        stops = [
+            TripStop(
+                stop=Stop(
+                    stop_id=s["stop_id"],
+                    feed_id=s["feed_id"],
+                    name=s["name"],
+                    lat=s["lat"],
+                    lon=s["lon"],
+                    parent_station=s["parent_station"],
+                ),
+                stop_sequence=s["stop_sequence"],
+                arrival=gtfs_to_datetime(service_date, s["arrival_s"], tz),
+                departure=gtfs_to_datetime(service_date, s["departure_s"], tz),
+                can_board=s["pickup_type"] != 1 and s["stop_sequence"] != row["last_seq"],
+                can_alight=s["drop_off_type"] != 1 and s["stop_sequence"] != row["first_seq"],
+                shape_index=index,
+            )
+            for s, index in zip(stop_rows, indices, strict=True)
+        ]
+        return TripDetail(
+            trip_id=trip_id,
+            service_date=service_date,
+            route=_route_info(row),
+            headsign=row["headsign"],
+            bikes_allowed=row["bikes_allowed"],
+            stops=stops,
+            shape=shape,
+        )
 
     def _calls(
         self,
@@ -126,12 +212,14 @@ class GtfsStore:
         radius_m: float,
         window_s: int,
         limit: int,
+        access: PathMode,
+        transfer: TransferContext | None,
         *,
         forward: bool,
     ) -> list[TransitCall]:
         with self._connect() as conn:
             stops_by_feed: dict[str, dict[str, NearbyStop]] = defaultdict(dict)
-            for stop in _nearby_stops(conn, lat, lon, radius_m):
+            for stop in _nearby_stops(conn, lat, lon, radius_m, access):
                 stops_by_feed[stop.feed_id][stop.stop_id] = stop
             timezones = _timezones(conn)
 
@@ -168,10 +256,10 @@ class GtfsStore:
                     """
                     for row in conn.execute(sql, [*stops, lo, hi, *service_ids]):
                         stop = stops[row["stop_id"]]
-                        # Leave time to walk between the queried point and the stop.
-                        if forward and row["departure_s"] < now_s + stop.walk_s:
+                        # Leave time to get between the queried point and the stop.
+                        if forward and row["departure_s"] < now_s + stop.access_s:
                             continue
-                        if not forward and row["arrival_s"] > now_s - stop.walk_s:
+                        if not forward and row["arrival_s"] > now_s - stop.access_s:
                             continue
                         key = (row["trip_id"], service_date)
                         if key in best and best[key].stop.distance_m <= stop.distance_m:
@@ -188,15 +276,17 @@ class GtfsStore:
                             bikes_allowed=row["bikes_allowed"],
                         )
 
-        if forward:
-            calls = sorted(best.values(), key=lambda c: c.departure)
-        else:
-            calls = sorted(best.values(), key=lambda c: c.arrival, reverse=True)
-        return calls[:limit]
+            if forward:
+                calls = sorted(best.values(), key=lambda c: c.departure)[:limit]
+            else:
+                calls = sorted(best.values(), key=lambda c: c.arrival, reverse=True)[:limit]
+            if transfer is not None:
+                _attach_transfer_rules(conn, calls, transfer, forward=forward)
+        return calls
 
 
 def _nearby_stops(
-    conn: sqlite3.Connection, lat: float, lon: float, radius_m: float
+    conn: sqlite3.Connection, lat: float, lon: float, radius_m: float, access: PathMode
 ) -> list[NearbyStop]:
     dlat, dlon = bbox_deltas(lat, radius_m)
     stops = []
@@ -210,10 +300,79 @@ def _nearby_stops(
         distance = haversine_m(lat, lon, row["lat"], row["lon"])
         if distance <= radius_m:
             stops.append(
-                NearbyStop(**dict(row), distance_m=distance, walk_s=estimate_walk_s(distance))
+                NearbyStop(
+                    **dict(row), distance_m=distance, access_s=estimate_access_s(distance, access)
+                )
             )
     stops.sort(key=lambda s: s.distance_m)
     return stops
+
+
+def _attach_transfer_rules(
+    conn: sqlite3.Connection, calls: list[TransitCall], ctx: TransferContext, *, forward: bool
+) -> None:
+    """Set each call's transfer rule for changing from ctx (forward) or to ctx (backward)."""
+    ctx_route = None
+    if ctx.trip_id:
+        found = conn.execute("SELECT route_id FROM trips WHERE trip_id = ?", (ctx.trip_id,))
+        ctx_route = (found.fetchone() or [None])[0]
+    stop_ids = {ctx.stop_id, *(c.stop.stop_id for c in calls)}
+    parents = {
+        row[0]: row[1]
+        for row in conn.execute(
+            f"SELECT stop_id, parent_station FROM stops WHERE stop_id IN ({_qmarks(stop_ids)})",
+            list(stop_ids),
+        )
+    }
+    other = (ctx.stop_id, ctx_route, ctx.trip_id)
+    for call in calls:
+        this = (call.stop.stop_id, call.route.route_id, call.trip_id)
+        src, dst = (other, this) if forward else (this, other)
+        call.transfer = _transfer_rule(conn, parents, src, dst)
+
+
+def _transfer_rule(
+    conn: sqlite3.Connection,
+    parents: dict[str, str | None],
+    src: tuple[str, str | None, str | None],
+    dst: tuple[str, str | None, str | None],
+) -> TransferRule | None:
+    """The most specific transfers.txt rule for changing from src to dst (stop, route, trip).
+
+    Rules may name a platform or its parent station, and may be limited to particular routes
+    or trips; trip beats route beats stop-only, and a platform beats its station.
+    """
+    (from_stop, from_route, from_trip), (to_stop, to_route, to_trip) = src, dst
+    from_ids = [from_stop] + ([parents[from_stop]] if parents.get(from_stop) else [])
+    to_ids = [to_stop] + ([parents[to_stop]] if parents.get(to_stop) else [])
+    best, best_score = None, -1
+    for rule in conn.execute(
+        f"""
+        SELECT * FROM transfers
+        WHERE from_stop IN ({_qmarks(from_ids)}) AND to_stop IN ({_qmarks(to_ids)})
+        """,
+        [*from_ids, *to_ids],
+    ):
+        if (
+            (rule["from_trip"] and rule["from_trip"] != from_trip)
+            or (rule["to_trip"] and rule["to_trip"] != to_trip)
+            or (rule["from_route"] and rule["from_route"] != from_route)
+            or (rule["to_route"] and rule["to_route"] != to_route)
+        ):
+            continue
+        score = (
+            8 * bool(rule["from_trip"])
+            + 8 * bool(rule["to_trip"])
+            + 4 * bool(rule["from_route"])
+            + 4 * bool(rule["to_route"])
+            + (rule["from_stop"] == from_stop)
+            + (rule["to_stop"] == to_stop)
+        )
+        if score > best_score:
+            best, best_score = rule, score
+    if best is None:
+        return None
+    return TransferRule(type=best["transfer_type"], min_transfer_s=best["min_transfer_s"])
 
 
 def _active_service_ids(conn: sqlite3.Connection, feed_id: str, day: dt.date) -> set[str]:
@@ -245,6 +404,7 @@ def _timezones(conn: sqlite3.Connection) -> dict[str, ZoneInfo]:
 def _route_info(row: sqlite3.Row) -> RouteInfo:
     return RouteInfo(
         route_id=row["route_id"],
+        agency=row["agency_name"],
         short_name=row["short_name"],
         long_name=row["long_name"],
         route_type=row["route_type"],

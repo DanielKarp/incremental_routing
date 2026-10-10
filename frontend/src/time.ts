@@ -77,6 +77,31 @@ export function formatLocalDateTime(iso: string): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
 }
 
+/** "08:30": an instant's PLAN_TZ wall-clock time as a time input value. */
+export function formatClock(iso: string): string {
+  const p = zonedParts(new Date(iso));
+  return `${pad(p.hour)}:${pad(p.minute)}`;
+}
+
+/**
+ * The instant at wall-clock time `hhmm` ("08:35") in PLAN_TZ closest to `reference`, so an
+ * edited time stays on the right day even when a trip crosses midnight.
+ */
+export function atLocalTime(reference: string, hhmm: string): string {
+  const day = zonedParts(new Date(reference));
+  const ref = Date.parse(reference);
+  let best: string | null = null;
+  for (const offset of [-1, 0, 1]) {
+    const d = new Date(Date.UTC(day.year, day.month - 1, day.day + offset));
+    const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    const candidate = localInputToIso(`${date}T${hhmm}`);
+    if (best === null || Math.abs(Date.parse(candidate) - ref) < Math.abs(Date.parse(best) - ref)) {
+      best = candidate;
+    }
+  }
+  return best!;
+}
+
 /** A datetime-local value read as PLAN_TZ wall time, as an ISO instant. */
 export function localInputToIso(value: string): string {
   const [y, mo, d, h, mi] = value.split(/[-T:]/).map(Number);

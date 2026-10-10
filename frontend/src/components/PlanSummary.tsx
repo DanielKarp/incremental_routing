@@ -7,11 +7,13 @@ import { PlanTable } from './PlanTable';
 interface Props {
   plan: Plan;
   issues: PlanIssue[];
+  /** A picture of the map fitted to the plan; undefined while it's being made. */
+  mapImage: string | null | undefined;
   onClose: () => void;
 }
 
 /** Full-width view of the finished trip, with printing and exports. */
-export function PlanSummary({ plan, issues, onClose }: Props) {
+export function PlanSummary({ plan, issues, mapImage, onClose }: Props) {
   const closeButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -69,6 +71,8 @@ export function PlanSummary({ plan, issues, onClose }: Props) {
             Save plan (.json)
           </button>
         </div>
+        {mapImage === undefined && <p className="muted">Drawing the map…</p>}
+        {mapImage && <img className="plan-map" src={mapImage} alt="Map of the whole trip" />}
         <PlanTable plan={plan} issues={issues} />
       </div>
     </div>

@@ -35,7 +35,8 @@ class Stop(BaseModel):
 
 class NearbyStop(Stop):
     distance_m: float
-    walk_s: int
+    # Estimated time to get between the queried point and the stop, walking or cycling.
+    access_s: int
 
 
 class RouteInfo(BaseModel):
@@ -45,6 +46,18 @@ class RouteInfo(BaseModel):
     route_type: int
     color: str | None
     text_color: str | None
+    agency: str | None = None
+
+
+class TransferRule(BaseModel):
+    """What transfers.txt says about changing between two trips at these stops.
+
+    type: 0 recommended point, 1 timed (the vehicle waits), 2 needs min_transfer_s,
+    3 not possible.
+    """
+
+    type: int
+    min_transfer_s: int | None = None
 
 
 class TransitCall(BaseModel):
@@ -59,6 +72,8 @@ class TransitCall(BaseModel):
     arrival: dt.datetime
     departure: dt.datetime
     bikes_allowed: int | None
+    # The rule for changing to (or from) the adjacent transit leg, when one was given.
+    transfer: TransferRule | None = None
 
 
 class TripStop(BaseModel):
@@ -68,6 +83,8 @@ class TripStop(BaseModel):
     departure: dt.datetime
     can_board: bool
     can_alight: bool
+    # Where the stop falls on TripDetail.shape.
+    shape_index: int | None = None
 
 
 class TripDetail(BaseModel):
@@ -77,6 +94,8 @@ class TripDetail(BaseModel):
     headsign: str | None
     bikes_allowed: int | None
     stops: list[TripStop]
+    # The trip's path from shapes.txt as [lon, lat] pairs, when the feed has one.
+    shape: list[tuple[float, float]] | None = None
 
 
 class RouteRequest(BaseModel):

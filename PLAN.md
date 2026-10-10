@@ -127,8 +127,8 @@ downloads them and builds one SQLite file.
 **Alternative: 511.org.** With one free API key, the [511 SF Bay open data
 API](https://511.org/open-data/transit) serves the same per-agency feeds (`operator_id=…`) and a
 consolidated **regional feed** for every Bay Area operator (`operator_id=RG`), plus matching
-GTFS-Realtime. Use direct URLs for the MVP because they need no key. Move to the 511 regional
-feed when adding Muni, SamTrans, AC Transit and others, or when adding real-time data.
+GTFS-Realtime. The direct agency URLs remain the default because they need no key. Set
+`GTFS_SOURCE=511` and `API_511_KEY` to load the regional feed instead (see M6 notes).
 
 **Freshness.** Agencies publish new feeds at service changes, several times a year. Mirrored
 copies on the Mobility Database showed date ranges that had already ended, so always fetch from
@@ -252,9 +252,62 @@ fix them automatically.
 | M3 ✅ | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
 | M4 ✅ | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
 | M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
+| M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. |
 
 M1 must come first because real feeds always surprise you. Everything after it is UI work on
 top of the existing API.
+
+### M6 notes
+
+- **Getting to the stop by bike.** The transit panel has a *Get to the stop by Walking /
+  Bike* toggle (*Leave the stop by* when planning backwards).
+  - It decides which trips count as reachable, and how the connection leg is routed.
+  - Any walk or bike leg can be switched to the other mode later. The new route keeps the leg's
+    anchored end if the new duration fits, otherwise its other end if that one is free, and is
+    refused otherwise.
+  - Reachability estimates and legs both round up to whole minutes, so the list and the leg
+    agree when the route matches the estimate.
+  - If the real route is slower and misses the trip, adding the trip is refused, and the
+    message gives the routed time.
+- **Editing times.** Walk and bike legs have *Leave*, *Arrive* and *Minutes* fields. Manual
+  waits have *From*, *Until* and *Minutes*. See decision 2 for what can move.
+- **511 regional feed.** `GTFS_SOURCE=511` (or `ir-load-gtfs --source 511`) builds the
+  database from 511.org's consolidated feed for every Bay Area operator, using `API_511_KEY`.
+  - The key is sent as a request parameter and never printed, including in error messages.
+  - The two sources are never loaded together, because the regional feed already contains the
+    agencies.
+  - Routes carry their agency's name, shown in lists, the itinerary, the summary and the CSV.
+- **Shapes.**
+  - The trip endpoint returns the trip's shape and where each stop falls on it. Caltrain and
+    VTA stops (98% of VTA's) are placed by `shape_dist_traveled`. BART has no such distances,
+    so its stops are matched geometrically. The matcher always moves forward along the shape
+    and is bounded, so loops and routes that double back are handled.
+  - On real data the matched points sit a median of 5–19 m from their stops, and matching
+    takes a few milliseconds per trip.
+  - Transit legs store the ridden part of the shape. The map, the trip preview and the
+    printed map follow the track.
+- **Renaming places.** *Rename places* under the itinerary lists every place in the plan,
+  stops included. A new name applies everywhere the place appears, and can be undone.
+- **Map picture.** Opening *Summary & export* fits the map to the plan and captures it as an
+  image. The image appears in the summary and on the printed page. The plan's start and end
+  are drawn into the map itself so they show in the picture.
+- **Transfer warnings.** When you extend the plan from a transit leg, the departure (or
+  arrival) list shows the agency's `transfers.txt` rule for each candidate:
+  - a warning when the connection is shorter than the minimum, or when the agency rules the
+    transfer out;
+  - a note for timed transfers.
+
+  Rules can be for a platform or its parent station, and limited to routes or trips; the most
+  specific matching rule wins. The agency feeds have few rules:
+  - Caltrain's timed transfers at San Jose Diridon.
+  - BART's platform rules at 12 stations. Most are 0 minutes. Coliseum ↔ the Oakland
+    Airport line is 4 minutes, and some route pairs at Warm Springs and Union City are 1
+    minute.
+
+  The 511 feed may carry more.
+- **Database version.** The database records its schema version. After an update that changes
+  the tables, the app says to rebuild (`uv run ir-load-gtfs --skip-download`) instead of
+  failing.
 
 ### M3–M5 notes
 
@@ -340,15 +393,27 @@ top of the existing API.
 
 1. **Connector walk timing: leave immediately.** The walk to a stop starts at the frontier
    time, and any spare time becomes a wait at the stop.
-2. **Duration edits never create overlaps.** A walk, bike or manual wait leg can be shortened
-   freely; shortening it opens a wait. It can be lengthened only until it would run into the
-   leg on either side. Legs at the open ends of the plan can grow freely on that side. Nothing
-   ripples, and the editor refuses edits past the limit instead of flagging conflicts.
+2. **Edits never create overlaps.** Walk, bike and manual wait legs can be shortened freely;
+   shortening opens a wait. They can be lengthened or moved only until they would run into
+   the leg on either side, and edits past that are refused rather than flagged. Nothing
+   ripples.
+   - *Refined after testing:* an end of a leg is fixed only when it meets a transit leg
+     directly (no wait between them). Next to a wait, or at an open end of the plan, both the
+     departure and the arrival can be edited.
+   - Moving one end shifts the whole leg, keeping its duration, when the other end is free;
+     otherwise it changes the duration.
+   - Changing the duration keeps a fixed end in place, or otherwise the end the leg was
+     planned from.
+   - This works the same when planning backwards.
 3. **Search radius is configurable.** It defaults to 500 m, and the UI offers 100 m to 3 km.
 4. **Bikes are informational only.** A transit leg on a trip with `bikes_allowed = 2` (not
    allowed) shows a warning and nothing else changes. Riders may have a folding bike or
    scooter, may park, or may use bikeshare, and modelling any of that is out of scope. In
    today's feeds this affects 66 VTA bus trips. Every Caltrain and BART trip allows bikes.
+5. **Connections to stops can be by bike** (added after testing). This is chosen while
+   planning a transit leg, and any walk or bike leg can be switched later.
+6. **Transfer rules are advice.** `transfers.txt` minimums show as warnings in the departure
+   and arrival lists only. Choosing a warned connection is allowed.
 
 **Risks:**
 
@@ -356,19 +421,20 @@ top of the existing API.
   The 511.org fallback covers every agency.
 - **Schedule-only data.** Real trips run late. GTFS-Realtime through 511 is the follow-up.
 - **Cross-agency transfers.** At Millbrae, Diridon and Mountain View each agency has its own
-  stop IDs, 100–300 m apart. The connector walk covers this, but `transfers.txt` minimum
-  transfer times are ignored for now.
+  stop IDs, 100–300 m apart. The connector walk covers this. The agency feeds don't describe
+  transfers between agencies, so there are no warnings for them. The 511 regional feed may;
+  that's unverified until it has been loaded.
+- **511 feed size.** The regional feed covers about 30 operators, so the database is much
+  larger and slower to build than with three agencies. It hasn't been loaded here yet, because
+  `api.511.org` is blocked in the cloud sandbox.
 - **Free services without an SLA** (ORS, FOSSGIS, OpenFreeMap). The provider interface and the
   style URL make each one swappable.
 
 ## 10. After the MVP
 
-- Real-time delays and alerts (511 GTFS-Realtime).
-- The 511 regional feed for all Bay Area agencies.
+- Real-time delays and alerts (511 GTFS-Realtime, with the same API key).
 - A "Suggest" button that asks a full journey planner (OpenTripPlanner or MOTIS, self-hosted)
   for the next leg or two.
-- `shapes.txt` for accurate transit lines on the map, and elevation profiles for bike legs.
-- Minimum transfer times from `transfers.txt`.
-- Renaming places after their leg is added; a map image in the printed plan.
+- Elevation profiles for bike legs.
 - Bike share, multiple saved plans, shareable links.
 - Self-hosted routing to remove quotas entirely.

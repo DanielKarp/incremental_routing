@@ -8,7 +8,8 @@ EARTH_RADIUS_M = 6_371_008.8
 
 # Straight-line distance understates street distance; this is a typical urban detour factor.
 DETOUR_FACTOR = 1.3
-WALK_SPEED_MPS = 1.3
+# Typical speeds on foot and by bike, for estimates when no router is involved.
+SPEEDS_MPS = {"walk": 1.3, "bike": 4.5}
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -19,9 +20,13 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
-def estimate_walk_s(distance_m: float) -> int:
-    """Rough walking time from a straight-line distance; used to filter catchable departures."""
-    return round(distance_m * DETOUR_FACTOR / WALK_SPEED_MPS)
+def estimate_access_s(distance_m: float, mode: str = "walk") -> int:
+    """Rough time to cover a straight-line distance on foot or by bike, allowing for detours.
+
+    Used to filter departures you could still reach. Rounded up to whole minutes, like the
+    walk and bike legs the frontend builds, so the two agree when the route matches the estimate.
+    """
+    return math.ceil(distance_m * DETOUR_FACTOR / SPEEDS_MPS[mode] / 60) * 60
 
 
 def bbox_deltas(lat: float, radius_m: float) -> tuple[float, float]:

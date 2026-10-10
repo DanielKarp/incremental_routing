@@ -31,6 +31,7 @@ const train: Leg = {
     color: 'E31837',
     textColor: 'FFFFFF',
     bikesAllowed: true,
+    agency: 'Caltrain',
     stops: [
       { stopId: 'caltrain:pa', name: 'Palo Alto Caltrain', lat: 37.4432, lon: -122.1649, time: t('14:43') },
       { stopId: 'caltrain:mb', name: 'Millbrae Caltrain', lat: 37.6, lon: -122.3866, time: t('15:04') },
@@ -83,17 +84,17 @@ describe('CSV export', () => {
     expect(csv.startsWith('﻿')).toBe(true);
     expect(lines).toHaveLength(4);
     expect(lines[0]).toBe(
-      'leg,mode,from,depart,to,arrive,duration_min,route,headsign,notes,from_lat,from_lon,to_lat,to_lon',
+      'leg,mode,from,depart,to,arrive,duration_min,agency,route,headsign,notes,from_lat,from_lon,to_lat,to_lon',
     );
   });
 
   it('lists every leg in local time, quoting text that needs it', () => {
     expect(lines[1]).toBe(
-      '1,Walk,"Home, sweet ""home""",2026-10-12 07:30,Palo Alto Caltrain,2026-10-12 07:35,5.0,,,' +
+      '1,Walk,"Home, sweet ""home""",2026-10-12 07:30,Palo Alto Caltrain,2026-10-12 07:35,5.0,,,,' +
         '0.4 km; estimated,37.445280,-122.161670,37.443200,-122.164900',
     );
     expect(lines[2]).toMatch(/^2,Wait,Palo Alto Caltrain,2026-10-12 07:35,Palo Alto Caltrain,2026-10-12 07:43,8\.0,/);
-    expect(lines[3]).toMatch(/^3,Transit,.*,Express,San Francisco,1 stop,/);
+    expect(lines[3]).toMatch(/^3,Transit,.*,Caltrain,Express,San Francisco,1 stop,/);
   });
 
   it('defuses names that a spreadsheet would run as formulas', () => {
