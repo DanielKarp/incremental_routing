@@ -39,7 +39,8 @@ built from either end.
 
 **Out of scope**
 
-- Automatic "best route" search. A "Suggest" button is a possible later addition (§10).
+- Automatic "best route" search, including suggestions for the next leg. You choose every
+  leg yourself.
 - Accounts, saved-plan lists, shareable links and bike share. Plans move as JSON files
   (decision 12).
 - Place and address search. You pick points on the map (on hold, §10).
@@ -519,12 +520,8 @@ fix them automatically.
 - Self-hosted walk and bike routing, to remove quotas. The public server's limits are fine for
   now.
 
-**Not decided**
-
-- A "Suggest" button that asks a full journey planner (OpenTripPlanner or MOTIS, self-hosted)
-  for the next leg or two.
-
 **Declined**
 
+- A "Suggest" button that asks a journey planner for the next leg or two (§2).
 - Bike share, saved-plan lists and shareable links (decision 12).
 - Live data (decision 7).
