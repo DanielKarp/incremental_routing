@@ -30,19 +30,32 @@ export function planEnd(plan: Plan): Waypoint {
 }
 
 export function appendLeg(plan: Plan, leg: Leg): Plan {
-  return { ...plan, legs: withWaits([...plan.legs, leg]) };
+  return appendLegs(plan, [leg]);
+}
+
+/** Add legs (in travel order) after the end of the plan. */
+export function appendLegs(plan: Plan, legs: Leg[]): Plan {
+  return { ...plan, legs: withWaits([...plan.legs, ...legs]) };
 }
 
 export function prependLeg(plan: Plan, leg: Leg): Plan {
-  return { ...plan, legs: withWaits([leg, ...plan.legs]) };
+  return prependLegs(plan, [leg]);
+}
+
+/** Add legs (in travel order) before the start of the plan. */
+export function prependLegs(plan: Plan, legs: Leg[]): Plan {
+  return { ...plan, legs: withWaits([...legs, ...plan.legs]) };
+}
+
+/** First and last legs you chose yourself: the ones that can be removed without a gap. */
+export function isEndLeg(plan: Plan, legId: string): boolean {
+  const userLegs = plan.legs.filter((l) => !l.auto);
+  return userLegs[0]?.id === legId || userLegs[userLegs.length - 1]?.id === legId;
 }
 
 export function removeLeg(plan: Plan, legId: string): Plan {
   return { ...plan, legs: withWaits(plan.legs.filter((l) => l.id !== legId)) };
 }
-
-/** Which end of a leg stays put when its duration changes. */
-export type FixedEnd = 'start' | 'end';
 
 export type EditResult = { ok: true; plan: Plan } | { ok: false; reason: string };
 
@@ -53,33 +66,32 @@ function userNeighbours(plan: Plan, legId: string) {
 }
 
 /**
- * The longest a leg may become, keeping `fixed` in place, without running into the leg on the
- * side it grows towards (PLAN.md §9, decision 2). Null when that side of the plan is open.
- * Automatic waits in between don't count: they shrink to make room.
+ * The longest a leg may become, keeping its fixed end in place, without running into the leg
+ * on the side it grows towards (PLAN.md §9, decision 2). Null when that side of the plan is
+ * open. Automatic waits in between don't count: they shrink to make room.
  */
-export function maxDurationS(plan: Plan, legId: string, fixed: FixedEnd): number | null {
+export function maxDurationS(plan: Plan, legId: string): number | null {
   const { leg, prev, next } = userNeighbours(plan, legId);
   if (!leg) throw new Error(`No leg ${legId}`);
-  if (fixed === 'start') return next ? (toMs(next.start.time) - toMs(leg.start.time)) / 1000 : null;
+  if ((leg.fixed ?? 'start') === 'start') {
+    return next ? (toMs(next.start.time) - toMs(leg.start.time)) / 1000 : null;
+  }
   return prev ? (toMs(leg.end.time) - toMs(prev.end.time)) / 1000 : null;
 }
 
 /**
- * Manually override a walk, bike or wait leg's duration. Keep 'start' fixed when the leg was
- * planned forwards (you leave at a known time), 'end' when planned backwards (you must arrive
- * by then). Shortening always works and opens a wait; lengthening into a neighbour is refused.
+ * Manually override a walk, bike or wait leg's duration. Its fixed end stays put: the start
+ * for legs planned forwards (you leave at a known time), the end for legs planned backwards
+ * (you must arrive by then). Shortening always works and opens a wait; lengthening into a
+ * neighbour is refused.
  */
-export function setLegDuration(
-  plan: Plan,
-  legId: string,
-  durationS: number,
-  fixed: FixedEnd,
-): EditResult {
+export function setLegDuration(plan: Plan, legId: string, durationS: number): EditResult {
   const { leg } = userNeighbours(plan, legId);
   if (!leg) return { ok: false, reason: 'That leg is no longer in the plan.' };
   if (leg.mode === 'transit') return { ok: false, reason: 'Transit times come from the timetable.' };
   if (!(durationS >= 0)) return { ok: false, reason: 'Enter a duration of 0 or more.' };
-  const max = maxDurationS(plan, legId, fixed);
+  const fixed = leg.fixed ?? 'start';
+  const max = maxDurationS(plan, legId);
   if (max !== null && durationS > max) {
     const neighbour = fixed === 'start' ? 'next' : 'previous';
     return {

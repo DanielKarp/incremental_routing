@@ -2,6 +2,12 @@
 
 export type LegMode = 'transit' | 'walk' | 'bike' | 'wait';
 
+/** Which way the plan is being extended: after its end, or before its start. */
+export type Direction = 'forward' | 'backward';
+
+/** Which end of a leg stays put when its duration is edited. */
+export type FixedEnd = 'start' | 'end';
+
 export interface Place {
   lat: number;
   lon: number;
@@ -47,6 +53,11 @@ export interface Leg {
   end: Waypoint;
   /** Derived by the planner (waits filling gaps) and rebuilt on every change. */
   auto?: boolean;
+  /**
+   * For walk, bike and manual wait legs: 'start' when planned forwards (and for walks to or
+   * from a stop, which leave immediately), 'end' when planned backwards.
+   */
+  fixed?: FixedEnd;
   transit?: TransitInfo;
   path?: PathInfo;
 }

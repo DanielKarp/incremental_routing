@@ -18,8 +18,29 @@ const partsFormat = new Intl.DateTimeFormat('en-CA', {
   hourCycle: 'h23',
 });
 
+const dateFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: PLAN_TZ,
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+const weekdayFormat = new Intl.DateTimeFormat('en-US', { timeZone: PLAN_TZ, weekday: 'short' });
+
 export function formatTime(iso: string): string {
   return timeFormat.format(new Date(iso));
+}
+
+/** "Monday, October 12, 2026". */
+export function formatDate(iso: string): string {
+  return dateFormat.format(new Date(iso));
+}
+
+/** Time of day, with the weekday added when it falls on a different local day from `reference`. */
+export function formatTimeOnDay(iso: string, reference: string): string {
+  const sameDay = formatLocalDateTime(iso).slice(0, 10) === formatLocalDateTime(reference).slice(0, 10);
+  return sameDay ? formatTime(iso) : `${weekdayFormat.format(new Date(iso))} ${formatTime(iso)}`;
 }
 
 export function formatDuration(seconds: number): string {
@@ -42,8 +63,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /** The current time in PLAN_TZ as a datetime-local input value ("2026-10-12T07:50"). */
 export function nowLocalInput(now: Date = new Date()): string {
-  const p = zonedParts(now);
-  return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+  return formatLocalDateTime(now.toISOString()).replace(' ', 'T');
+}
+
+/** An instant as a datetime-local input value in PLAN_TZ. */
+export function toLocalInput(iso: string): string {
+  return nowLocalInput(new Date(iso));
+}
+
+/** "2026-10-12 07:30" in PLAN_TZ: unambiguous for files and spreadsheets. */
+export function formatLocalDateTime(iso: string): string {
+  const p = zonedParts(new Date(iso));
+  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
 }
 
 /** A datetime-local value read as PLAN_TZ wall time, as an ISO instant. */

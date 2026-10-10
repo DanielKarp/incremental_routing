@@ -62,8 +62,10 @@ built from either end.
 ### Backward
 
 This is the same flow mirrored. You see **arrivals** at stops near the frontier before its time,
-pick a trip, then pick where you got on from its earlier stops. Walk and bike legs keep their
-**end** time fixed and compute the start time.
+pick a trip, then pick where you got on from its earlier stops. The walk from the stop to the
+frontier leaves as soon as you get off, and any spare time becomes a wait at the frontier
+(decision 1, mirrored). Walk, bike and wait legs you add keep their **end** time fixed and
+compute the start time.
 
 ### Leg types
 
@@ -247,12 +249,48 @@ fix them automatically.
 | M0 ✅ | Scaffold | GTFS loader and queries, routing providers, API, map page listing departures and arrivals, plan model. Unit tests for all of it. |
 | M1 🟡 | Real-data check | All three feeds load. Departures at Millbrae, San Jose Diridon and Mountain View match the published timetables. Query latency measured. Feed quirks fixed. *Mostly done; see below.* |
 | M2 ✅ | Forward transit legs | Pick a departure, then a stop to get off at, and the leg (with connector walk and wait) is added. Transit legs are drawn on the map, and an itinerary panel lists the legs. You can build home → Caltrain → BART by clicking. |
-| M3 🟡 | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. *Already done in M2: duration editing under decision 2, and undo.* |
-| M4 | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
-| M5 | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
+| M3 ✅ | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
+| M4 ✅ | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
+| M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
 
 M1 must come first because real feeds always surprise you. Everything after it is UI work on
 top of the existing API.
+
+### M3–M5 notes
+
+- **Picking points.** For walk and bike legs you click the map, and the route is previewed (a
+  dashed purple line) before you add it. A picked point is named after a stop within 150 m
+  ("Near Hamilton & High"), or otherwise by its coordinates. You can edit the name before
+  adding the leg. The start point's name can be edited until the first leg is added.
+- **Durations** from the router are rounded up to whole minutes. That matches timetables and
+  keeps connections on the safe side.
+- **Which end stays fixed** is stored on each leg:
+  - Legs planned forwards keep their departure.
+  - Legs planned backwards keep their arrival.
+  - Walks to or from a stop always leave immediately (decision 1).
+- **Removing.** Only the first and last legs you chose can be removed, because removing one
+  in the middle would leave a gap. Undo steps back through every change, including Clear plan
+  and Open plan.
+- **Summary & export.**
+  - The summary table lists every leg, including waits. Printing shows only the table.
+  - CSV has one row per leg, in Bay Area local time. It starts with a byte-order mark so
+    Excel reads it as UTF-8. Names starting with `=`, `+`, `-` or `@` are prefixed so
+    spreadsheets don't run them as formulas.
+  - The calendar file (.ics) has one event per leg you chose. Connection waits are left out,
+    since they show as gaps.
+  - JSON files are versioned (`incremental-routing-plan`, version 1). Opening one validates it
+    and rebuilds the waits.
+- **Autosave.** The current plan and start point are kept in this browser (localStorage) and
+  restored on reload. This is per browser and best effort, so use Save plan (.json) to keep or
+  move a plan.
+- **Browser test on real data** (Monday 2026-10-12):
+  - Backwards from Home at 7:30: Rapid 522, a walk to a coffee shop, then a walk home.
+  - Forwards from Home: a walk, Caltrain Express to Millbrae, a bike to an office, and a
+    15-minute wait.
+  - Also checked: duration limits, Remove and Undo, the summary, all three downloads, the
+    print layout, reloading and re-opening the file.
+  - Walk and bike legs used the straight-line estimate, because the routing hosts are blocked
+    in the cloud sandbox.
 
 ### M2 notes
 
@@ -330,5 +368,7 @@ top of the existing API.
 - A "Suggest" button that asks a full journey planner (OpenTripPlanner or MOTIS, self-hosted)
   for the next leg or two.
 - `shapes.txt` for accurate transit lines on the map, and elevation profiles for bike legs.
+- Minimum transfer times from `transfers.txt`.
+- Renaming places after their leg is added; a map image in the printed plan.
 - Bike share, multiple saved plans, shareable links.
 - Self-hosted routing to remove quotas entirely.

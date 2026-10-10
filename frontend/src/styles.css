@@ -143,6 +143,8 @@ button:disabled {
 }
 
 .route-badge {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--muted);
@@ -287,4 +289,185 @@ button.secondary {
 
 .issue-warning {
   color: var(--warning-fg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel h3 {
+  font-size: 0.9rem;
+  margin: 4px 0 0;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+.row.align-end {
+  align-items: flex-end;
+}
+
+.grow {
+  flex: 1;
+}
+
+.hint {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Buttons that read as links: Move, Remove, Open plan. */
+button.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Segmented toggles: direction and mode. */
+.toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.toggle button {
+  flex: 1;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg);
+  padding: 6px 8px;
+}
+
+.toggle button + button {
+  border-left: 1px solid var(--border);
+}
+
+.toggle button[aria-pressed='true'] {
+  background: var(--accent);
+  color: white;
+}
+
+.next-leg {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.pending {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px dashed #7c3aed;
+  border-radius: 6px;
+}
+
+.trip-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leg {
+  grid-template-columns: 4.5em 1fr auto;
+}
+
+.leg .remove {
+  align-self: start;
+}
+
+/* Summary dialog. */
+.summary-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 40%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 24px 16px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.summary {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 16px;
+  width: min(1100px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-header h2 {
+  margin: 0;
+}
+
+.plan-table {
+  overflow-x: auto;
+}
+
+.plan-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.plan-table th,
+.plan-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.plan-table .num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Connection waits the planner added, as opposed to legs you chose. */
+.plan-table .row-auto {
+  color: var(--muted);
+}
+
+.plan-meta {
+  margin: 0 0 8px;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  .app,
+  .summary-backdrop {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+    color: black;
+    background: white;
+  }
+  .print-only h1 {
+    font-size: 1.2rem;
+  }
+  .plan-table th,
+  .plan-table td {
+    border-bottom-color: #ccc;
+  }
 }

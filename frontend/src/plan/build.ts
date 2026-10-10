@@ -1,12 +1,15 @@
 // Turn API results into plan legs. Pure functions; the UI does the fetching.
 
-import type { PathMode, RouteInfo, RouteResult, Stop, TripDetail } from '../api';
+import type { NearbyStop, PathMode, RouteInfo, RouteResult, Stop, TripDetail } from '../api';
 import { SAME_PLACE_M, addSeconds, distanceM, newLegId, toMs } from './plan';
-import type { Leg, Place, Waypoint } from './types';
+import type { Direction, Leg, PathInfo, Place, Waypoint } from './types';
 
 // Mirror backend/src/incremental_routing/geo.py, for when the router is unavailable.
 const DETOUR_FACTOR = 1.3;
 const SPEEDS_MPS: Record<PathMode, number> = { walk: 1.3, bike: 4.5 };
+
+/** A picked point this close to a stop is labelled after it. */
+export const NEAR_STOP_M = 150;
 
 export function routeLabel(route: RouteInfo): string {
   return route.short_name || route.long_name || route.route_id;
@@ -16,7 +19,13 @@ export function stopPlace(stop: Stop): Place {
   return { lat: stop.lat, lon: stop.lon, name: stop.name, stopId: stop.stop_id };
 }
 
-/** Whether reaching `stop` from `from` needs a walk leg of its own. */
+/** Default label for a point picked on the map: the nearest stop if close, else coordinates. */
+export function pinName(point: { lat: number; lon: number }, nearest?: NearbyStop | null): string {
+  if (nearest && nearest.distance_m <= NEAR_STOP_M) return `Near ${nearest.name}`;
+  return `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+}
+
+/** Whether getting between a place and a stop needs a walk leg of its own. */
 export function needsConnector(from: Place, stop: Place): boolean {
   return distanceM(from, stop) > SAME_PLACE_M;
 }
@@ -36,20 +45,69 @@ export function estimatedRoute(mode: PathMode, from: Place, to: Place): RouteRes
   };
 }
 
-/** A walk or bike leg that leaves `from` immediately (PLAN.md §9, decision 1). */
+/**
+ * A route's duration rounded up to whole minutes. Timetables are in minutes too, so every time
+ * in a plan stays on the minute and rounding up keeps connections on the safe side.
+ */
+export function pathDurationS(route: RouteResult): number {
+  return Math.ceil(route.duration_s / 60) * 60;
+}
+
+function pathInfo(route: RouteResult, durationS: number): PathInfo {
+  return {
+    provider: route.provider,
+    distanceM: route.distance_m,
+    routedDurationS: durationS,
+    geometry: route.geometry,
+  };
+}
+
+/**
+ * A walk or bike leg that leaves `from` at its time: planned forwards, or a walk to or from a
+ * stop, which always leaves immediately (PLAN.md §9, decision 1).
+ */
 export function pathLeg(from: Waypoint, to: Place, route: RouteResult): Leg {
-  const durationS = Math.round(route.duration_s);
+  const durationS = pathDurationS(route);
   return {
     id: newLegId(),
     mode: route.mode,
+    fixed: 'start',
     start: from,
     end: { place: to, time: addSeconds(from.time, durationS) },
-    path: {
-      provider: route.provider,
-      distanceM: route.distance_m,
-      routedDurationS: durationS,
-      geometry: route.geometry,
-    },
+    path: pathInfo(route, durationS),
+  };
+}
+
+/** A walk or bike leg planned backwards: it arrives at `to` exactly at its time. */
+export function pathLegArriving(from: Place, to: Waypoint, route: RouteResult): Leg {
+  const durationS = pathDurationS(route);
+  return {
+    id: newLegId(),
+    mode: route.mode,
+    fixed: 'end',
+    start: { place: from, time: addSeconds(to.time, -durationS) },
+    end: to,
+    path: pathInfo(route, durationS),
+  };
+}
+
+/** A wait you add yourself: after the end of the plan, or before its start. */
+export function waitLeg(at: Waypoint, durationS: number, direction: Direction): Leg {
+  if (direction === 'forward') {
+    return {
+      id: newLegId(),
+      mode: 'wait',
+      fixed: 'start',
+      start: at,
+      end: { place: at.place, time: addSeconds(at.time, durationS) },
+    };
+  }
+  return {
+    id: newLegId(),
+    mode: 'wait',
+    fixed: 'end',
+    start: { place: at.place, time: addSeconds(at.time, -durationS) },
+    end: at,
   };
 }
 
@@ -87,12 +145,12 @@ export function transitLeg(trip: TripDetail, boardSeq: number, alightSeq: number
   };
 }
 
-export type BoardingResult = { ok: true; legs: Leg[] } | { ok: false; reason: string };
+export type LegsResult = { ok: true; legs: Leg[] } | { ok: false; reason: string };
 
 /**
- * The legs that take you from the frontier onto `trip` and off at alightSeq: a walk to the
- * boarding stop when it isn't at the frontier, then the ride. Waits are added by withWaits.
- * Pass the walk route whenever needsConnector says one is needed.
+ * Planning forwards: the legs that take you from the frontier (the plan's end) onto `trip` and
+ * off at alightSeq. A walk to the boarding stop comes first when it isn't at the frontier.
+ * Waits are added by withWaits. Pass the walk route whenever needsConnector says so.
  */
 export function boardingLegs(
   frontier: Waypoint,
@@ -100,7 +158,7 @@ export function boardingLegs(
   boardSeq: number,
   alightSeq: number,
   walk: RouteResult | null,
-): BoardingResult {
+): LegsResult {
   const ride = transitLeg(trip, boardSeq, alightSeq);
   if (toMs(ride.start.time) < toMs(frontier.time)) {
     return { ok: false, reason: 'That departure is before the end of your plan.' };
@@ -117,4 +175,34 @@ export function boardingLegs(
     };
   }
   return { ok: true, legs: [connector, ride] };
+}
+
+/**
+ * Planning backwards: the legs that bring you from boardSeq on `trip` to the frontier (the
+ * plan's start). A walk from the alighting stop comes last when it isn't at the frontier; it
+ * leaves as soon as you get off and any spare time becomes a wait at the frontier.
+ */
+export function alightingLegs(
+  frontier: Waypoint,
+  trip: TripDetail,
+  boardSeq: number,
+  alightSeq: number,
+  walk: RouteResult | null,
+): LegsResult {
+  const ride = transitLeg(trip, boardSeq, alightSeq);
+  if (toMs(ride.end.time) > toMs(frontier.time)) {
+    return { ok: false, reason: 'That trip arrives after the start of your plan.' };
+  }
+  if (!needsConnector(ride.end.place, frontier.place)) return { ok: true, legs: [ride] };
+  if (!walk) throw new Error('alightingLegs needs a walk route from the stop');
+
+  const connector = pathLeg(ride.end, frontier.place, walk);
+  if (toMs(connector.end.time) > toMs(frontier.time)) {
+    const minutes = Math.ceil(walk.duration_s / 60);
+    return {
+      ok: false,
+      reason: `The ${minutes}-min walk from ${ride.end.place.name} doesn't get you there in time.`,
+    };
+  }
+  return { ok: true, legs: [ride, connector] };
 }

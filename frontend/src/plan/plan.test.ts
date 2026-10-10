@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendLeg,
+  appendLegs,
   findIssues,
+  isEndLeg,
   maxDurationS,
   planEnd,
   planStart,
   prependLeg,
+  prependLegs,
   removeLeg,
   setLegDuration,
 } from './plan';
@@ -26,7 +29,13 @@ const emptyPlan: Plan = { anchor: { place: HOME, time: t('07:40') }, legs: [] };
 const bike = leg('bike', 'bike', HOME, '07:40', STATION, '07:50');
 const train = leg('train', 'transit', STATION, '08:00', CITY, '08:45');
 const walk = leg('walk', 'walk', CITY, '08:45', OFFICE, '08:55');
-const commute = [bike, train, walk].reduce(appendLeg, emptyPlan);
+const commute = appendLegs(emptyPlan, [bike, train, walk]);
+// The same trip, planned backwards from the office: walk and bike keep their end fixed.
+const commuteBackwards = appendLegs(emptyPlan, [
+  { ...bike, fixed: 'end' },
+  train,
+  { ...walk, fixed: 'end' },
+]);
 
 function edited(result: ReturnType<typeof setLegDuration>): Plan {
   if (!result.ok) throw new Error(result.reason);
@@ -60,53 +69,72 @@ describe('building a plan', () => {
     expect(planEnd(plan).time).toBe(t('08:45'));
   });
 
+  it('adds several legs in travel order at either end', () => {
+    const plan = prependLegs(appendLegs(emptyPlan, [walk]), [bike, train]);
+    expect(plan.legs.map((l) => l.id)).toEqual(['bike', 'wait-after-bike', 'train', 'walk']);
+  });
+
+  it('only lets the legs at either end be removed', () => {
+    expect([bike, train, walk].map((l) => isEndLeg(commute, l.id))).toEqual([true, false, true]);
+    expect(isEndLeg(commute, 'wait-after-bike')).toBe(false);
+  });
+
   it('rebuilds waits when a leg is removed', () => {
-    const plan = removeLeg(appendLeg(appendLeg(emptyPlan, bike), train), 'bike');
-    expect(plan.legs.map((l) => l.id)).toEqual(['train']);
+    const plan = removeLeg(commute, 'bike');
+    expect(plan.legs.map((l) => l.id)).toEqual(['train', 'walk']);
   });
 });
 
 describe('duration edits (decision 2: never into a neighbour)', () => {
-  it('lengthens into the wait, keeping the start fixed', () => {
-    const plan = edited(setLegDuration(commute, 'bike', 15 * 60, 'start'));
+  it('lengthens into the wait, keeping the start fixed by default', () => {
+    const plan = edited(setLegDuration(commute, 'bike', 15 * 60));
+    expect(plan.legs[0].start.time).toBe(t('07:40'));
     expect(plan.legs[0].end.time).toBe(t('07:55'));
     expect(plan.legs[1]).toMatchObject({ mode: 'wait', end: { time: t('08:00') } });
     expect(findIssues(plan)).toEqual([]);
   });
 
   it('may lengthen right up to the next leg, removing the wait', () => {
-    const plan = edited(setLegDuration(commute, 'bike', 20 * 60, 'start'));
+    const plan = edited(setLegDuration(commute, 'bike', 20 * 60));
     expect(plan.legs.map((l) => l.mode)).toEqual(['bike', 'transit', 'walk']);
   });
 
   it('refuses to lengthen a leg into the next one', () => {
-    expect(maxDurationS(commute, 'bike', 'start')).toBe(20 * 60);
-    expect(setLegDuration(commute, 'bike', 25 * 60, 'start')).toEqual({
+    expect(maxDurationS(commute, 'bike')).toBe(20 * 60);
+    expect(setLegDuration(commute, 'bike', 25 * 60)).toEqual({
       ok: false,
       reason: 'At most 20 min. Any longer runs into the next leg.',
     });
   });
 
-  it('refuses to lengthen backwards into the previous leg', () => {
-    expect(maxDurationS(commute, 'walk', 'end')).toBe(10 * 60);
-    const result = setLegDuration(commute, 'walk', 20 * 60, 'end');
-    expect(result.ok).toBe(false);
+  it('moves the start of legs planned backwards, keeping their end', () => {
+    const plan = edited(setLegDuration(commuteBackwards, 'bike', 30 * 60));
+    expect(plan.legs[0].start.time).toBe(t('07:20'));
+    expect(plan.legs[0].end.time).toBe(t('07:50'));
+  });
+
+  it('refuses to lengthen a backward leg into the previous one', () => {
+    expect(maxDurationS(commuteBackwards, 'walk')).toBe(10 * 60);
+    expect(setLegDuration(commuteBackwards, 'walk', 20 * 60)).toEqual({
+      ok: false,
+      reason: 'At most 10 min. Any longer runs into the previous leg.',
+    });
   });
 
   it('lets legs at the open ends of the plan grow freely', () => {
-    expect(maxDurationS(commute, 'walk', 'start')).toBeNull();
-    expect(maxDurationS(commute, 'bike', 'end')).toBeNull();
-    const plan = edited(setLegDuration(commute, 'walk', 60 * 60, 'start'));
+    expect(maxDurationS(commute, 'walk')).toBeNull();
+    expect(maxDurationS(commuteBackwards, 'bike')).toBeNull();
+    const plan = edited(setLegDuration(commute, 'walk', 60 * 60));
     expect(planEnd(plan).time).toBe(t('09:45'));
   });
 
   it('always allows shortening, which opens a wait', () => {
-    const plan = edited(setLegDuration(commute, 'bike', 5 * 60, 'start'));
+    const plan = edited(setLegDuration(commute, 'bike', 5 * 60));
     expect(plan.legs[1]).toMatchObject({ mode: 'wait', start: { time: t('07:45') } });
   });
 
   it('never edits transit legs', () => {
-    expect(setLegDuration(commute, 'train', 30 * 60, 'start').ok).toBe(false);
+    expect(setLegDuration(commute, 'train', 30 * 60).ok).toBe(false);
   });
 });
 

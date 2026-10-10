@@ -13,6 +13,7 @@ maplibregl.setWorkerUrl(workerUrl);
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const BAY_AREA: [number, number] = [-122.05, 37.5];
 const ACCENT = '#2563eb';
+const PENDING = '#7c3aed';
 
 export interface PreviewStop {
   lat: number;
@@ -21,18 +22,26 @@ export interface PreviewStop {
 }
 
 interface Props {
-  anchor: Place | null;
-  /** End of the plan, once it has legs. */
-  frontier: Place | null;
-  /** Stops of the departures being listed. */
+  /** Where the plan begins (before any legs: the point it is planned from). */
+  start: Place | null;
+  /** Where the plan ends, once it has legs. */
+  end: Place | null;
+  /** Stops of the departures or arrivals being listed. */
   stops: NearbyStop[];
-  /** Stops of the trip being chosen, from boarding onwards. */
+  /** Stops of the trip being chosen. */
   tripPreview: PreviewStop[] | null;
+  /** A walk or bike leg being set up: its picked point and route. */
+  pendingPoint: Place | null;
+  pendingRoute: [number, number][] | null;
+  /** Whether a map click picks a point (shows a crosshair). */
+  picking: boolean;
   legs: Leg[];
   onPick: (point: LatLon) => void;
 }
 
-export function MapView({ anchor, frontier, stops, tripPreview, legs, onPick }: Props) {
+export function MapView(props: Props) {
+  const { start, end, stops, tripPreview, pendingPoint, pendingRoute, picking, legs, onPick } =
+    props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const onPickRef = useRef(onPick);
@@ -57,6 +66,8 @@ export function MapView({ anchor, frontier, stops, tripPreview, legs, onPick }: 
       setStyleReady(true);
     });
     map.current = m;
+    // Lets browser tests (and the console) reach the map in development builds.
+    if (import.meta.env.DEV) Object.assign(window, { __map: m });
     return () => {
       m.remove();
       map.current = null;
@@ -64,8 +75,31 @@ export function MapView({ anchor, frontier, stops, tripPreview, legs, onPick }: 
     };
   }, []);
 
-  useMarker(map, anchor, '#d1495b');
-  useMarker(map, frontier, '#15803d');
+  useMarker(map, start, '#d1495b');
+  useMarker(map, end, '#15803d');
+  useMarker(map, pendingPoint, PENDING);
+
+  useEffect(() => {
+    if (map.current) map.current.getCanvas().style.cursor = picking ? 'crosshair' : '';
+  }, [picking]);
+
+  useEffect(() => {
+    const source = map.current?.getSource<maplibregl.GeoJSONSource>('pending');
+    if (!styleReady || !source) return;
+    source.setData({
+      type: 'FeatureCollection',
+      features:
+        pendingRoute && pendingRoute.length > 1
+          ? [
+              {
+                type: 'Feature',
+                properties: {},
+                geometry: { type: 'LineString', coordinates: pendingRoute },
+              },
+            ]
+          : [],
+    });
+  }, [styleReady, pendingRoute]);
 
   // Markers rather than style layers, so they work before (or without) the style loading.
   useEffect(() => {
@@ -134,6 +168,7 @@ const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 function addOverlayLayers(m: maplibregl.Map) {
   m.addSource('trip-preview', { type: 'geojson', data: EMPTY });
   m.addSource('legs', { type: 'geojson', data: EMPTY });
+  m.addSource('pending', { type: 'geojson', data: EMPTY });
   m.addLayer({
     id: 'trip-preview-line',
     type: 'line',
@@ -172,6 +207,13 @@ function addOverlayLayers(m: maplibregl.Map) {
       'line-width': 3,
       'line-dasharray': [1, 2],
     },
+  });
+  m.addLayer({
+    id: 'pending-path',
+    type: 'line',
+    source: 'pending',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': PENDING, 'line-width': 4, 'line-dasharray': [1, 1.5] },
   });
 }
 

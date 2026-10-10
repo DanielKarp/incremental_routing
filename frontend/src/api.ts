@@ -129,6 +129,14 @@ function callParams({ point, time, radiusM = 500, windowMin = 60 }: CallQuery): 
 export const api = {
   health: () => request<Health>('/api/health'),
   feeds: () => request<FeedInfo[]>('/api/feeds'),
+  nearbyStops: (point: LatLon, radiusM: number) =>
+    request<NearbyStop[]>(
+      `/api/stops/nearby?${new URLSearchParams({
+        lat: String(point.lat),
+        lon: String(point.lon),
+        radius_m: String(radiusM),
+      })}`,
+    ),
   departures: (q: CallQuery) => request<TransitCall[]>(`/api/departures?${callParams(q)}`),
   arrivals: (q: CallQuery) => request<TransitCall[]>(`/api/arrivals?${callParams(q)}`),
   trip: (tripId: string, serviceDate: string) =>

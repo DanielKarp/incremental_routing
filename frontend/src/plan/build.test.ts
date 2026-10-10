@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { RouteResult, TripDetail, TripStop } from '../api';
-import { boardingLegs, estimatedRoute, needsConnector, transitLeg } from './build';
-import { appendLeg } from './plan';
+import type { NearbyStop, RouteResult, TripDetail, TripStop } from '../api';
+import {
+  alightingLegs,
+  boardingLegs,
+  estimatedRoute,
+  needsConnector,
+  pathLeg,
+  pathLegArriving,
+  pinName,
+  transitLeg,
+  waitLeg,
+} from './build';
+import { appendLegs, prependLegs } from './plan';
 import type { Waypoint } from './types';
 
 function stop(seq: number, name: string, lat: number, time: string): TripStop {
@@ -35,9 +45,14 @@ const trip: TripDetail = {
   ],
 };
 
+// 07:50 PDT, at Alpha and ~330 m south of it.
 const atAlpha: Waypoint = { place: { lat: 37.4, lon: -122.1 }, time: '2026-10-12T14:50:00.000Z' };
-// ~330 m south of Alpha.
 const nearAlpha: Waypoint = { place: { lat: 37.397, lon: -122.1 }, time: atAlpha.time };
+// 08:30 PDT, ~330 m north of Charlie.
+const nearCharlie: Waypoint = {
+  place: { lat: 37.423, lon: -122.1, name: 'Office' },
+  time: '2026-10-12T15:30:00.000Z',
+};
 
 const walkOf = (seconds: number): RouteResult => ({
   mode: 'walk',
@@ -61,7 +76,7 @@ describe('transitLeg', () => {
   });
 });
 
-describe('boardingLegs (decision 1: leave immediately)', () => {
+describe('boardingLegs: planning forwards (decision 1: leave immediately)', () => {
   it('boards directly when already at the stop', () => {
     const result = boardingLegs(atAlpha, trip, 1, 2, null);
     expect(result.ok && result.legs.map((l) => l.mode)).toEqual(['transit']);
@@ -72,10 +87,10 @@ describe('boardingLegs (decision 1: leave immediately)', () => {
     const result = boardingLegs(nearAlpha, trip, 1, 3, walkOf(300));
     if (!result.ok) throw new Error(result.reason);
     const [walk, ride] = result.legs;
-    expect(walk.start).toEqual(nearAlpha);
+    expect(walk).toMatchObject({ start: nearAlpha, fixed: 'start' });
     expect(walk.end.time).toBe('2026-10-12T14:55:00.000Z');
 
-    const plan = result.legs.reduce(appendLeg, { anchor: nearAlpha, legs: [] });
+    const plan = appendLegs({ anchor: nearAlpha, legs: [] }, result.legs);
     expect(plan.legs.map((l) => l.mode)).toEqual(['walk', 'wait', 'transit']);
     expect(plan.legs[1].end.time).toBe(ride.start.time);
   });
@@ -89,11 +104,84 @@ describe('boardingLegs (decision 1: leave immediately)', () => {
   });
 });
 
-describe('estimatedRoute', () => {
-  it('uses straight-line distance with a detour factor', () => {
+describe('alightingLegs: planning backwards', () => {
+  it('walks from the stop as soon as you get off and waits at the destination', () => {
+    const result = alightingLegs(nearCharlie, trip, 1, 3, walkOf(300));
+    if (!result.ok) throw new Error(result.reason);
+    const [ride, walk] = result.legs;
+    expect(ride.end.place.name).toBe('Charlie');
+    expect(walk).toMatchObject({ fixed: 'start', end: { place: { name: 'Office' } } });
+    expect(walk.start.time).toBe(ride.end.time);
+
+    const plan = prependLegs({ anchor: nearCharlie, legs: [] }, result.legs);
+    expect(plan.legs.map((l) => l.mode)).toEqual(['transit', 'walk']);
+    // Arriving 08:18 for an 08:30 start: the wait shows up once later legs are added.
+    expect(Date.parse(walk.end.time)).toBeLessThan(Date.parse(nearCharlie.time));
+  });
+
+  it('refuses a trip whose walk would arrive too late', () => {
+    const result = alightingLegs(nearCharlie, trip, 1, 3, walkOf(20 * 60));
+    expect(result).toEqual({
+      ok: false,
+      reason: "The 20-min walk from Charlie doesn't get you there in time.",
+    });
+  });
+
+  it('refuses a trip that arrives after the plan starts', () => {
+    const early = { ...nearCharlie, time: '2026-10-12T15:00:00.000Z' };
+    expect(alightingLegs(early, trip, 1, 3, walkOf(60)).ok).toBe(false);
+  });
+});
+
+describe('walk, bike and wait legs', () => {
+  const office = { lat: 37.43, lon: -122.1, name: 'Office' };
+
+  it('forwards: leave now, arrive after the routed duration', () => {
+    const leg = pathLeg(atAlpha, office, { ...walkOf(600), mode: 'bike' });
+    expect(leg).toMatchObject({ mode: 'bike', fixed: 'start', start: atAlpha });
+    expect(leg.end.time).toBe('2026-10-12T15:00:00.000Z');
+  });
+
+  it('rounds routed durations up to whole minutes', () => {
+    const leg = pathLeg(atAlpha, office, walkOf(173));
+    expect(leg.end.time).toBe('2026-10-12T14:53:00.000Z');
+    expect(leg.path?.routedDurationS).toBe(180);
+  });
+
+  it('backwards: arrive exactly at the frontier, leave the routed duration earlier', () => {
+    const leg = pathLegArriving(office, atAlpha, walkOf(600));
+    expect(leg).toMatchObject({ mode: 'walk', fixed: 'end', end: atAlpha });
+    expect(leg.start.time).toBe('2026-10-12T14:40:00.000Z');
+  });
+
+  it('manual waits extend the plan at either end', () => {
+    expect(waitLeg(atAlpha, 300, 'forward')).toMatchObject({
+      fixed: 'start',
+      start: atAlpha,
+      end: { place: atAlpha.place, time: '2026-10-12T14:55:00.000Z' },
+    });
+    expect(waitLeg(atAlpha, 300, 'backward')).toMatchObject({
+      fixed: 'end',
+      start: { place: atAlpha.place, time: '2026-10-12T14:45:00.000Z' },
+      end: atAlpha,
+    });
+  });
+});
+
+describe('estimatedRoute and pinName', () => {
+  it('estimates with straight-line distance and a detour factor', () => {
     const route = estimatedRoute('walk', nearAlpha.place, atAlpha.place);
     expect(route.provider).toBe('estimate');
     expect(route.distance_m).toBeCloseTo(333.6 * 1.3, 0);
     expect(route.duration_s).toBeCloseTo(route.distance_m / 1.3, 5);
+  });
+
+  it('names picked points after a nearby stop, or by coordinates', () => {
+    const near = { name: 'Palo Alto Caltrain', distance_m: 90 } as NearbyStop;
+    expect(pinName({ lat: 37.44, lon: -122.16 }, near)).toBe('Near Palo Alto Caltrain');
+    expect(pinName({ lat: 37.44, lon: -122.16 }, { ...near, distance_m: 400 })).toBe(
+      '37.44000, -122.16000',
+    );
+    expect(pinName({ lat: 37.44, lon: -122.16 }, null)).toBe('37.44000, -122.16000');
   });
 });

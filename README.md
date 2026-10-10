@@ -4,9 +4,9 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (Caltrain, BART
 walking and cycling. See [PLAN.md](PLAN.md) for the concept, data sources, architecture and
 roadmap.
 
-**Status:** milestone M2. You can build a trip forwards from transit legs. Each one is added
-with the walk to the stop and any wait, and you can edit walk durations and undo steps. Walk
-and bike legs of your own come next (M3), then planning backwards (M4).
+**Status:** MVP complete (milestones M0–M5). You can build a trip forwards and backwards from
+transit, walk, bike and wait legs, then print it or export it as CSV, a calendar file or a
+reusable JSON plan. The plan is autosaved in your browser.
 
 ## Prerequisites
 
@@ -40,11 +40,19 @@ Set `ROUTING_PROVIDER=straight-line` to work fully offline.
 
 ## Using it
 
-1. Click the map to choose where you start, and set the time.
-2. Click **Find transit** to list trips you can reach on foot, then choose one.
-3. Choose where to get off. The walk to the stop and any wait are added automatically.
-4. Repeat from the new end of the plan. **Undo** steps back, and walk durations can be edited.
-   Edits that would run into the next leg are refused.
+1. **Plan from a point.** Click the map and set the time. It can be where you set off, where
+   you need to be, or anywhere in between. Give it a name such as "Home".
+2. **Add legs** under *Next leg*. Choose *After the end* to plan forwards or *Before the
+   start* to plan backwards, then a mode:
+   - **Transit:** *Find departures* (or *Find arrivals*), choose a trip, then the stop where
+     you get off (or on). The walk to or from the stop and any wait are added for you.
+   - **Walk / Bike:** click the map where you're going (or coming from), check the preview,
+     name the place and add the leg.
+   - **Wait:** add a stop of a set number of minutes, e.g. for coffee.
+3. **Adjust** walk, bike and wait durations in the itinerary. A leg can't be stretched into
+   its neighbours. **Remove** takes off the first or last leg, and **Undo** reverts any change.
+4. **Finish** with *Summary & export*: print the itinerary, download a CSV, add it to your
+   calendar (.ics), or *Save plan* (.json) to open later with *Open plan…*.
 
 ## Tests
 
