@@ -18,9 +18,39 @@ def test_matches_stops_geometrically_in_order():
 
 def test_uses_shape_dist_traveled_when_both_sides_have_it():
     shape = line(21, dist=True)
-    # Distances say 444 m and 1554 m, whatever the coordinates say.
-    stops = [(0, 0, 0.0), (0, 0, 444.0), (0, 0, 1554.0)]
+    stops = [(37.4, -122.1, 0.0), (37.404, -122.1, 444.0), (37.414, -122.1, 1554.0)]
     assert stop_indices(shape, stops) == [0, 4, 14]
+
+
+def test_distances_pick_the_pass_where_a_route_retraces_itself():
+    # 1.1 km north and back down the same street: the middle stop is on both passes.
+    out = line(11, dist=True)
+    back = [(37.4 + STEP * k, -122.1, 111.0 * (20 - k)) for k in range(9, -1, -1)]
+    shape = out + back
+    stops = [(37.4, -122.1, 0.0), (37.405, -122.1, 1665.0)]
+    assert stop_indices(shape, stops) == [0, 15]  # on the way back, as its distance says
+
+
+def test_distances_that_disagree_with_the_shape_give_way_to_geometry():
+    # Stop distances measured along a longer path than the published shape: from the second
+    # stop on, they run 555 m ahead of where the stops really are.
+    shape = line(21, dist=True)
+    stops = [(37.4, -122.1, 0.0), (37.405, -122.1, 1110.0), (37.41, -122.1, 1665.0)]
+    assert stop_indices(shape, stops) == [0, 5, 10]
+
+
+def test_a_stop_the_shape_never_passes_gets_no_index():
+    shape = line(21)
+    # The middle stop is ~880 m west of the line.
+    stops = [(37.4, -122.1, None), (37.405, -122.11, None), (37.41, -122.1, None)]
+    assert stop_indices(shape, stops) == [0, None, 10]
+
+
+def test_a_stop_midway_along_a_sparse_shape_is_on_it():
+    # Two points 2 km apart; the stop is on the line between them, ~900 m from either.
+    shape = [(37.4, -122.1, None), (37.418, -122.1, None)]
+    stops = [(37.4, -122.1, None), (37.41, -122.1, None), (37.418, -122.1, None)]
+    assert stop_indices(shape, stops) == [0, 1, 1]
 
 
 def test_mixes_distances_and_geometry_without_going_backwards():

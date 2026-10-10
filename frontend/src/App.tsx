@@ -14,6 +14,7 @@ import { NextLeg, type PendingPath, type TripSelection } from './components/Next
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
+import { uncoveredOn } from './coverage';
 import {
   NEAR_STOP_M,
   type LegsResult,
@@ -142,9 +143,7 @@ export function App() {
     !anchorPlace || movingAnchor ? 'anchor' : pathMode ? 'path' : committed ? null : 'anchor';
 
   const day = timeInput.slice(0, 10);
-  const uncoveredFeeds = feeds.filter(
-    (f) => (f.end_date && f.end_date < day) || (f.start_date && f.start_date > day),
-  );
+  const uncovered = uncoveredOn(feeds, day);
 
   const callStops = useMemo(() => {
     if (selection) return [];
@@ -394,10 +393,10 @@ export function App() {
               {health.gtfs_problem ?? 'No transit data loaded. Run uv run ir-load-gtfs in backend/.'}
             </p>
           )}
-          {uncoveredFeeds.length > 0 && (
+          {uncovered.length > 0 && (
             <p className="warning">
-              Schedule data doesn't cover {day} for:{' '}
-              {uncoveredFeeds.map((f) => f.feed_id).join(', ')}. Re-run <code>ir-load-gtfs</code>.
+              Schedule data doesn't cover {day} for: {uncovered.join(', ')}. Re-run{' '}
+              <code>ir-load-gtfs</code>.
             </p>
           )}
 

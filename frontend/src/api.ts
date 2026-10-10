@@ -13,6 +13,12 @@ export interface Health {
   routing_provider: string;
 }
 
+export interface AgencyCoverage {
+  name: string | null;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 export interface FeedInfo {
   feed_id: string;
   timezone: string;
@@ -20,6 +26,8 @@ export interface FeedInfo {
   end_date: string | null;
   loaded_at: string;
   has_frequencies: boolean;
+  /** Each agency's own dates: in a regional feed their schedules run out at different times. */
+  agencies?: AgencyCoverage[];
 }
 
 export interface RouteInfo {

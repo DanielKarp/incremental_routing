@@ -109,13 +109,25 @@ DELTA = (37.43, -122.10)
 SOUTH_OF_ALPHA = (37.3937, -122.10)  # ~700 m: 12 min on foot, 4 min by bike
 
 
-@pytest.fixture(scope="session")
-def feed_zip(tmp_path_factory) -> Path:
-    path = tmp_path_factory.mktemp("feeds") / "testrail.zip"
+def write_feed(path: Path, files: dict[str, str]) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
-        for name, content in FEED_FILES.items():
+        for name, content in files.items():
             zf.writestr(name, content)
     return path
+
+
+@pytest.fixture(scope="session")
+def feed_zip(tmp_path_factory) -> Path:
+    return write_feed(tmp_path_factory.mktemp("feeds") / "testrail.zip", FEED_FILES)
+
+
+@pytest.fixture(scope="session")
+def bus_ends_early_zip(tmp_path_factory) -> Path:
+    """The same feed, except that the bus agency's schedule ends on 2026-10-31."""
+    files = dict(FEED_FILES)
+    files["calendar.txt"] += "BUS,1,1,1,1,1,0,0,20260101,20261031\n"
+    files["trips.txt"] = files["trips.txt"].replace("B2,WKDY,", "B2,BUS,")
+    return write_feed(tmp_path_factory.mktemp("feeds") / "busends.zip", files)
 
 
 @pytest.fixture(scope="session")

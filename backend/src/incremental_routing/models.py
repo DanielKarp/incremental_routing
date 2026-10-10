@@ -15,6 +15,12 @@ class LatLon(BaseModel):
     lon: float
 
 
+class AgencyCoverage(BaseModel):
+    name: str | None
+    start_date: dt.date | None
+    end_date: dt.date | None
+
+
 class FeedInfo(BaseModel):
     feed_id: str
     timezone: str
@@ -22,6 +28,8 @@ class FeedInfo(BaseModel):
     end_date: dt.date | None
     loaded_at: dt.datetime
     has_frequencies: bool
+    # Each agency's own dates: in a regional feed their schedules run out at different times.
+    agencies: list[AgencyCoverage] = []
 
 
 class Stop(BaseModel):

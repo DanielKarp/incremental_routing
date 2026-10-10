@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 from ..geo import bbox_deltas, estimate_access_s, haversine_m
 from ..models import (
+    AgencyCoverage,
     FeedInfo,
     NearbyStop,
     PathMode,
@@ -78,8 +79,9 @@ class GtfsStore:
 
     def feeds(self) -> list[FeedInfo]:
         with self._connect() as conn:
+            coverage = agency_coverage(conn)
             return [
-                FeedInfo(**dict(row))
+                FeedInfo(**dict(row), agencies=coverage.get(row["feed_id"], []))
                 for row in conn.execute("SELECT * FROM feeds ORDER BY feed_id")
             ]
 
@@ -373,6 +375,36 @@ def _transfer_rule(
     if best is None:
         return None
     return TransferRule(type=best["transfer_type"], min_transfer_s=best["min_transfer_s"])
+
+
+def agency_coverage(conn: sqlite3.Connection) -> dict[str, list[AgencyCoverage]]:
+    """Per feed, the dates each agency's services cover, by agency name.
+
+    A regional feed merges agencies whose schedules end at different times, so its overall
+    date range can't show that one of them has run out.
+    """
+    rows = conn.execute(
+        """
+        WITH services AS (
+            SELECT DISTINCT t.feed_id, r.agency_name, t.service_id
+            FROM trips t JOIN routes r ON r.route_id = t.route_id
+        ),
+        spans AS (
+            SELECT s.feed_id, s.agency_name, c.start_date AS first, c.end_date AS last
+            FROM services s JOIN calendar c ON c.service_id = s.service_id
+            UNION ALL
+            SELECT s.feed_id, s.agency_name, d.date, d.date
+            FROM services s JOIN calendar_dates d ON d.service_id = s.service_id
+            WHERE d.exception_type = 1
+        )
+        SELECT feed_id, agency_name, MIN(first), MAX(last) FROM spans
+        GROUP BY feed_id, agency_name ORDER BY feed_id, agency_name
+        """
+    )
+    coverage: dict[str, list[AgencyCoverage]] = defaultdict(list)
+    for feed_id, name, first, last in rows:
+        coverage[feed_id].append(AgencyCoverage(name=name, start_date=first, end_date=last))
+    return coverage
 
 
 def _active_service_ids(conn: sqlite3.Connection, feed_id: str, day: dt.date) -> set[str]:

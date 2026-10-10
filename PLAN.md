@@ -277,13 +277,28 @@ top of the existing API.
   - The two sources are never loaded together, because the regional feed already contains the
     agencies.
   - Routes carry their agency's name, shown in lists, the itinerary, the summary and the CSV.
+  - Checked on the real feed (2026-10-10): 41 agencies, 21,627 stops, 90,168 trips and
+    3.1 million stop times. Downloading and building took 62 s, giving a 619 MB database.
+    Departures for Caltrain, BART and VTA at six shared stations match the agency feeds
+    exactly. Queries take 5–25 ms.
+  - Dates are tracked per agency. The regional feed's overall range (2021–2099) says nothing,
+    while VTA's schedule in it ends on 2026-10-25. The load summary lists agencies whose
+    schedules end within 30 days, and the app names any agency whose schedule doesn't cover
+    the plan's day.
 - **Shapes.**
-  - The trip endpoint returns the trip's shape and where each stop falls on it. Caltrain and
-    VTA stops (98% of VTA's) are placed by `shape_dist_traveled`. BART has no such distances,
-    so its stops are matched geometrically. The matcher always moves forward along the shape
-    and is bounded, so loops and routes that double back are handled.
-  - On real data the matched points sit a median of 5–19 m from their stops, and matching
-    takes a few milliseconds per trip.
+  - The trip endpoint returns the trip's shape and where each stop falls on it. Stops are
+    placed by `shape_dist_traveled` where the feed gives it (Caltrain, and 98% of VTA's
+    stops), and matched geometrically otherwise (BART). The matcher always moves forward along
+    the shape and is bounded, so loops and routes that double back are handled.
+  - Distances are checked against the geometry. Capitol Corridor's stop distances run 5 km
+    ahead of its shapes from Richmond on, so a stop placed more than 100 m away by distance
+    is matched geometrically instead.
+  - A stop more than 500 m from the shape isn't on it. SFO AirTrain's Red line shape skips
+    three of its stops, for example. Such a stop gets no index, and rides to or from it are
+    drawn stop to stop.
+  - Across all 41 agencies in the 511 feed (about 1,000 sampled trips, 19,000 stop calls),
+    stops sit a median of 0–28 m from the shape, and 171 m at worst. A trip query, matching
+    included, takes 1–7 ms.
   - Transit legs store the ridden part of the shape. The map, the trip preview and the
     printed map follow the track.
 - **Renaming places.** *Rename places* under the itinerary lists every place in the plan,
@@ -304,7 +319,8 @@ top of the existing API.
     Airport line is 4 minutes, and some route pairs at Warm Springs and Union City are 1
     minute.
 
-  The 511 feed may carry more.
+  The 511 feed has the same rules, plus a few timed transfers for WestCat and FAST. None of
+  its rules are between agencies.
 - **Database version.** The database records its schema version. After an update that changes
   the tables, the app says to rebuild (`uv run ir-load-gtfs --skip-download`) instead of
   failing.
@@ -421,12 +437,11 @@ top of the existing API.
   The 511.org fallback covers every agency.
 - **Schedule-only data.** Real trips run late. GTFS-Realtime through 511 is the follow-up.
 - **Cross-agency transfers.** At Millbrae, Diridon and Mountain View each agency has its own
-  stop IDs, 100–300 m apart. The connector walk covers this. The agency feeds don't describe
-  transfers between agencies, so there are no warnings for them. The 511 regional feed may;
-  that's unverified until it has been loaded.
-- **511 feed size.** The regional feed covers about 30 operators, so the database is much
-  larger and slower to build than with three agencies. It hasn't been loaded here yet, because
-  `api.511.org` is blocked in the cloud sandbox.
+  stop IDs, 100–300 m apart. The connector walk covers this. Neither the agency feeds nor the
+  511 regional feed describe transfers between agencies, so there are no warnings for them.
+- **Busy stops with every operator.** Downtown, a 500 m radius takes in hundreds of
+  departures an hour. The list shows the first 40, which at Powell is only the next 10
+  minutes. Filtering by agency or grouping by route would fix this; it's still to decide.
 - **Free services without an SLA** (ORS, FOSSGIS, OpenFreeMap). The provider interface and the
   style URL make each one swappable.
 

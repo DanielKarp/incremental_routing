@@ -217,6 +217,16 @@ describe('transit lines from shapes.txt', () => {
     expect(transitLeg(trip, 1, 2).transit?.geometry).toBeUndefined();
   });
 
+  it('draws stop to stop when the shape misses a stop it rides to', () => {
+    // The backend leaves out the index of a stop the shape doesn't pass near.
+    const offShape = {
+      ...shaped,
+      stops: shaped.stops.map((s, i) => (i === 2 ? { ...s, shape_index: null } : s)),
+    };
+    expect(transitLeg(offShape, 1, 3).transit?.geometry).toBeUndefined();
+    expect(transitLeg(offShape, 1, 2).transit?.geometry).toHaveLength(5);
+  });
+
   it('previews the rest of the line forwards, or the part before the stop backwards', () => {
     expect(previewLine(shaped, 2, 'forward')).toHaveLength(5); // Bravo .. Charlie: 3 points + 2 stops
     expect(previewLine(shaped, 2, 'backward')).toHaveLength(5);

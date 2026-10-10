@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from conftest import ALPHA, BRAVO, DELTA, SOUTH_OF_ALPHA
 
+from incremental_routing.gtfs.loader import build_database
 from incremental_routing.gtfs.query import (
     GtfsStore,
     GtfsUnavailable,
@@ -83,6 +84,17 @@ def test_trip_sequence_bounds_and_feed_dates_come_from_the_calendar(conn):
         "2026-01-01",
         "2026-12-31",
     )
+
+
+def test_feeds_report_each_agencys_dates(tmp_path, bus_ends_early_zip):
+    build_database(tmp_path / "gtfs.sqlite", [("tr", bus_ends_early_zip)])
+    [feed] = GtfsStore(tmp_path / "gtfs.sqlite").feeds()
+    assert (feed.start_date, feed.end_date) == (dt.date(2026, 1, 1), dt.date(2026, 12, 31))
+    # The feed as a whole runs to December, but the bus schedule stops in October.
+    assert [(a.name, a.start_date, a.end_date) for a in feed.agencies] == [
+        ("Test Bus", dt.date(2026, 1, 1), dt.date(2026, 10, 31)),
+        ("Test Rail", dt.date(2026, 1, 1), dt.date(2026, 12, 31)),
+    ]
 
 
 def test_service_calendar_with_exceptions(conn):

@@ -24,6 +24,14 @@ def test_health(client):
     }
 
 
+def test_feeds_list_each_agencys_dates(client):
+    [feed] = client.get("/api/feeds").json()
+    assert feed["agencies"] == [
+        {"name": "Test Bus", "start_date": "2026-01-01", "end_date": "2026-12-31"},
+        {"name": "Test Rail", "start_date": "2026-01-01", "end_date": "2026-12-31"},
+    ]
+
+
 def test_departures_take_naive_times_as_local(client):
     resp = client.get(
         "/api/departures",

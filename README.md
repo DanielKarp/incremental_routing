@@ -46,7 +46,8 @@ names.
 ### Every Bay Area operator (511.org)
 
 The default data needs no key: the Caltrain, BART and VTA feeds. To load every Bay Area
-operator from 511.org's regional feed instead (Muni, SamTrans, AC Transit and about 30 others):
+operator from 511.org's regional feed instead (41 agencies, including Muni, SamTrans, AC
+Transit, Golden Gate Transit and the ferries):
 
 1. Get a free token at <https://511.org/open-data/token>.
 2. Add it to `backend/.env` as `API_511_KEY=…`. Add `GTFS_SOURCE=511` to make 511 the default.
@@ -55,8 +56,12 @@ operator from 511.org's regional feed instead (Muni, SamTrans, AC Transit and ab
 
 The regional feed already includes Caltrain, BART and VTA, so the two sources are never loaded
 together. `uv run ir-load-gtfs --source agencies --skip-download` switches back. The download
-is large, and the build takes longer than for three agencies. The key is never printed, even
-when a download fails.
+is about 60 MB, and building took about a minute; the database is about 620 MB. The key is
+never printed, even when a download fails.
+
+Agencies update their schedules at different times, so the load summary lists any whose data
+in the feed ends within 30 days. The app also names any agency whose schedule doesn't cover
+the day you're planning.
 
 Without an ORS key, walk and bike routing uses the public FOSSGIS Valhalla server (fair use).
 Set `ROUTING_PROVIDER=straight-line` to work fully offline.
