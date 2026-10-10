@@ -2,6 +2,7 @@
 
 uv run ir-load-gtfs                  # download the feed (needs API_511_KEY), rebuild
 uv run ir-load-gtfs --skip-download  # rebuild from the feed already on disk
+uv run ir-load-gtfs --keep-fresh 7   # keep running: rebuild whenever the data is a week old
 """
 
 from __future__ import annotations
@@ -10,6 +11,9 @@ import argparse
 import datetime as dt
 import logging
 import sqlite3
+import time
+import zipfile
+from collections.abc import Callable
 from contextlib import closing
 from pathlib import Path
 
@@ -18,12 +22,15 @@ import httpx
 from ..config import Settings
 from .feeds import REGIONAL_511, Feed
 from .loader import build_database
-from .query import agency_coverage
+from .query import GtfsStore, agency_coverage
 
 USER_AGENT = "incremental-routing/0.1 (personal trip planner)"
 TOKEN_URL = "https://511.org/open-data/token"
 # Agencies whose schedules end within this many days are listed after a build.
 ENDING_SOON_DAYS = 30
+# --keep-fresh looks at the data this often, and tries again this soon after a failure.
+CHECK_EVERY_S = 6 * 3600
+RETRY_AFTER_S = 3600
 
 
 class DownloadError(RuntimeError):
@@ -56,8 +63,68 @@ def download_feed(feed: Feed, dest_dir: Path, params: dict[str, str] | None = No
     except httpx.HTTPError as exc:
         # httpx messages can quote the full URL, key included; report only the kind of error.
         raise DownloadError(f"{feed.name}: {type(exc).__name__}") from None
+    if not zipfile.is_zipfile(partial):
+        # An error page sent with HTTP 200, say: keep the feed we already have.
+        partial.unlink()
+        raise DownloadError(f"{feed.name}: the download is not a GTFS zip file")
     partial.replace(dest)
     return dest
+
+
+class RefreshError(RuntimeError):
+    """The database couldn't be refreshed; the message says why."""
+
+
+def refresh(settings: Settings, *, download: bool = True) -> None:
+    """Download the 511 feed (unless `download` is false) and rebuild the database from it."""
+    zip_path = settings.feeds_dir / f"{REGIONAL_511.feed_id}.zip"
+    if download:
+        if not settings.api_511_key:
+            raise RefreshError(f"downloading needs API_511_KEY in .env (free token: {TOKEN_URL})")
+        print(f"Downloading {REGIONAL_511.name} from {REGIONAL_511.url} (this can take minutes)")
+        try:
+            download_feed(
+                REGIONAL_511, settings.feeds_dir, params={"api_key": settings.api_511_key}
+            )
+        except DownloadError as exc:
+            reason = f"{exc}: 511.org rejected API_511_KEY" if exc.status == 401 else str(exc)
+            raise RefreshError(f"Download failed: {reason}") from None
+    if not zip_path.exists():
+        raise RefreshError(f"no downloaded feed at {zip_path}")
+
+    print(f"Building {settings.db_path} from {zip_path.name}")
+    build_database(settings.db_path, [(REGIONAL_511.feed_id, zip_path)])
+    _print_summary(settings.db_path)
+
+
+def keep_fresh(
+    settings: Settings,
+    every_days: float,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.time,
+) -> None:
+    """Keep the database current, forever: the Docker image runs this beside the server.
+
+    The database is rebuilt when it's missing, outdated, or older than every_days. The feed is
+    downloaded again only when the downloaded copy is that old too, so a restart or an app
+    update doesn't fetch it needlessly. Failures are reported and retried an hour later.
+    """
+    max_age_s = every_days * 86400
+    zip_path = settings.feeds_dir / f"{REGIONAL_511.feed_id}.zip"
+    while True:
+        wait = CHECK_EVERY_S
+        if _stale(settings.db_path, max_age_s, clock()) or GtfsStore(settings.db_path).problem():
+            try:
+                refresh(settings, download=_stale(zip_path, max_age_s, clock()))
+            except Exception as exc:  # noqa: BLE001 - one bad refresh mustn't stop the next
+                print(f"Refreshing the transit data failed: {exc}. Trying again in an hour.")
+                wait = RETRY_AFTER_S
+        sleep(wait)
+
+
+def _stale(path: Path, max_age_s: float, now: float) -> bool:
+    return not path.exists() or now - path.stat().st_mtime >= max_age_s
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -66,30 +133,26 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--skip-download", action="store_true", help="rebuild from the feed already on disk"
     )
+    parser.add_argument(
+        "--keep-fresh",
+        type=float,
+        metavar="DAYS",
+        help="keep running, and rebuild whenever the data is DAYS days old (or missing)",
+    )
     # Accepted and ignored: from when the agencies' own feeds were the other choice.
     parser.add_argument("--source", choices=["511"], help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    zip_path = settings.feeds_dir / f"{REGIONAL_511.feed_id}.zip"
-    if not args.skip_download:
-        if not settings.api_511_key:
-            parser.error(f"downloading needs API_511_KEY in backend/.env (free: {TOKEN_URL})")
-        print(f"Downloading {REGIONAL_511.name} from {REGIONAL_511.url} (this can take minutes)")
-        try:
-            download_feed(
-                REGIONAL_511, settings.feeds_dir, params={"api_key": settings.api_511_key}
-            )
-        except DownloadError as exc:
-            reason = f"{exc}: 511.org rejected API_511_KEY" if exc.status == 401 else str(exc)
-            parser.exit(1, f"Download failed: {reason}\n")
-    if not zip_path.exists():
-        parser.error(f"no downloaded feed at {zip_path}")
-
-    print(f"Building {settings.db_path} from {zip_path.name}")
-    build_database(settings.db_path, [(REGIONAL_511.feed_id, zip_path)])
-    _print_summary(settings.db_path)
+    if args.keep_fresh is not None:
+        if args.keep_fresh <= 0:
+            parser.error("--keep-fresh needs a positive number of days")
+        keep_fresh(settings, args.keep_fresh)
+    try:
+        refresh(settings, download=not args.skip_download)
+    except RefreshError as exc:
+        parser.exit(1, f"{exc}\n")
 
 
 def _print_summary(db_path: Path, today: dt.date | None = None) -> None:

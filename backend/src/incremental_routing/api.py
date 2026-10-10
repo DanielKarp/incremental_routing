@@ -1,4 +1,4 @@
-"""HTTP API. Run with:
+"""HTTP API, plus the built frontend when there is one. Run with:
 
 uv run uvicorn --factory incremental_routing.api:create_app --reload
 """
@@ -11,9 +11,10 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Settings
-from .gtfs.query import GtfsStore, GtfsUnavailable, TransferContext
+from .gtfs.query import REBUILD, GtfsStore, GtfsUnavailable, TransferContext
 from .models import (
     FeedInfo,
     NearbyStop,
@@ -48,7 +49,7 @@ def create_app(
     settings: Settings | None = None, provider: RoutingProvider | None = None
 ) -> FastAPI:
     settings = settings or Settings()
-    store = GtfsStore(settings.db_path)
+    store = GtfsStore(settings.db_path, settings.data_hint or REBUILD)
     router = provider or make_provider(settings)
 
     @asynccontextmanager
@@ -162,4 +163,7 @@ def create_app(
         except RoutingError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    if settings.static_dir.is_dir():
+        # Mounted last, so the API routes above take precedence.
+        app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="frontend")
     return app

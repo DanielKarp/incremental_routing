@@ -4,8 +4,8 @@ A route planner for building a multi-leg trip **one leg at a time**, mixing publ
 cycling and walking. Instead of asking a journey planner for "the best route", you choose
 every leg yourself and the app keeps the itinerary consistent in space and time.
 
-This document describes the planner as built (the MVP plus two rounds of refinements), the
-data sources and decisions behind it, and what might come next.
+This document describes the planner as built (the MVP plus two rounds of refinements,
+packaged for Docker), the data sources and decisions behind it, and what might come next.
 
 ---
 
@@ -27,7 +27,9 @@ built from either end.
 
 **In scope**
 
-- One local user, on a laptop, in a browser.
+- A few people, in a browser. It runs on a home server and is shared through a Cloudflare
+  tunnel, or a technical friend runs the same Docker setup on their own machine (decision 13).
+  There are no accounts: each person's plans stay in their own browser.
 - Transit schedules for every Bay Area operator, from the **511 SF Bay regional feed** (static
   GTFS; decisions 7 and 9).
 - Leg types: transit, walk, bike, wait (waits inserted automatically, or added by hand).
@@ -230,6 +232,12 @@ Browser: React + MapLibre                       Backend: FastAPI (Python)
 | `GET /api/trip?trip_id&service_date` | A trip's stops with times and board/alight flags, and its shape |
 | `POST /api/route {mode, origin, destination}` | Walk or bike path, distance and duration, with heights along bike routes |
 
+**Deployment.** One Docker image holds everything. The backend serves the built frontend at
+`/` and the API under `/api/`, and `ir-load-gtfs --keep-fresh` runs beside it to keep the
+transit data current. `compose.yml` runs the image, keeps the data in a volume, and optionally
+adds a Cloudflare tunnel (`--profile tunnel`). Settings come from one `.env` at the repository
+root, which Compose and the backend both read.
+
 Times without an offset are read as Bay Area local time, and responses carry the offset
 (`-07:00` or `-08:00`). The UI always shows Bay Area time, whatever time zone your laptop is in.
 
@@ -282,6 +290,39 @@ fix them automatically.
 | M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
 | M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. Departures listed by line. |
 | M7 ✅ | Simplify and finish | 511 is the only transit source. Valhalla is the router, and its times are used as they are. Hilly bike rides show a height profile. The plan is brought up to date. |
+| M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. |
+
+### M8 notes
+
+- **One process.** The backend serves the built frontend (`IR_STATIC_DIR`, by default
+  `frontend/dist`). The API routes come first, so the site can't shadow them.
+- **The image.**
+  - A Node stage builds the site, and a Python stage installs the backend with uv.
+  - It runs as a non-root user, with the data in a `/data` volume.
+  - It holds no settings or secrets: the 511 key comes from `.env` at run time, and
+    `.dockerignore` keeps every `.env` out of the build.
+  - The start script runs the data refresher in the background and the server in the
+    foreground. Access logging is off, so the server keeps no record of where people search.
+- **Keeping the data fresh** (`ir-load-gtfs --keep-fresh DAYS`).
+  - Every 6 hours it rebuilds the database if it's missing, from an older version of the app,
+    or older than `DAYS` (7 by default).
+  - It downloads the feed again only if the downloaded copy is that old too, so restarts and
+    app updates don't fetch it needlessly.
+  - A failed attempt is retried an hour later.
+  - A download that isn't a zip (an error page sent as a success, say) is rejected, keeping
+    the copy we have.
+- **Compose.** The app is reachable on this machine only by default (`BIND`, `PORT`), with a
+  health check on `/api/health`. The `tunnel` profile adds `cloudflared`, which reaches the app
+  as `http://app:8000`. Cloudflare Access, set up in the dashboard, limits who can open it.
+- **Checked by building and running it here.**
+  - The image is 276 MB and contains no `.env`, database or key.
+  - On the first start it downloaded and built the 511 data in about a minute, and the health
+    check turned healthy. Meanwhile the app answered with a message explaining the wait.
+  - After a restart it didn't download again.
+  - In a browser, the production build served by the container worked: the map, the
+    departure search and the API, with no page errors.
+  - The tunnel service's configuration is valid and cloudflared reads `TUNNEL_TOKEN`. The
+    tunnel itself needs your Cloudflare account to try.
 
 ### M7 notes
 
@@ -502,12 +543,20 @@ fix them automatically.
 12. **Plans move as JSON files.** No accounts, saved-plan lists, shareable links or bike
     share. *Save plan (.json)* and *Open plan…* cover keeping a plan and sending it to
     someone.
+13. **Shared from a home server; installable with Docker.** The app runs in Docker on a Linux
+    home server, reached through a Cloudflare tunnel, and Cloudflare Access lets in only the
+    listed email addresses. Technical friends can run the same setup on their own machine,
+    with their own 511 key. The code is MIT-licensed.
 
 **Risks:**
 
 - **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (VTA's on
   2026-10-25). The loader and the app flag it, and re-running `ir-load-gtfs` fixes it once the
   agency has published a new one.
+- **No logins of its own.** The app trusts whoever reaches it. Cloudflare Access is what keeps
+  the shared copy private, and the app listens on the local machine only by default.
+- **Home server uptime.** The shared copy is up only while the home server and its internet
+  connection are.
 - **Free services without an SLA** (511.org, FOSSGIS Valhalla, OpenFreeMap). Their quotas are
   fine for one user. The provider interface and the style URL make the router and the map
   swappable.

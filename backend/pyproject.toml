@@ -3,6 +3,7 @@ name = "incremental-routing"
 version = "0.1.0"
 description = "Backend for an incremental, leg-by-leg multimodal trip planner"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

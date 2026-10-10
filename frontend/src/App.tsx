@@ -494,8 +494,8 @@ export function App() {
           )}
 
           <footer className="muted">
-            Routing: {health?.routing_provider ?? '…'} · Map © OpenStreetMap contributors,
-            OpenFreeMap
+            Transit data: 511.org · Routing: {health?.routing_provider ?? '…'} · Map ©
+            OpenStreetMap contributors, OpenFreeMap
           </footer>
         </aside>
         <MapView

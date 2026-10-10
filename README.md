@@ -4,7 +4,8 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (every operator
 511.org's regional feed) with walking and cycling. See [PLAN.md](PLAN.md) for the concept, data
 sources, architecture, decisions and what's next.
 
-**Status:** MVP complete (milestones M0–M5), plus two rounds of refinements (M6–M7).
+**Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
+(M8).
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
 - Bike or walk to and from stops, and edit when walks, rides and waits leave or arrive.
 - Departures are listed by line. Transfer warnings come from the agencies' own rules.
@@ -13,47 +14,108 @@ sources, architecture, decisions and what's next.
   open again or send to someone.
 - The plan is autosaved in your browser.
 
-## Prerequisites
+## Run it with Docker
 
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-- Node 22.12+
-- A free 511.org API token: <https://511.org/open-data/token>
+This is the easy way, on a home server or on your own computer. You need:
+- Docker with Compose: Docker Engine on Linux, or Docker Desktop on Windows and macOS;
+- about 1 GB of disk;
+- a free 511.org API token: <https://511.org/open-data/token>.
 
-## Run it
+```sh
+git clone https://github.com/DanielKarp/incremental_routing.git
+cd incremental_routing
+cp .env.example .env              # then put your token in .env: API_511_KEY=...
+docker compose up -d --build
+```
 
-Each block starts from the repository root, in its own terminal; both must keep running.
+Open <http://localhost:8000>.
+- **First start.** The app downloads the transit data and builds its database, which takes
+  about a minute. Reload the page once it's done.
+- **Data refresh.** The data is checked every few hours and downloaded again once it's a week
+  old. `REFRESH_DAYS` in `.env` changes that.
+- **Storage.** The data lives in a Docker volume, so it survives restarts and updates.
+
+Day to day:
+
+| To | Run |
+| --- | --- |
+| Update to the latest version | `git pull && docker compose up -d --build` |
+| See what it's doing | `docker compose logs -f app` |
+| Fetch fresh schedules now | `docker compose exec app ir-load-gtfs` |
+| Stop it | `docker compose down` (the data is kept) |
+
+The app listens on this machine only. To reach it from other devices on your network, set
+`BIND=0.0.0.0` in `.env` and use the machine's address. The app has no logins of its own, so
+don't open it to the internet directly; use the tunnel below instead.
+
+### Share it with friends through a Cloudflare tunnel
+
+A Cloudflare tunnel gives the app a web address without opening ports on your router.
+Cloudflare Access then asks visitors for an emailed one-time code, so only the people you list
+get in. Both are free, for up to 50 people. You need a domain whose DNS is on Cloudflare.
+
+1. In the Cloudflare Zero Trust dashboard, create a tunnel (type *Cloudflared*). Copy its
+   token into `.env` as `TUNNEL_TOKEN=...`.
+2. Give the tunnel a public hostname, such as `trips.example.com`, pointing to the service
+   `http://app:8000`.
+3. Under Access, add a *self-hosted* application for that hostname. Its policy should allow
+   your friends' email addresses, with one-time PIN as the login method. Don't skip this step:
+   without it, anyone who finds the address can use the app.
+4. Start the app and the tunnel:
+
+   ```sh
+   docker compose --profile tunnel up -d --build
+   ```
+
+Your friends open `https://trips.example.com`, enter their email and the code they receive,
+and plan away. Each person's plans stay in their own browser; they can save them as JSON files
+to keep or share. Cloudflare's guides cover the details:
+[tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) and
+[self-hosted applications](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/).
+
+### Settings
+
+Everything goes in `.env`; [.env.example](.env.example) lists each setting.
+- `API_511_KEY` is the only one you must set.
+- Walk and bike routes come from the public FOSSGIS Valhalla server (fair use, no key). Its bike
+  times already allow for hills.
+- `ROUTING_PROVIDER=straight-line` works without any routing service.
+- `ROUTING_PROVIDER=ors`, with an `ORS_API_KEY`, uses openrouteservice instead. Its bike times
+  ignore hills, and it gives no height profiles.
+
+## Develop without Docker
+
+You need Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22.12+, and the same `.env`
+at the repository root. Each block starts from the repository root, in its own terminal; both
+must keep running.
 
 ```sh
 # Backend (first terminal)
 cd backend
 uv sync
-cp .env.example .env        # then set API_511_KEY in .env (Windows cmd: use `copy`)
 uv run ir-load-gtfs         # downloads the 511 regional feed, then builds data/gtfs.sqlite
 uv run uvicorn --factory incremental_routing.api:create_app --reload   # http://127.0.0.1:8000
 
-# Frontend (second terminal, from the repository root)
+# Frontend (second terminal)
 cd frontend
 npm install
 npm run dev                 # http://localhost:5173 (proxies /api to the backend)
 ```
 
-The transit data is 511.org's regional feed: one GTFS feed for every Bay Area operator (41
-agencies, including Caltrain, BART, VTA, Muni, AC Transit, SamTrans, Golden Gate Transit and
-the ferries). The download is about 60 MB. Building takes about a minute and gives a database
-of about 620 MB. The key is never printed, even when a download fails.
+After `npm run build`, the backend also serves the built app at <http://127.0.0.1:8000>, as it
+does in Docker.
 
-Re-run `uv run ir-load-gtfs` every month or so. Agencies update their schedules at different
-times, so the load summary lists any agency whose schedule ends within 30 days. The app also
-names any agency whose schedule doesn't cover the day you're planning.
-`uv run ir-load-gtfs --skip-download` rebuilds from the feed already on disk.
-
-**After pulling an update**, run `uv run ir-load-gtfs --skip-download` if the app says the
-transit database was built by an older version.
-
-Walk and bike routes come from the public FOSSGIS Valhalla server (fair use, no key). Its bike
-times already allow for hills. `ROUTING_PROVIDER=straight-line` works fully offline.
-`ROUTING_PROVIDER=ors`, with an `ORS_API_KEY`, uses openrouteservice instead; its bike times
-ignore hills, and it gives no height profiles.
+**The transit data.**
+- It's 511.org's regional feed: one GTFS feed for every Bay Area operator. That's 41 agencies,
+  including Caltrain, BART, VTA, Muni, AC Transit, SamTrans, Golden Gate Transit and the
+  ferries.
+- The download is about 60 MB. Building takes about a minute and gives a database of about
+  620 MB. The key is never printed, even when a download fails.
+- Re-run `uv run ir-load-gtfs` every month or so. Agencies update their schedules at different
+  times, so the load summary lists any agency whose schedule ends within 30 days. The app also
+  names any agency whose schedule doesn't cover the day you're planning.
+- `uv run ir-load-gtfs --skip-download` rebuilds from the feed already on disk. Run it after
+  pulling an update if the app says the database was built by an older version.
 
 ## Using it
 
@@ -98,6 +160,11 @@ cd frontend && npm test && npm run build
 The backend tests run against a small synthetic GTFS feed (`backend/tests/conftest.py`). It
 covers trips past midnight, holiday exceptions, stops without scheduled times, parent stations,
 the daylight-saving change day, shapes and transfer rules.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The data it uses comes from the services
+below, under their own terms.
 
 ## Data and attribution
 

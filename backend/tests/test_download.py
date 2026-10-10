@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import shutil
 import sqlite3
 
 import httpx
 import pytest
 
+from incremental_routing.config import Settings
 from incremental_routing.gtfs import download
 
 SECRET = "not-a-real-key-123"
@@ -69,6 +71,17 @@ def test_511_download_never_shows_the_key(data_dir, monkeypatch, capsys):
     assert "Download failed: 511 SF Bay regional feed: ConnectError" in out.err
 
 
+def test_a_download_that_is_not_a_zip_keeps_the_feed_we_have(data_dir, monkeypatch, capsys):
+    monkeypatch.setenv("API_511_KEY", SECRET)
+    (data_dir / "feeds" / "bayarea.zip").write_bytes(b"the previous feed")
+    serve(monkeypatch, lambda _: httpx.Response(200, text="<html>Service unavailable</html>"))
+    with pytest.raises(SystemExit):
+        download.main([])
+    assert "not a GTFS zip file" in capsys.readouterr().err
+    assert (data_dir / "feeds" / "bayarea.zip").read_bytes() == b"the previous feed"
+    assert not (data_dir / "feeds" / "bayarea.zip.part").exists()
+
+
 def test_511_says_when_the_key_is_rejected(data_dir, monkeypatch, capsys):
     monkeypatch.setenv("API_511_KEY", SECRET)
     serve(monkeypatch, lambda _: httpx.Response(401, text="This API key provided is invalid."))
@@ -122,3 +135,80 @@ def test_summary_says_when_no_schedule_ends_soon(data_dir, feed_zip, capsys):
     out = capsys.readouterr().out
     assert "bayarea: 2 agencies, 7 stops, 6 trips" in out
     assert "Every agency's schedule runs past 2026-11-11." in out
+
+
+class Stop(Exception):
+    """Ends a keep_fresh loop after the rounds a test wants."""
+
+
+def run_keep_fresh(settings: Settings, rounds: int, now: float = 1e9) -> list[float]:
+    waits: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        waits.append(seconds)
+        if len(waits) == rounds:
+            raise Stop
+
+    with pytest.raises(Stop):
+        download.keep_fresh(settings, 7, sleep=sleep, clock=lambda: now)
+    return waits
+
+
+def age(path, days: float, now: float = 1e9) -> None:
+    os.utime(path, (now - days * 86400, now - days * 86400))
+
+
+def test_keep_fresh_builds_from_a_recent_download_without_fetching_again(data_dir, feed_zip):
+    # A first start where the feed was already downloaded: no key needed, no download.
+    shutil.copy(feed_zip, data_dir / "feeds" / "bayarea.zip")
+    age(data_dir / "feeds" / "bayarea.zip", 1)
+    waits = run_keep_fresh(Settings(), rounds=1)
+    assert feed_ids(data_dir / "gtfs.sqlite") == ["bayarea"]
+    assert waits == [download.CHECK_EVERY_S]
+
+
+def test_keep_fresh_leaves_fresh_data_alone(data_dir, feed_zip, monkeypatch):
+    shutil.copy(feed_zip, data_dir / "feeds" / "bayarea.zip")
+    download.main(["--skip-download"])
+    age(data_dir / "gtfs.sqlite", 2)
+    rebuilt = []
+    monkeypatch.setattr(download, "refresh", lambda *a, **k: rebuilt.append(k))
+    run_keep_fresh(Settings(), rounds=2)
+    assert rebuilt == []
+
+
+def test_keep_fresh_downloads_again_when_the_data_is_old(data_dir, feed_zip, monkeypatch):
+    monkeypatch.setenv("API_511_KEY", SECRET)
+    shutil.copy(feed_zip, data_dir / "feeds" / "bayarea.zip")
+    download.main(["--skip-download"])
+    age(data_dir / "gtfs.sqlite", 8)
+    age(data_dir / "feeds" / "bayarea.zip", 8)
+    requests = serve(monkeypatch, lambda _: httpx.Response(200, content=feed_zip.read_bytes()))
+    run_keep_fresh(Settings(), rounds=1)
+    assert len(requests) == 1
+    assert feed_ids(data_dir / "gtfs.sqlite") == ["bayarea"]
+
+
+def test_keep_fresh_rebuilds_a_database_from_an_older_app(data_dir, feed_zip, monkeypatch):
+    shutil.copy(feed_zip, data_dir / "feeds" / "bayarea.zip")
+    download.main(["--skip-download"])
+    with sqlite3.connect(data_dir / "gtfs.sqlite") as conn:
+        conn.execute("UPDATE meta SET value = '1' WHERE key = 'schema_version'")
+    calls = []
+    monkeypatch.setattr(download, "refresh", lambda settings, download: calls.append(download))
+    run_keep_fresh(Settings(), rounds=1)
+    assert calls == [False]  # the downloaded feed is recent: rebuild from it
+
+
+def test_keep_fresh_retries_an_hour_after_a_failure(data_dir, capsys):
+    # No key and nothing downloaded: report it, and keep trying.
+    waits = run_keep_fresh(Settings(), rounds=2)
+    assert waits == [download.RETRY_AFTER_S, download.RETRY_AFTER_S]
+    out = capsys.readouterr().out
+    assert "Refreshing the transit data failed: downloading needs API_511_KEY" in out
+
+
+def test_keep_fresh_needs_a_positive_interval(data_dir, capsys):
+    with pytest.raises(SystemExit):
+        download.main(["--keep-fresh", "0"])
+    assert "positive number of days" in capsys.readouterr().err

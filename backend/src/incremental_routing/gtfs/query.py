@@ -47,8 +47,10 @@ class TransferContext:
 
 
 class GtfsStore:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, hint: str = REBUILD):
         self.db_path = db_path
+        # Appended to "no database" messages: how to build it in this setup.
+        self.hint = hint
 
     def problem(self) -> str | None:
         """Why the database can't be used, or None when it's ready."""
@@ -61,7 +63,7 @@ class GtfsStore:
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         if not self.db_path.exists():
-            raise GtfsUnavailable(f"No GTFS database at {self.db_path}. {REBUILD}")
+            raise GtfsUnavailable(f"No GTFS database at {self.db_path}. {self.hint}")
         conn = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
@@ -71,7 +73,7 @@ class GtfsStore:
                 row = None
             if row is None or row[0] != str(SCHEMA_VERSION):
                 raise GtfsUnavailable(
-                    f"The transit database was built by an older version of the app. {REBUILD}"
+                    f"The transit database was built by an older version of the app. {self.hint}"
                 )
             yield conn
         finally:

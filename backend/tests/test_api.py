@@ -120,3 +120,26 @@ def test_trip_endpoint_includes_the_shape(client):
     ).json()
     assert len(trip["shape"]) == 13
     assert [s["shape_index"] for s in trip["stops"]] == [0, 4, 8, 12]
+
+
+def test_serves_the_built_frontend_beside_the_api(settings, tmp_path):
+    site = tmp_path / "dist"
+    (site / "assets").mkdir(parents=True)
+    (site / "index.html").write_text("<!doctype html><title>Incremental Routing</title>")
+    (site / "assets" / "app.js").write_text("console.log('hi')")
+    with_site = Settings(data_dir=settings.data_dir, static_dir=site)
+    with TestClient(create_app(with_site, StraightLineProvider())) as client:
+        assert "Incremental Routing" in client.get("/").text
+        assert client.get("/assets/app.js").text == "console.log('hi')"
+        assert client.get("/api/health").json()["gtfs_loaded"] is True
+    without = Settings(data_dir=settings.data_dir, static_dir=tmp_path / "missing")
+    with TestClient(create_app(without, StraightLineProvider())) as client:
+        assert client.get("/").status_code == 404
+
+
+def test_missing_data_says_how_to_get_it(tmp_path):
+    empty = Settings(data_dir=tmp_path, static_dir=tmp_path / "none", data_hint="Wait a minute.")
+    with TestClient(create_app(empty, StraightLineProvider())) as client:
+        health = client.get("/api/health").json()
+    assert health["gtfs_loaded"] is False
+    assert health["gtfs_problem"].endswith("Wait a minute.")
