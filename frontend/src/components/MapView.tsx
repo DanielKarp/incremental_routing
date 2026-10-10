@@ -1,6 +1,11 @@
 import * as maplibregl from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { useEffect, useRef } from 'react';
 import type { LatLon, NearbyStop } from '../api';
+
+// MapLibre finds its worker next to its own module by default, which breaks once Vite
+// pre-bundles (dev) or bundles (build) it: the map would show only its background colour.
+maplibregl.setWorkerUrl(workerUrl);
 
 // OpenFreeMap: free vector tiles from OpenStreetMap data, no API key.
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';

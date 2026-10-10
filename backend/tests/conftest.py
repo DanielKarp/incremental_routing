@@ -7,6 +7,8 @@ Delta (37.43, a parent station with one platform). Stops are ~1.1 km apart.
 - T_LATE     weekdays 23:50 Alpha, past midnight to 24:20 Charlie
 - T_SATURDAY Saturdays, plus Thanksgiving 2026-11-26 via calendar_dates
 - T_SUNDAY   Sundays 08:00 Alpha -> 08:05 Bravo (2026-11-01 is the DST change day)
+
+feed_info.txt is deliberately stale, as in real BART feeds; the calendar must win.
 """
 
 from __future__ import annotations
@@ -62,6 +64,10 @@ service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,e
 WKDY,1,1,1,1,1,0,0,20260101,20261231
 SAT,0,0,0,0,0,1,0,20260101,20261231
 SUN,0,0,0,0,0,0,1,20260101,20261231
+""",
+    "feed_info.txt": """\
+feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date
+Test Rail,https://example.com,en,20250101,20250630
 """,
     "calendar_dates.txt": """\
 service_id,date,exception_type

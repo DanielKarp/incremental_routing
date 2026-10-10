@@ -69,7 +69,7 @@ def test_missing_stop_times_are_interpolated(conn):
     assert row == (8 * 3600 + 13 * 60, 8 * 3600 + 13 * 60)
 
 
-def test_trip_sequence_bounds_and_feed_dates(conn):
+def test_trip_sequence_bounds_and_feed_dates_come_from_the_calendar(conn):
     assert conn.execute(
         "SELECT first_seq, last_seq FROM trips WHERE trip_id = 'tr:T_MORNING'"
     ).fetchone() == (1, 4)

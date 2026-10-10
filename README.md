@@ -4,9 +4,9 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (Caltrain, BART
 walking and cycling. See [PLAN.md](PLAN.md) for the concept, data sources, architecture and
 roadmap.
 
-**Status:** scaffold (milestone M0). The backend loads GTFS and answers departure, arrival,
-trip and routing queries. The map page lists transit near a clicked point. Building legs comes
-in M2 to M4.
+**Status:** scaffold (milestone M0), checked against the real feeds (M1, mostly done). The
+backend loads GTFS and answers departure, arrival, trip and routing queries. The map page lists
+transit near a clicked point. Building legs comes in M2 to M4.
 
 ## Prerequisites
 

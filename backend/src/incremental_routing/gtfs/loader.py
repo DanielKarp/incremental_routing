@@ -302,11 +302,11 @@ def _interpolate_missing_times(conn: sqlite3.Connection, feed_id: str) -> None:
 def _feed_date_range(
     conn: sqlite3.Connection, feed_id: str, feed_info: dict[str, str]
 ) -> tuple[str | None, str | None]:
-    if feed_info.get("feed_start_date") and feed_info.get("feed_end_date"):
-        return (
-            parse_gtfs_date(feed_info["feed_start_date"]).isoformat(),
-            parse_gtfs_date(feed_info["feed_end_date"]).isoformat(),
-        )
+    """The dates the service calendar actually covers.
+
+    feed_info.txt is only a fallback: publishers forget to update it (BART's 2026-08 feed
+    still claimed to end 2026-08-30 while its calendar ran into 2027).
+    """
     row = conn.execute(
         """
         SELECT MIN(d), MAX(d) FROM (
@@ -317,7 +317,24 @@ def _feed_date_range(
         """,
         {"f": feed_id},
     ).fetchone()
-    return row[0], row[1]
+    calendar_range = (row[0], row[1])
+
+    info_range = None
+    if feed_info.get("feed_start_date") and feed_info.get("feed_end_date"):
+        info_range = (
+            parse_gtfs_date(feed_info["feed_start_date"]).isoformat(),
+            parse_gtfs_date(feed_info["feed_end_date"]).isoformat(),
+        )
+    if calendar_range[0] is None:
+        return info_range or calendar_range
+    if info_range and info_range != calendar_range:
+        log.info(
+            "%s: feed_info.txt says %s..%s but the calendar covers %s..%s; using the calendar",
+            feed_id,
+            *info_range,
+            *calendar_range,
+        )
+    return calendar_range
 
 
 def _index_members(zf: zipfile.ZipFile) -> dict[str, str]:

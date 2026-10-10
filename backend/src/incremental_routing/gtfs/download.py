@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     unknown = [f for f in args.feeds if f not in FEEDS]
     if unknown:

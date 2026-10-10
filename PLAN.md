@@ -131,6 +131,9 @@ copies on the Mobility Database showed date ranges that had already ended, so al
 the source. The loader prints each feed's date range and flags expired feeds, and the UI warns
 when the selected date falls outside a feed's range. Re-run the loader monthly.
 
+The date range comes from the service calendar, not from `feed_info.txt`. BART's August 2026
+feed still declared an end date of 2026-08-30, while its calendar ran to 2027-01-10.
+
 **GTFS details the loader and queries already handle:**
 
 - Times past `24:00:00` for trips that run past midnight. Every query checks yesterday's
@@ -142,7 +145,10 @@ when the selected date falls outside a feed's range. Re-run the loader monthly.
 - Stops without a scheduled time are interpolated between scheduled timepoints.
 - ID collisions between feeds: every ID is prefixed with its feed, e.g. `bart:…`.
 - No boarding at a trip's last stop, or where `pickup_type=1`. The same applies to alighting.
+- Zips with files nested in a folder. Stray macOS `__MACOSX/` entries are ignored; VTA's zip
+  has them.
 - Not handled yet: `frequencies.txt` (headway-based trips). The loader warns if a feed uses it.
+  Caltrain ships the file with a header only, and none of the three feeds uses it today.
 
 ### 5.2 Walking and cycling routes
 
@@ -236,8 +242,8 @@ fix them automatically.
 
 | # | Milestone | Done when |
 | --- | --- | --- |
-| **M0** | **Scaffold** (this commit) | GTFS loader and queries, routing providers, API, map page listing departures and arrivals, plan model. Unit tests for all of it. |
-| M1 | Real-data check | All three feeds load. Departures at Millbrae, San Jose Diridon and Mountain View match the published timetables. Query latency measured. Feed quirks fixed. |
+| M0 ✅ | Scaffold | GTFS loader and queries, routing providers, API, map page listing departures and arrivals, plan model. Unit tests for all of it. |
+| M1 🟡 | Real-data check | All three feeds load. Departures at Millbrae, San Jose Diridon and Mountain View match the published timetables. Query latency measured. Feed quirks fixed. *Mostly done; see below.* |
 | M2 | Forward transit legs | Pick a departure, then a stop to get off at, and the leg (with connector walk and wait) is added. Transit legs are drawn on the map, and an itinerary panel lists the legs. You can build home → Caltrain → BART by clicking. |
 | M3 | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
 | M4 | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
@@ -245,6 +251,37 @@ fix them automatically.
 
 M1 must come first because real feeds always surprise you. Everything after it is UI work on
 top of the existing API.
+
+### M1 findings (feeds downloaded 2026-10-10)
+
+- **Loading.** Downloading and building all three feeds takes about 10 s and produces a 50 MB
+  SQLite file.
+
+  | Feed | Valid dates | Total trips | Trips on Mon 2026-10-12 |
+  | --- | --- | --- | --- |
+  | Caltrain | 2026-01-31 to 2027-01-31 | 260 | 112 (66 on Saturday) |
+  | BART | 2026-08-10 to 2027-01-10 | 4,417 | 1,021 |
+  | VTA | 2026-08-10 to 2026-10-25 | 9,432 | 3,931 |
+
+  VTA's feed expires soon, so re-download it once VTA publishes the next one.
+- **Integrity.** No stop times without a time, and no references to missing stops or routes.
+  Times run up to 27:12 (trips past midnight).
+- **Query speed.** A 60-minute departure search takes 1–18 ms. The slowest are Palo Alto and
+  downtown San Jose, which return 100+ departures.
+- **Spot checks.**
+  - Northbound Caltrain Express leaves San Jose at 07:22 and reaches SF at 08:22, with the
+    express stopping pattern.
+  - At 00:30 the departure list correctly includes trains belonging to the previous service
+    day.
+  - Weekday, Saturday and holiday calendars select the right trips.
+- **Bugs found and fixed.**
+  - BART's stale `feed_info.txt` caused a false "expired" warning.
+  - MapLibre v6 couldn't find its worker once Vite bundled it, so the map showed only its
+    background colour. Fixed with `setWorkerUrl`.
+- **Still to do.**
+  - Compare a few stations against the agencies' published timetables by hand.
+  - Exercise live walk/bike routing. `api.openrouteservice.org` and
+    `valhalla1.openstreetmap.de` are still blocked in the cloud sandbox.
 
 ## 9. Open questions and risks
 
