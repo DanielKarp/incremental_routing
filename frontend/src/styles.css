@@ -5,6 +5,8 @@
   --border: #e3e5ea;
   --accent: #2563eb;
   --warning-bg: #fff6db;
+  --warning-fg: #8a5a00;
+  --hover: #f3f5f9;
   --error: #b42318;
   font-family:
     system-ui,
@@ -22,6 +24,8 @@
     --muted: #9aa1ad;
     --border: #2b303a;
     --warning-bg: #3a3218;
+    --warning-fg: #f3c969;
+    --hover: #1f232b;
     --error: #ff8a80;
   }
 }
@@ -177,4 +181,110 @@ footer {
   .panel {
     border-right: 0;
   }
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.calls li {
+  border-bottom: 1px solid var(--border);
+}
+
+.calls .call {
+  border-bottom: 0;
+}
+
+/* A whole departure row as a button. */
+.call-button {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  border-radius: 0;
+  padding: 8px 4px;
+}
+
+.call-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.stop-choice {
+  grid-template-columns: 4.5em 1fr;
+}
+
+.no-bikes {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.itinerary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.leg {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  gap: 8px;
+  padding: 8px 0 8px 8px;
+  border-left: 4px solid var(--border);
+}
+
+.leg-transit {
+  border-left-color: var(--accent);
+}
+
+.leg-walk,
+.leg-bike {
+  border-left-style: dashed;
+}
+
+.leg-wait {
+  font-size: 0.85rem;
+}
+
+.leg-times {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
+.leg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.duration {
+  font-size: 0.85rem;
+}
+
+.duration input {
+  width: 4.5em;
+}
+
+.issue {
+  font-size: 0.85rem;
+}
+
+.issue-error {
+  color: var(--error);
+}
+
+.issue-warning {
+  color: var(--warning-fg);
 }

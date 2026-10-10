@@ -13,7 +13,7 @@ export interface Place {
 /** A point in space-time: where the traveller is, and when. */
 export interface Waypoint {
   place: Place;
-  /** ISO 8601 with UTC offset. */
+  /** ISO 8601 instant. */
   time: string;
 }
 
@@ -23,11 +23,15 @@ export interface TransitInfo {
   routeName: string;
   headsign: string | null;
   color: string | null;
+  textColor: string | null;
+  /** From GTFS bikes_allowed: true (1), false (2), null (no information). */
+  bikesAllowed: boolean | null;
   /** Stops ridden, boarding to alighting inclusive. */
-  stops: { name: string; lat: number; lon: number; time: string }[];
+  stops: { stopId: string; name: string; lat: number; lon: number; time: string }[];
 }
 
 export interface PathInfo {
+  /** Routing provider, or 'estimate' when the router was unavailable. */
   provider: string;
   distanceM: number;
   /** What the router estimated; the leg's own times win if the user overrode them. */
@@ -54,10 +58,12 @@ export interface Plan {
   legs: Leg[];
 }
 
-export type IssueKind = 'overlap' | 'location-gap' | 'negative-duration';
+export type IssueKind = 'overlap' | 'location-gap' | 'negative-duration' | 'bikes-not-allowed';
 
 export interface PlanIssue {
   kind: IssueKind;
+  /** Errors make the plan inconsistent; warnings are informational only. */
+  severity: 'error' | 'warning';
   legId: string;
   message: string;
 }

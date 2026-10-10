@@ -50,8 +50,8 @@ built from either end.
    - **Transit**: see departures from stops near the frontier after its time. Only trips you
      can still walk to are shown. Pick one, then pick the stop to get off at from that trip's
      remaining stops.
-     - If the boarding stop isn't at the frontier, the app inserts a walk to the stop, plus a
-       wait if you arrive early.
+     - If the boarding stop isn't at the frontier, the app inserts a walk to the stop. The walk
+       starts right away, and a wait fills any time left before the departure.
    - **Walk / Bike**: click the destination. The router returns a path and duration, and
      you can edit the duration.
    - **Wait**: stay put for N minutes, e.g. a coffee stop.
@@ -95,8 +95,10 @@ The real definitions are in `frontend/src/plan/types.ts`.
 
 1. Legs are chronological.
 2. **Continuous in time.** A gap between legs becomes an automatic wait leg. An **overlap**
-   (the next leg starts before the previous one ends) is a *missed connection*. It is flagged
-   to the user and never silently re-timed, because transit times can't move.
+   (the next leg starts before the previous one ends) is a *missed connection*. Nothing is
+   ever silently re-timed, because transit times can't move. Duration edits that would cause
+   an overlap are refused (§9, decision 2), and `findIssues` still reports any overlap as a
+   safety net.
 3. **Continuous in space.** Each leg starts within 75 m of where the previous one ended.
    Otherwise the plan reports a `location-gap` issue.
 4. Automatic legs are derived data. They are deleted and rebuilt on every edit, so they can
@@ -244,13 +246,24 @@ fix them automatically.
 | --- | --- | --- |
 | M0 ✅ | Scaffold | GTFS loader and queries, routing providers, API, map page listing departures and arrivals, plan model. Unit tests for all of it. |
 | M1 🟡 | Real-data check | All three feeds load. Departures at Millbrae, San Jose Diridon and Mountain View match the published timetables. Query latency measured. Feed quirks fixed. *Mostly done; see below.* |
-| M2 | Forward transit legs | Pick a departure, then a stop to get off at, and the leg (with connector walk and wait) is added. Transit legs are drawn on the map, and an itinerary panel lists the legs. You can build home → Caltrain → BART by clicking. |
-| M3 | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. |
+| M2 ✅ | Forward transit legs | Pick a departure, then a stop to get off at, and the leg (with connector walk and wait) is added. Transit legs are drawn on the map, and an itinerary panel lists the legs. You can build home → Caltrain → BART by clicking. |
+| M3 🟡 | Walk and bike legs | Choose a mode at the frontier, click a destination, and get a routed path drawn on the map. Duration is editable, conflicts are shown, manual waits work, and you can remove the last leg. *Already done in M2: duration editing under decision 2, and undo.* |
 | M4 | Backward planning | Arrivals list, choose where to board, prepend legs. Walk and bike legs keep their end time fixed. A plan can grow both ways from the anchor. |
 | M5 | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
 
 M1 must come first because real feeds always surprise you. Everything after it is UI work on
 top of the existing API.
+
+### M2 notes
+
+- If the walking router fails, connector walks fall back to the straight-line estimate and are
+  labelled "(estimated)". This is what happens in the cloud sandbox, where the routing hosts
+  are blocked.
+- Same-station changes need no walk leg when the platforms are within 75 m. Millbrae's
+  Caltrain platform and BART's "Caltrain Transfer Platform" are an example.
+- The departure list leaves out the trip you have just got off.
+- Searches start exactly at the frontier time, so a 0-minute change can be offered.
+  Minimum transfer times (`transfers.txt`) remain a later refinement.
 
 ### M1 findings (feeds downloaded 2026-10-10)
 
@@ -283,18 +296,21 @@ top of the existing API.
   - Exercise live walk/bike routing. `api.openrouteservice.org` and
     `valhalla1.openstreetmap.de` are still blocked in the cloud sandbox.
 
-## 9. Open questions and risks
+## 9. Decisions and risks
 
-**Decisions I've defaulted. Please confirm or change:**
+**Decisions** (settled 2026-10-10):
 
-1. **Connector walk timing.** Leave immediately and wait at the stop (conservative, the
-   default), or leave just in time and wait at the start?
-2. **Duration edits.** Flag the resulting conflicts (the default), or shift later walk and
-   bike legs automatically ("ripple")? Transit legs never move either way.
-3. **Search radius.** 500 m by default. Should it grow, say to 2 km, when you're on a bike?
-4. **Bike on board.** Caltrain and BART allow bikes with restrictions, and VTA buses have racks.
-   Should the plan track "bike with me" across legs and warn when a trip doesn't allow it? GTFS
-   `bikes_allowed` is already exposed per trip.
+1. **Connector walk timing: leave immediately.** The walk to a stop starts at the frontier
+   time, and any spare time becomes a wait at the stop.
+2. **Duration edits never create overlaps.** A walk, bike or manual wait leg can be shortened
+   freely; shortening it opens a wait. It can be lengthened only until it would run into the
+   leg on either side. Legs at the open ends of the plan can grow freely on that side. Nothing
+   ripples, and the editor refuses edits past the limit instead of flagging conflicts.
+3. **Search radius is configurable.** It defaults to 500 m, and the UI offers 100 m to 3 km.
+4. **Bikes are informational only.** A transit leg on a trip with `bikes_allowed = 2` (not
+   allowed) shows a warning and nothing else changes. Riders may have a folding bike or
+   scooter, may park, or may use bikeshare, and modelling any of that is out of scope. In
+   today's feeds this affects 66 VTA bus trips. Every Caltrain and BART trip allows bikes.
 
 **Risks:**
 

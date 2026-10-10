@@ -5,7 +5,15 @@ import type { Leg, Plan, PlanIssue, Waypoint } from './types';
 /** Consecutive legs whose endpoints are closer than this are treated as the same place. */
 export const SAME_PLACE_M = 75;
 
-const toMs = (iso: string) => Date.parse(iso);
+export const toMs = (iso: string) => Date.parse(iso);
+
+export function addSeconds(iso: string, seconds: number): string {
+  return new Date(toMs(iso) + seconds * 1000).toISOString();
+}
+
+export function legDurationS(leg: Leg): number {
+  return (toMs(leg.end.time) - toMs(leg.start.time)) / 1000;
+}
 
 export function newLegId(): string {
   return crypto.randomUUID();
@@ -33,27 +41,59 @@ export function removeLeg(plan: Plan, legId: string): Plan {
   return { ...plan, legs: withWaits(plan.legs.filter((l) => l.id !== legId)) };
 }
 
+/** Which end of a leg stays put when its duration changes. */
+export type FixedEnd = 'start' | 'end';
+
+export type EditResult = { ok: true; plan: Plan } | { ok: false; reason: string };
+
+function userNeighbours(plan: Plan, legId: string) {
+  const userLegs = plan.legs.filter((l) => !l.auto);
+  const i = userLegs.findIndex((l) => l.id === legId);
+  return { leg: userLegs[i], prev: userLegs[i - 1], next: userLegs[i + 1] };
+}
+
 /**
- * Manually override a leg's duration, keeping one end fixed: 'start' when the leg was planned
- * forwards (you leave at a known time), 'end' when planned backwards (you must arrive by then).
- * Neighbouring legs don't move; a resulting overlap is reported by findIssues.
+ * The longest a leg may become, keeping `fixed` in place, without running into the leg on the
+ * side it grows towards (PLAN.md §9, decision 2). Null when that side of the plan is open.
+ * Automatic waits in between don't count: they shrink to make room.
+ */
+export function maxDurationS(plan: Plan, legId: string, fixed: FixedEnd): number | null {
+  const { leg, prev, next } = userNeighbours(plan, legId);
+  if (!leg) throw new Error(`No leg ${legId}`);
+  if (fixed === 'start') return next ? (toMs(next.start.time) - toMs(leg.start.time)) / 1000 : null;
+  return prev ? (toMs(leg.end.time) - toMs(prev.end.time)) / 1000 : null;
+}
+
+/**
+ * Manually override a walk, bike or wait leg's duration. Keep 'start' fixed when the leg was
+ * planned forwards (you leave at a known time), 'end' when planned backwards (you must arrive
+ * by then). Shortening always works and opens a wait; lengthening into a neighbour is refused.
  */
 export function setLegDuration(
   plan: Plan,
   legId: string,
   durationS: number,
-  keep: 'start' | 'end',
-): Plan {
-  const legs = plan.legs.map((leg) => {
-    if (leg.id !== legId) return leg;
-    if (keep === 'start') {
-      const end = new Date(toMs(leg.start.time) + durationS * 1000).toISOString();
-      return { ...leg, end: { ...leg.end, time: end } };
-    }
-    const start = new Date(toMs(leg.end.time) - durationS * 1000).toISOString();
-    return { ...leg, start: { ...leg.start, time: start } };
+  fixed: FixedEnd,
+): EditResult {
+  const { leg } = userNeighbours(plan, legId);
+  if (!leg) return { ok: false, reason: 'That leg is no longer in the plan.' };
+  if (leg.mode === 'transit') return { ok: false, reason: 'Transit times come from the timetable.' };
+  if (!(durationS >= 0)) return { ok: false, reason: 'Enter a duration of 0 or more.' };
+  const max = maxDurationS(plan, legId, fixed);
+  if (max !== null && durationS > max) {
+    const neighbour = fixed === 'start' ? 'next' : 'previous';
+    return {
+      ok: false,
+      reason: `At most ${Math.floor(max / 60)} min. Any longer runs into the ${neighbour} leg.`,
+    };
+  }
+  const legs = plan.legs.map((l) => {
+    if (l.id !== legId) return l;
+    return fixed === 'start'
+      ? { ...l, end: { ...l.end, time: addSeconds(l.start.time, durationS) } }
+      : { ...l, start: { ...l.start, time: addSeconds(l.end.time, -durationS) } };
   });
-  return { ...plan, legs: withWaits(legs) };
+  return { ok: true, plan: { ...plan, legs: withWaits(legs) } };
 }
 
 /** Drop derived legs and insert a wait wherever one leg ends before the next begins. */
@@ -81,7 +121,20 @@ export function findIssues(plan: Plan): PlanIssue[] {
   const userLegs = plan.legs.filter((l) => !l.auto);
   userLegs.forEach((leg, i) => {
     if (toMs(leg.end.time) < toMs(leg.start.time)) {
-      issues.push({ kind: 'negative-duration', legId: leg.id, message: 'Ends before it starts' });
+      issues.push({
+        kind: 'negative-duration',
+        severity: 'error',
+        legId: leg.id,
+        message: 'Ends before it starts',
+      });
+    }
+    if (leg.transit?.bikesAllowed === false) {
+      issues.push({
+        kind: 'bikes-not-allowed',
+        severity: 'warning',
+        legId: leg.id,
+        message: 'Bikes are not allowed on this trip',
+      });
     }
     const prev = userLegs[i - 1];
     if (!prev) return;
@@ -89,6 +142,7 @@ export function findIssues(plan: Plan): PlanIssue[] {
     if (overlapS > 0) {
       issues.push({
         kind: 'overlap',
+        severity: 'error',
         legId: leg.id,
         message: `Starts ${Math.ceil(overlapS / 60)} min before the previous leg ends`,
       });
@@ -97,6 +151,7 @@ export function findIssues(plan: Plan): PlanIssue[] {
     if (gapM > SAME_PLACE_M) {
       issues.push({
         kind: 'location-gap',
+        severity: 'error',
         legId: leg.id,
         message: `Starts ${Math.round(gapM)} m from where the previous leg ends`,
       });

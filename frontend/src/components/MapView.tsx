@@ -1,7 +1,9 @@
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import type { LatLon, NearbyStop } from '../api';
+import type { Leg, Place } from '../plan/types';
 
 // MapLibre finds its worker next to its own module by default, which breaks once Vite
 // pre-bundles (dev) or bundles (build) it: the map would show only its background colour.
@@ -10,17 +12,32 @@ maplibregl.setWorkerUrl(workerUrl);
 // OpenFreeMap: free vector tiles from OpenStreetMap data, no API key.
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const BAY_AREA: [number, number] = [-122.05, 37.5];
+const ACCENT = '#2563eb';
+
+export interface PreviewStop {
+  lat: number;
+  lon: number;
+  name: string;
+}
 
 interface Props {
-  anchor: LatLon | null;
+  anchor: Place | null;
+  /** End of the plan, once it has legs. */
+  frontier: Place | null;
+  /** Stops of the departures being listed. */
   stops: NearbyStop[];
+  /** Stops of the trip being chosen, from boarding onwards. */
+  tripPreview: PreviewStop[] | null;
+  legs: Leg[];
   onPick: (point: LatLon) => void;
 }
 
-export function MapView({ anchor, stops, onPick }: Props) {
+export function MapView({ anchor, frontier, stops, tripPreview, legs, onPick }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const onPickRef = useRef(onPick);
+  // Sources and layers can only be added once the style has loaded.
+  const [styleReady, setStyleReady] = useState(false);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -35,24 +52,22 @@ export function MapView({ anchor, stops, onPick }: Props) {
     });
     m.addControl(new maplibregl.NavigationControl(), 'top-right');
     m.on('click', (e) => onPickRef.current({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
+    m.on('load', () => {
+      addOverlayLayers(m);
+      setStyleReady(true);
+    });
     map.current = m;
     return () => {
       m.remove();
       map.current = null;
+      setStyleReady(false);
     };
   }, []);
 
-  // Markers rather than style layers, so they work before (or without) the style loading.
-  useEffect(() => {
-    if (!map.current || !anchor) return;
-    const marker = new maplibregl.Marker({ color: '#d1495b' })
-      .setLngLat([anchor.lon, anchor.lat])
-      .addTo(map.current);
-    return () => {
-      marker.remove();
-    };
-  }, [anchor]);
+  useMarker(map, anchor, '#d1495b');
+  useMarker(map, frontier, '#15803d');
 
+  // Markers rather than style layers, so they work before (or without) the style loading.
   useEffect(() => {
     if (!map.current) return;
     const markers = stops.map((stop) => {
@@ -66,5 +81,131 @@ export function MapView({ anchor, stops, onPick }: Props) {
     return () => markers.forEach((m) => m.remove());
   }, [stops]);
 
+  useEffect(() => {
+    const source = map.current?.getSource<maplibregl.GeoJSONSource>('legs');
+    if (styleReady && source) source.setData(legFeatures(legs));
+  }, [styleReady, legs]);
+
+  // Show the whole plan whenever it changes.
+  useEffect(() => {
+    if (!map.current || !legs.length) return;
+    const bounds = new maplibregl.LngLatBounds();
+    for (const leg of legs) {
+      bounds.extend([leg.start.place.lon, leg.start.place.lat]);
+      bounds.extend([leg.end.place.lon, leg.end.place.lat]);
+      leg.transit?.stops.forEach((s) => bounds.extend([s.lon, s.lat]));
+    }
+    map.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
+  }, [legs]);
+
+  useEffect(() => {
+    const m = map.current;
+    const source = m?.getSource<maplibregl.GeoJSONSource>('trip-preview');
+    if (!m || !styleReady || !source) return;
+    source.setData(previewFeatures(tripPreview ?? []));
+    if (tripPreview && tripPreview.length > 1) {
+      const bounds = new maplibregl.LngLatBounds();
+      tripPreview.forEach((s) => bounds.extend([s.lon, s.lat]));
+      m.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+    }
+  }, [styleReady, tripPreview]);
+
   return <div ref={container} className="map" data-testid="map" />;
+}
+
+function useMarker(
+  map: RefObject<maplibregl.Map | null>,
+  place: Place | null,
+  color: string,
+) {
+  const lat = place?.lat;
+  const lon = place?.lon;
+  useEffect(() => {
+    if (!map.current || lat === undefined || lon === undefined) return;
+    const marker = new maplibregl.Marker({ color }).setLngLat([lon, lat]).addTo(map.current);
+    return () => {
+      marker.remove();
+    };
+  }, [map, lat, lon, color]);
+}
+
+const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+function addOverlayLayers(m: maplibregl.Map) {
+  m.addSource('trip-preview', { type: 'geojson', data: EMPTY });
+  m.addSource('legs', { type: 'geojson', data: EMPTY });
+  m.addLayer({
+    id: 'trip-preview-line',
+    type: 'line',
+    source: 'trip-preview',
+    filter: ['==', ['geometry-type'], 'LineString'],
+    paint: { 'line-color': ACCENT, 'line-width': 3, 'line-opacity': 0.5 },
+  });
+  m.addLayer({
+    id: 'trip-preview-stops',
+    type: 'circle',
+    source: 'trip-preview',
+    filter: ['==', ['geometry-type'], 'Point'],
+    paint: {
+      'circle-radius': 5,
+      'circle-color': '#ffffff',
+      'circle-stroke-color': ACCENT,
+      'circle-stroke-width': 2,
+    },
+  });
+  m.addLayer({
+    id: 'legs-transit',
+    type: 'line',
+    source: 'legs',
+    filter: ['==', ['get', 'mode'], 'transit'],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': ['coalesce', ['get', 'color'], ACCENT], 'line-width': 5 },
+  });
+  m.addLayer({
+    id: 'legs-path',
+    type: 'line',
+    source: 'legs',
+    filter: ['!=', ['get', 'mode'], 'transit'],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ['match', ['get', 'mode'], 'bike', '#15803d', '#374151'],
+      'line-width': 3,
+      'line-dasharray': [1, 2],
+    },
+  });
+}
+
+function legFeatures(legs: Leg[]): FeatureCollection<LineString> {
+  const features: Feature<LineString>[] = [];
+  for (const leg of legs) {
+    let coordinates: [number, number][];
+    if (leg.transit) {
+      // Stop to stop; shapes.txt would follow the track more closely (PLAN.md §10).
+      coordinates = leg.transit.stops.map((s) => [s.lon, s.lat]);
+    } else if (leg.path && leg.path.geometry.length > 1) {
+      coordinates = leg.path.geometry;
+    } else {
+      continue;
+    }
+    features.push({
+      type: 'Feature',
+      properties: { mode: leg.mode, color: leg.transit?.color ? `#${leg.transit.color}` : null },
+      geometry: { type: 'LineString', coordinates },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+function previewFeatures(stops: PreviewStop[]): FeatureCollection<LineString | Point> {
+  const points: Feature<Point>[] = stops.map((s) => ({
+    type: 'Feature',
+    properties: { name: s.name },
+    geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+  }));
+  const line: Feature<LineString> = {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'LineString', coordinates: stops.map((s) => [s.lon, s.lat]) },
+  };
+  return { type: 'FeatureCollection', features: stops.length > 1 ? [line, ...points] : points };
 }

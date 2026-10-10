@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appendLeg,
   findIssues,
+  maxDurationS,
   planEnd,
   planStart,
   prependLeg,
@@ -25,6 +26,12 @@ const emptyPlan: Plan = { anchor: { place: HOME, time: t('07:40') }, legs: [] };
 const bike = leg('bike', 'bike', HOME, '07:40', STATION, '07:50');
 const train = leg('train', 'transit', STATION, '08:00', CITY, '08:45');
 const walk = leg('walk', 'walk', CITY, '08:45', OFFICE, '08:55');
+const commute = [bike, train, walk].reduce(appendLeg, emptyPlan);
+
+function edited(result: ReturnType<typeof setLegDuration>): Plan {
+  if (!result.ok) throw new Error(result.reason);
+  return result.plan;
+}
 
 describe('building a plan', () => {
   it('starts at the anchor', () => {
@@ -59,28 +66,47 @@ describe('building a plan', () => {
   });
 });
 
-describe('manual duration overrides', () => {
-  it('keeps the start fixed for forward-planned legs and regrows the wait', () => {
-    let plan = appendLeg(appendLeg(emptyPlan, bike), train);
-    plan = setLegDuration(plan, 'bike', 15 * 60, 'start');
+describe('duration edits (decision 2: never into a neighbour)', () => {
+  it('lengthens into the wait, keeping the start fixed', () => {
+    const plan = edited(setLegDuration(commute, 'bike', 15 * 60, 'start'));
     expect(plan.legs[0].end.time).toBe(t('07:55'));
-    expect(plan.legs[1].end.time).toBe(t('08:00'));
+    expect(plan.legs[1]).toMatchObject({ mode: 'wait', end: { time: t('08:00') } });
     expect(findIssues(plan)).toEqual([]);
   });
 
-  it('flags a missed connection instead of moving the train', () => {
-    let plan = appendLeg(appendLeg(emptyPlan, bike), train);
-    plan = setLegDuration(plan, 'bike', 25 * 60, 'start');
-    expect(plan.legs.map((l) => l.mode)).toEqual(['bike', 'transit']);
-    expect(findIssues(plan)).toEqual([
-      { kind: 'overlap', legId: 'train', message: 'Starts 5 min before the previous leg ends' },
-    ]);
+  it('may lengthen right up to the next leg, removing the wait', () => {
+    const plan = edited(setLegDuration(commute, 'bike', 20 * 60, 'start'));
+    expect(plan.legs.map((l) => l.mode)).toEqual(['bike', 'transit', 'walk']);
   });
 
-  it('keeps the end fixed for backward-planned legs', () => {
-    const plan = setLegDuration(appendLeg(emptyPlan, walk), 'walk', 20 * 60, 'end');
-    expect(plan.legs[0].start.time).toBe(t('08:35'));
-    expect(plan.legs[0].end.time).toBe(t('08:55'));
+  it('refuses to lengthen a leg into the next one', () => {
+    expect(maxDurationS(commute, 'bike', 'start')).toBe(20 * 60);
+    expect(setLegDuration(commute, 'bike', 25 * 60, 'start')).toEqual({
+      ok: false,
+      reason: 'At most 20 min. Any longer runs into the next leg.',
+    });
+  });
+
+  it('refuses to lengthen backwards into the previous leg', () => {
+    expect(maxDurationS(commute, 'walk', 'end')).toBe(10 * 60);
+    const result = setLegDuration(commute, 'walk', 20 * 60, 'end');
+    expect(result.ok).toBe(false);
+  });
+
+  it('lets legs at the open ends of the plan grow freely', () => {
+    expect(maxDurationS(commute, 'walk', 'start')).toBeNull();
+    expect(maxDurationS(commute, 'bike', 'end')).toBeNull();
+    const plan = edited(setLegDuration(commute, 'walk', 60 * 60, 'start'));
+    expect(planEnd(plan).time).toBe(t('09:45'));
+  });
+
+  it('always allows shortening, which opens a wait', () => {
+    const plan = edited(setLegDuration(commute, 'bike', 5 * 60, 'start'));
+    expect(plan.legs[1]).toMatchObject({ mode: 'wait', start: { time: t('07:45') } });
+  });
+
+  it('never edits transit legs', () => {
+    expect(setLegDuration(commute, 'train', 30 * 60, 'start').ok).toBe(false);
   });
 });
 
@@ -88,5 +114,25 @@ describe('findIssues', () => {
   it('flags legs that do not connect in space', () => {
     const plan = appendLeg(appendLeg(emptyPlan, bike), walk);
     expect(findIssues(plan).map((i) => i.kind)).toEqual(['location-gap']);
+  });
+
+  it('warns, without erroring, when a trip does not allow bikes', () => {
+    const noBikes: Leg = {
+      ...train,
+      transit: {
+        tripId: 'vta:1',
+        serviceDate: '2026-10-12',
+        routeName: '22',
+        headsign: null,
+        color: null,
+        textColor: null,
+        bikesAllowed: false,
+        stops: [],
+      },
+    };
+    const plan = appendLeg(appendLeg(emptyPlan, bike), noBikes);
+    expect(findIssues(plan)).toEqual([
+      expect.objectContaining({ kind: 'bikes-not-allowed', severity: 'warning', legId: 'train' }),
+    ]);
   });
 });
