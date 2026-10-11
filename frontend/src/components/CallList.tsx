@@ -1,5 +1,6 @@
 import type { PathMode, TransitCall } from '../api';
 import { TRIPS_PER_LINE, groupCalls } from '../callGroups';
+import { lineCall } from '../linePreviews';
 import { routeLabel } from '../plan/build';
 import type { TransferNote } from '../plan/transfers';
 import { formatDuration, formatTime } from '../time';
@@ -14,6 +15,12 @@ interface Props {
   noteFor?: (call: TransitCall) => TransferNote | null;
   /** When set, each trip's time is a button that picks it. */
   onSelect?: (call: TransitCall) => void;
+  /** When set, each line's name is a button that picks its next trip (or last arrival). */
+  onChooseLine?: (key: string) => void;
+  /** The pointer or keyboard focus moved onto a line's row, or off it (null). */
+  onHoverLine?: (key: string | null) => void;
+  /** The lines pointed at on the map: their rows are marked. */
+  highlight?: string[];
   disabled?: boolean;
 }
 
@@ -21,7 +28,10 @@ interface Props {
  * Lines you could board (departures) or alight from (arrivals) near the frontier: one row per
  * route, headsign and stop, with a time for each of its next (or last) few trips.
  */
-export function CallList({ calls, direction, access, noteFor, onSelect, disabled }: Props) {
+export function CallList(props: Props) {
+  const { calls, direction, access, noteFor, onSelect, onChooseLine, onHoverLine, highlight } =
+    props;
+  const { disabled } = props;
   if (!calls.length) return <p className="muted">No trips found in this window.</p>;
   const timeOf = (c: TransitCall) =>
     formatTime(direction === 'departures' ? c.departure : c.arrival);
@@ -29,27 +39,53 @@ export function CallList({ calls, direction, access, noteFor, onSelect, disabled
     <>
       <p className="muted">
         {direction === 'departures' ? 'The next' : 'The last'} {TRIPS_PER_LINE} trips of each
-        line. Pick a time.
+        line. Pick a time, or a line (here or on the map) for its{' '}
+        {direction === 'departures' ? 'next trip' : 'last arrival'}.
       </p>
       <ul className="calls">
-        {groupCalls(calls, direction).map(({ key, calls: trips }) => {
+        {groupCalls(calls, direction).map((group) => {
+          const { key, calls: trips } = group;
           const { route, headsign, stop } = trips[0];
           const noBikes = trips.filter((c) => c.bikes_allowed === 2).length;
           const notes = trips.flatMap((c) => {
             const note = noteFor?.(c);
             return note ? [{ call: c, note }] : [];
           });
+          const name = (
+            <>
+              <RouteBadge
+                name={routeLabel(route)}
+                color={route.color}
+                textColor={route.text_color}
+              />
+              <span className="call-headsign">{headsign ?? ''}</span>
+              {noBikes > 0 && <NoBikesBadge />}
+            </>
+          );
           return (
-            <li key={key} className="call-group">
-              <div className="call-line">
-                <RouteBadge
-                  name={routeLabel(route)}
-                  color={route.color}
-                  textColor={route.text_color}
-                />
-                <span className="call-headsign">{headsign ?? ''}</span>
-                {noBikes > 0 && <NoBikesBadge />}
-              </div>
+            <li
+              key={key}
+              className={`call-group${highlight?.includes(key) ? ' highlighted' : ''}`}
+              onMouseEnter={() => onHoverLine?.(key)}
+              onMouseLeave={() => onHoverLine?.(null)}
+            >
+              {onChooseLine ? (
+                <button
+                  type="button"
+                  className="call-line call-line-button"
+                  disabled={disabled}
+                  title={`Take the ${timeOf(lineCall(group, direction))} and choose where to get ${
+                    direction === 'departures' ? 'off' : 'on'
+                  }`}
+                  onClick={() => onChooseLine(key)}
+                  onFocus={() => onHoverLine?.(key)}
+                  onBlur={() => onHoverLine?.(null)}
+                >
+                  {name}
+                </button>
+              ) : (
+                <div className="call-line">{name}</div>
+              )}
               <span className="call-stop muted">
                 {route.agency ? `${route.agency} · ` : ''}
                 {stop.name} · {formatDuration(stop.access_s)}{' '}

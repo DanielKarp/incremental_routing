@@ -180,6 +180,16 @@ export function shapeBetween(
   ];
 }
 
+/** The stops you could choose: where to get off after `stopSequence` (forwards), or where to
+ * get on before it (backwards). */
+export function stopChoices(trip: TripDetail, stopSequence: number, direction: Direction) {
+  return trip.stops.filter((s) =>
+    direction === 'forward'
+      ? s.stop_sequence > stopSequence && s.can_alight
+      : s.stop_sequence < stopSequence && s.can_board,
+  );
+}
+
 /** The line to preview while choosing where to get off (forwards) or on (backwards). */
 export function previewLine(trip: TripDetail, stopSequence: number, direction: Direction) {
   const at = trip.stops.find((s) => s.stop_sequence === stopSequence);

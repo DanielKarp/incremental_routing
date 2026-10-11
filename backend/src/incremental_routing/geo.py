@@ -60,3 +60,54 @@ def decode_polyline(encoded: str, precision: int = 5) -> list[tuple[float, float
         lon += deltas[1]
         coords.append((lat / factor, lon / factor))
     return coords
+
+
+def simplify_line(
+    points: list[tuple[float, float]], tolerance_m: float
+) -> list[tuple[float, float]]:
+    """Drop the [lon, lat] points within tolerance_m of a straighter line (Douglas-Peucker).
+
+    The ends are always kept. For drawing: a line followed to within a few metres looks the same.
+    """
+    if len(points) < 3:
+        return list(points)
+    cos_lat = math.cos(math.radians(points[0][1]))
+    m_per_deg = math.radians(1) * EARTH_RADIUS_M
+    xy = [(lon * cos_lat * m_per_deg, lat * m_per_deg) for lon, lat in points]
+    # First drop points crowding the last one kept: cheap, and it spares the slower pass most
+    # of the work on densely drawn shapes.
+    near = [0]
+    for i in range(1, len(points) - 1):
+        last = xy[near[-1]]
+        if math.hypot(xy[i][0] - last[0], xy[i][1] - last[1]) >= tolerance_m:
+            near.append(i)
+    near.append(len(points) - 1)
+    points = [points[i] for i in near]
+    xy = [xy[i] for i in near]
+    keep = [False] * len(points)
+    keep[0] = keep[-1] = True
+    spans = [(0, len(points) - 1)]
+    while spans:
+        a, b = spans.pop()
+        far, far_m = None, tolerance_m
+        for i in range(a + 1, b):
+            d = _segment_distance(xy[i], xy[a], xy[b])
+            if d > far_m:
+                far, far_m = i, d
+        if far is not None:
+            keep[far] = True
+            spans += [(a, far), (far, b)]
+    return [p for p, k in zip(points, keep, strict=True) if k]
+
+
+def _segment_distance(
+    p: tuple[float, float], a: tuple[float, float], b: tuple[float, float]
+) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length2 = dx * dx + dy * dy
+    t = (
+        0.0
+        if length2 == 0
+        else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2))
+    )
+    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)

@@ -37,7 +37,7 @@ def stop_indices(shape: Sequence[Point], stops: Sequence[Point]) -> list[int | N
     if not shape:
         return []
     cos_lat = math.cos(math.radians(shape[0][0]))
-    along = _cumulative_m(shape, cos_lat)
+    along: list[float] = []  # Distances along the shape: worked out only if a stop needs them.
     shape_dists = [p[2] for p in shape]
     by_distance = all(d is not None for d in shape_dists)
 
@@ -50,6 +50,7 @@ def stop_indices(shape: Sequence[Point], stops: Sequence[Point]) -> list[int | N
             i = _at_distance(shape_dists, stop[2], lo)  # type: ignore[arg-type]
             offset = _offset(shape, i, stop, cos_lat)
         if offset > DISTANCE_TRUST_M:
+            along = along or _cumulative_m(shape, cos_lat)
             limit = None
             if previous is not None:
                 limit = along[lo] + SEARCH_FACTOR * _dist(previous, stop, cos_lat) + SEARCH_SLACK_M

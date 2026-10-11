@@ -1,5 +1,5 @@
 import type { TransitCall, TripDetail } from '../api';
-import { routeLabel } from '../plan/build';
+import { routeLabel, stopChoices } from '../plan/build';
 import type { Direction } from '../plan/types';
 import { formatTime } from '../time';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
@@ -20,11 +20,7 @@ interface Props {
  */
 export function TripStops({ trip, call, direction, onChoose, onBack, disabled }: Props) {
   const forward = direction === 'forward';
-  const choices = trip.stops.filter((s) =>
-    forward
-      ? s.stop_sequence > call.stop_sequence && s.can_alight
-      : s.stop_sequence < call.stop_sequence && s.can_board,
-  );
+  const choices = stopChoices(trip, call.stop_sequence, direction);
   return (
     <div className="trip-stops">
       <h3>{forward ? 'Where do you get off?' : 'Where do you get on?'}</h3>
@@ -40,6 +36,7 @@ export function TripStops({ trip, call, direction, onChoose, onBack, disabled }:
         {forward
           ? `Boards at ${call.stop.name}, ${formatTime(call.departure)}`
           : `Gets off at ${call.stop.name}, ${formatTime(call.arrival)}`}
+        . Choose a stop here or on the map.
       </p>
       <ul className="calls">
         {choices.map((s) => (

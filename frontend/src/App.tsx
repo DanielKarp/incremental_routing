@@ -4,11 +4,12 @@ import {
   type FeedInfo,
   type Health,
   type LatLon,
+  type LinePath,
   type PathMode,
   type RouteResult,
   type TransitCall,
 } from './api';
-import { TRIPS_PER_LINE } from './callGroups';
+import { TRIPS_PER_LINE, groupCalls } from './callGroups';
 import { Itinerary } from './components/Itinerary';
 import { type MapHandle, MapView, type TripPreview } from './components/MapView';
 import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
@@ -16,6 +17,7 @@ import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
 import { uncoveredOn } from './coverage';
+import { lineCall, linePreviews } from './linePreviews';
 import {
   NEAR_STOP_M,
   type LegsResult,
@@ -28,6 +30,7 @@ import {
   pathLegArriving,
   pinName,
   previewLine,
+  stopChoices,
   stopPlace,
   waitLeg,
 } from './plan/build';
@@ -87,6 +90,13 @@ export function App() {
   const [access, setAccess] = useState<PathMode>('walk');
   const [calls, setCalls] = useState<TransitCall[] | null>(null);
   const [selection, setSelection] = useState<TripSelection | null>(null);
+  // Where each listed line goes, for the map; loaded after the list itself.
+  const [linePaths, setLinePaths] = useState<LinePath[]>([]);
+  const linesRequest = useRef(0);
+  // The line pointed at in the list (framed on the map), and those on the map (marked in the
+  // list).
+  const [listHover, setListHover] = useState<string | null>(null);
+  const [mapHover, setMapHover] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingPath | null>(null);
   const [waitMinutes, setWaitMinutes] = useState(10);
 
@@ -149,20 +159,32 @@ export function App() {
   const day = timeInput.slice(0, 10);
   const uncovered = uncoveredOn(feeds, day);
 
-  const callStops = useMemo(() => {
-    if (selection) return [];
-    const byId = new Map((calls ?? []).map((c) => [c.stop.stop_id, c.stop]));
-    return [...byId.values()];
-  }, [calls, selection]);
+  const listing = forward ? 'departures' : 'arrivals';
+  const lines = useMemo(() => (calls ? groupCalls(calls, listing) : []), [calls, listing]);
+  // The lines are on the map while the list is showing; a chosen trip takes their place.
+  const previews = useMemo(
+    () => (selection ? [] : linePreviews(lines, listing, linePaths)),
+    [selection, lines, listing, linePaths],
+  );
 
   const tripPreview: TripPreview | null = useMemo(() => {
     if (!selection) return null;
-    const seq = selection.call.stop_sequence;
+    const { call, trip } = selection;
+    const seq = call.stop_sequence;
+    const choices = new Set(stopChoices(trip, seq, direction).map((s) => s.stop_sequence));
     return {
-      stops: selection.trip.stops
+      color: trip.route.color,
+      stops: trip.stops
         .filter((s) => (direction === 'forward' ? s.stop_sequence >= seq : s.stop_sequence <= seq))
-        .map((s) => ({ lat: s.stop.lat, lon: s.stop.lon, name: s.stop.name })),
-      line: previewLine(selection.trip, seq, direction),
+        .map((s) => ({
+          lat: s.stop.lat,
+          lon: s.stop.lon,
+          name: s.stop.name,
+          sequence: s.stop_sequence,
+          time: direction === 'forward' ? s.arrival : s.departure,
+          choosable: choices.has(s.stop_sequence),
+        })),
+      line: previewLine(trip, seq, direction),
     };
   }, [selection, direction]);
 
@@ -175,6 +197,32 @@ export function App() {
     setCalls(null);
     setSelection(null);
     setPending(null);
+    forgetLines();
+  }
+
+  /** Clears the line previews, and drops any still loading. */
+  function forgetLines() {
+    linesRequest.current += 1;
+    setLinePaths([]);
+    setListHover(null);
+    setMapHover([]);
+  }
+
+  /** Fetches where each listed line goes, for the map. The list doesn't wait for it. */
+  async function loadLines(shown: TransitCall[]) {
+    forgetLines();
+    const ticket = linesRequest.current;
+    const trips = groupCalls(shown, listing).map((group) => {
+      const call = lineCall(group, listing);
+      return { trip_id: call.trip_id, stop_sequence: call.stop_sequence };
+    });
+    if (!trips.length) return;
+    try {
+      const paths = await api.lines(direction, trips);
+      if (ticket === linesRequest.current) setLinePaths(paths);
+    } catch {
+      // The previews are extra: the list works without them.
+    }
   }
 
   function commit(next: Plan) {
@@ -298,17 +346,26 @@ export function App() {
       const found = await (forward ? api.departures(query) : api.arrivals(query));
       // Don't offer the trip you're already on at this end of the plan.
       const onIt = ride?.transit;
-      setCalls(
-        found.filter(
-          (c) => !onIt || c.trip_id !== onIt.tripId || c.service_date !== onIt.serviceDate,
-        ),
+      const shown = found.filter(
+        (c) => !onIt || c.trip_id !== onIt.tripId || c.service_date !== onIt.serviceDate,
       );
+      setCalls(shown);
+      void loadLines(shown);
     });
 
   const chooseCall = (call: TransitCall) =>
     run(async () => {
       setSelection({ call, trip: await api.trip(call.trip_id, call.service_date) });
+      // The rows pointed at are gone now; their mouse-leave events never come.
+      setListHover(null);
+      setMapHover([]);
     });
+
+  /** A line picked by name, in the list or on the map: its next trip (or last arrival). */
+  function chooseLine(key: string) {
+    const group = lines.find((l) => l.key === key);
+    if (group && !busy) void chooseCall(lineCall(group, listing));
+  }
 
   const chooseStop = (stopSequence: number) =>
     run(async () => {
@@ -473,12 +530,16 @@ export function App() {
               onAccess={(a) => {
                 setAccess(a);
                 setCalls(null); // Which trips are reachable depends on it.
+                forgetLines();
               }}
               onSearch={search}
               calls={calls}
               noteFor={(call) => transferNote(call, ride, direction)}
               selection={selection}
               onChooseCall={chooseCall}
+              onChooseLine={chooseLine}
+              onHoverLine={setListHover}
+              highlightLines={mapHover}
               onChooseStop={chooseStop}
               onBackToCalls={() => setSelection(null)}
               pending={pending}
@@ -502,13 +563,17 @@ export function App() {
           ref={mapRef}
           start={committed ? planStart(committed).place : anchorPlace}
           end={committed ? planEnd(committed).place : null}
-          stops={callStops}
+          lines={previews}
+          focusLine={listHover}
           tripPreview={tripPreview}
           pendingPoint={pending?.place ?? null}
           pendingRoute={pending?.route.geometry ?? null}
           picking={picking !== null}
           legs={committed?.legs ?? NO_LEGS}
           onPick={pickOnMap}
+          onHoverLines={setMapHover}
+          onChooseLine={chooseLine}
+          onChooseStop={(sequence) => !busy && void chooseStop(sequence)}
         />
       </div>
       {showSummary && committed && (

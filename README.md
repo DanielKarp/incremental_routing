@@ -5,8 +5,10 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (every operator
 sources, architecture, decisions and what's next.
 
 **Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
-(M8).
+(M8), with line previews on the map (M9).
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
+- While you choose a ride, the map shows where each line nearby goes. Pick lines and stops in
+  the list or on the map.
 - Bike or walk to and from stops, and edit when walks, rides and waits leave or arrive.
 - Departures are listed by line. Transfer warnings come from the agencies' own rules.
 - Hilly bike rides show a simple height profile.
@@ -126,8 +128,17 @@ does in Docker.
    - **Transit:** pick how you'll reach the stop: *Get to the stop by Walking* or *Bike*
      (when planning backwards, how you'll leave it). Then *Find departures* (or *Find
      arrivals*). Each line nearby gets a row with its next three departures (or, backwards,
-     its last three arrivals). Pick a time, then the stop where you get off (or on). The walk
-     or bike ride to or from the stop, and any wait, are added for you.
+     its last three arrivals).
+
+     The map shows those lines too, thin and faded in their own colours, each with a dot at
+     the stop where you'd catch it. Forwards, a line runs from that stop to the end of its
+     route; backwards, from the start of its route to the stop. Point at a row to highlight
+     its line and zoom to it, or point at a line on the map to see its name.
+
+     Pick a time, or click a line's name for its next departure (or last arrival). You can
+     also click the line itself on the map; where lines overlap, you're asked which one.
+     Then choose the stop where you get off (or on), in the list or on the map. The walk or
+     bike ride to or from the stop, and any wait, are added for you.
 
      When you change from another ride, the list notes the agency's transfer rules. It warns
      when a connection is shorter than the agency's minimum, or when the agency says the

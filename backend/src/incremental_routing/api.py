@@ -17,6 +17,8 @@ from .config import Settings
 from .gtfs.query import REBUILD, GtfsStore, GtfsUnavailable, TransferContext
 from .models import (
     FeedInfo,
+    LinePath,
+    LinesRequest,
     NearbyStop,
     PathMode,
     RouteRequest,
@@ -147,6 +149,14 @@ def create_app(
             access,
             transfer,
             per_route,
+        )
+
+    @app.post("/api/lines")
+    def lines(req: LinesRequest) -> list[LinePath]:
+        """Where each trip could take you from its stop (forward), or bring you to it
+        (backward): the choices in a departure or arrival list, drawn on the map."""
+        return store.lines(
+            [(t.trip_id, t.stop_sequence) for t in req.trips], forward=req.direction == "forward"
         )
 
     @app.get("/api/trip")

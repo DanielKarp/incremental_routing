@@ -40,6 +40,11 @@ interface Props {
   noteFor: (call: TransitCall) => TransferNote | null;
   selection: TripSelection | null;
   onChooseCall: (call: TransitCall) => void;
+  /** A line was picked by name (in the list or on the map). */
+  onChooseLine: (key: string) => void;
+  onHoverLine: (key: string | null) => void;
+  /** The lines pointed at on the map. */
+  highlightLines: string[];
   onChooseStop: (stopSequence: number) => void;
   onBackToCalls: () => void;
 
@@ -156,6 +161,9 @@ function TransitPanel(p: Props) {
             access={p.access}
             noteFor={p.noteFor}
             onSelect={p.onChooseCall}
+            onChooseLine={p.onChooseLine}
+            onHoverLine={p.onHoverLine}
+            highlight={p.highlightLines}
             disabled={p.busy}
           />
         </>

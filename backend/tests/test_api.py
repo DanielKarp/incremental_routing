@@ -143,3 +143,18 @@ def test_missing_data_says_how_to_get_it(tmp_path):
         health = client.get("/api/health").json()
     assert health["gtfs_loaded"] is False
     assert health["gtfs_problem"].endswith("Wait a minute.")
+
+
+def test_lines_endpoint(client):
+    resp = client.post(
+        "/api/lines",
+        json={"direction": "forward", "trips": [{"trip_id": "tr:T_BUS", "stop_sequence": 1}]},
+    )
+    assert resp.json() == [
+        {
+            "trip_id": "tr:T_BUS",
+            "stop_sequence": 1,
+            "geometry": [[-122.1003, 37.4302], [-122.09, 37.43]],
+        }
+    ]
+    assert client.post("/api/lines", json={"direction": "up", "trips": []}).status_code == 422

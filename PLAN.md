@@ -58,8 +58,10 @@ built from either end.
 1. Click the map and set a time. That's the anchor, and it becomes the frontier.
 2. Choose a mode for the next leg:
    - **Transit**: see departures from stops near the frontier after its time, grouped by line
-     (decision 8). Only trips you can still reach on foot or by bike are shown. Pick one, then
-     pick the stop to get off at from that trip's remaining stops.
+     (decision 8). Only trips you can still reach on foot or by bike are shown. The map draws
+     each of those lines from its stop onwards (decision 14). Pick a trip, in the list or by
+     clicking its line on the map. Then pick the stop to get off at from that trip's remaining
+     stops, in the list or on the map.
      - If the boarding stop isn't at the frontier, the app inserts a walk or bike ride to the
        stop. It starts right away, and a wait fills any time left before the departure.
    - **Walk / Bike**: click the destination. The router returns a path and duration. You can
@@ -73,7 +75,8 @@ built from either end.
 ### Backward
 
 This is the same flow mirrored. You see **arrivals** at stops near the frontier before its time,
-pick a trip, then pick where you got on from its earlier stops. The walk or bike ride from the
+with each line drawn up to its stop, pick a trip, then pick where you got on from its earlier
+stops. The walk or bike ride from the
 stop to the frontier leaves as soon as you get off, and any spare time becomes a wait at the frontier
 (decision 1, mirrored). Walk, bike and wait legs you add keep their **end** time fixed and
 compute the start time.
@@ -82,7 +85,7 @@ compute the start time.
 
 | Mode | Start / end chosen by | Times come from | Editable |
 | --- | --- | --- | --- |
-| Transit | Departure (or arrival) list, then a stop on that trip | Timetable | No: fixed by the schedule |
+| Transit | Departure (or arrival) list or a line on the map, then a stop on that trip | Timetable | No: fixed by the schedule |
 | Walk, Bike | Frontier, then a map click | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2) |
 | Wait | Same place at both ends | Gap between legs, or manual | Manual waits only |
 
@@ -218,6 +221,7 @@ Browser: React + MapLibre                       Backend: FastAPI (Python)
 │ components/  map, lists,     │ ─ departures ─▶│                       ▲              │
 │   leg builder, itinerary     │   arrivals     │ ir-load-gtfs ─────────┘ (download +  │
 │ localStorage + JSON export   │   trip         │                         build)       │
+│                              │   POST /lines  │                                      │
 │                              │   POST /route ▶│ routing/ ─▶ Valhalla | ORS | straight│
 └──────────────────────────────┘                └──────────────────────────────────────┘
 ```
@@ -230,6 +234,7 @@ Browser: React + MapLibre                       Backend: FastAPI (Python)
 | `GET /api/departures?lat&lon&time&radius_m&window_min&limit&access&per_route&transfer_stop&transfer_trip` | Trips you can reach and board after `time` (forward), each with any transfer rule |
 | `GET /api/arrivals?…` (same parameters) | Trips you can ride to arrive before `time` (backward) |
 | `GET /api/trip?trip_id&service_date` | A trip's stops with times and board/alight flags, and its shape |
+| `POST /api/lines {direction, trips}` | For the map: the part of each listed trip you could ride from its stop (forward) or to it (backward), simplified |
 | `POST /api/route {mode, origin, destination}` | Walk or bike path, distance and duration, with heights along bike routes |
 
 **Deployment.** One Docker image holds everything. The backend serves the built frontend at
@@ -266,6 +271,13 @@ query time.
 stops after the boarding stop where `can_alight` is true (forward), or stops before the alighting
 stop where `can_board` is true (backward).
 
+**Line previews** (`GtfsStore.lines`): for each line in the list, the UI sends the trip it
+stands for (the next departure, or the last arrival when planning backwards) and its stop. The
+backend cuts that trip's shape from the stop to the trip's last stop (forward), or from its
+first stop to the stop (backward). It matches stops to the shape as `/api/trip` does, and runs
+stop to stop when the shape can't be used. Each path is then simplified to within 10 m
+(Douglas–Peucker), which keeps 60 lines to about 40 KB.
+
 **Connector walks:** when the chosen stop isn't at the frontier, the UI requests a walk or bike
 route from the frontier to the stop and adds it as a leg. `withWaits` then fills the remaining time.
 
@@ -291,6 +303,40 @@ fix them automatically.
 | M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. Departures listed by line. |
 | M7 ✅ | Simplify and finish | 511 is the only transit source. Valhalla is the router, and its times are used as they are. Hilly bike rides show a height profile. The plan is brought up to date. |
 | M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. |
+| M9 ✅ | Line previews | While you choose a ride, the map shows every line in the list, faded in its own colour, with the stop to catch it. Pointing at a row highlights and frames its line, and pointing at a line marks its row. Lines, and the stop to get off at (or on), can be picked on the map. |
+
+### M9 notes
+
+- **What's drawn** (decision 14). Each line is drawn from its stop onwards when planning
+  forwards, and up to its stop when planning backwards, with a dot at the stop. Its path
+  arrives just after the list, which never waits for it.
+- **How it looks.**
+  - Previews are thin (3 px) and 60% opaque, under everything else.
+  - The line pointed at, in the list or on the map, is drawn at full strength with a white
+    halo, and the others fade further.
+  - Planned rides stay bold with a dark edge. Dashes are kept for walking and cycling.
+  - Pale route colours, such as BART's yellow and Caltrain's grey locals (26 of the 671
+    routes), get a thin dark edge in place of the white one so they still show. The same
+    goes for the stops of a trip being chosen.
+- **Pointing and clicking.**
+  - Pointing at a row frames its line after a short pause, so sweeping down the list doesn't
+    throw the map around. Leaving the row frames all the lines again.
+  - Pointing at a line on the map names it and marks its row without moving the map. Where
+    lines overlap, all of them are highlighted and named.
+  - Clicking a line picks its next trip (or last arrival). Where lines overlap, a small menu
+    asks which; pointing at a choice highlights that line.
+  - Once a trip is picked, its stops on the map can be clicked to get off (or on). Each names
+    the stop and its time, and stops you can't use are smaller and grey.
+  - Clicking a line never moves the plan's start, and a click away from the menu only closes
+    it.
+- **Speed**, on the 511 data: Powell Street at 500 m (61 lines) takes about 0.2 s and
+  40 KB. Civic Center at 3 km (206 lines) takes about 0.5 s and 130 KB. Matching stops to
+  shapes measures along the shape only when a stop needs matching by position.
+- **Checked in a browser** on the 511 data:
+  - forwards from Powell Street;
+  - backwards from Palo Alto;
+  - choosing lines and stops on the map, overlapping lines, going back to the list;
+  - no page errors.
 
 ### M8 notes
 
@@ -547,6 +593,12 @@ fix them automatically.
     home server, reached through a Cloudflare tunnel, and Cloudflare Access lets in only the
     listed email addresses. Technical friends can run the same setup on their own machine,
     with their own 511 key. The code is MIT-licensed.
+14. **Previews show where each line can take you.** While you choose a ride, each line in the
+    list is drawn from its stop to the end of its trip (or, planning backwards, from the start
+    of its trip to the stop). Where a line runs both ways along the same streets, its two
+    directions together show the whole line; where they differ, each shows only its own
+    onward route. Previews are thin and see-through in the line's colour, so they can't be
+    mistaken for planned rides.
 
 **Risks:**
 

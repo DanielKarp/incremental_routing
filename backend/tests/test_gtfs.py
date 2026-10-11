@@ -269,3 +269,23 @@ def test_an_outdated_database_asks_for_a_rebuild(settings, tmp_path):
     with pytest.raises(GtfsUnavailable, match="ir-load-gtfs"):
         store.departures(*ALPHA, at(MONDAY, 7, 50), 500, 3600, 10)
     assert GtfsStore(settings.db_path).problem() is None
+
+
+# --- line previews ------------------------------------------------------------------------
+
+
+def test_lines_follow_each_trip_onward_from_its_stop(store):
+    morning, bus = store.lines([("tr:T_MORNING", 2), ("tr:T_BUS", 1)], forward=True)
+    # From Bravo along T_MORNING's straight shape to Delta, simplified to its ends.
+    assert morning.geometry == [(-122.1, 37.41), (-122.1, 37.43)]
+    # T_BUS has no shape: stop to stop.
+    assert bus.geometry == [(-122.1003, 37.4302), (-122.09, 37.43)]
+
+
+def test_lines_backwards_run_from_the_start_to_the_stop(store):
+    [path] = store.lines([("tr:T_MORNING", 2)], forward=False)
+    assert path.geometry == [(-122.1, 37.4), (-122.1, 37.41)]
+
+
+def test_lines_leave_out_unknown_trips_and_stops(store):
+    assert store.lines([("tr:NOPE", 1), ("tr:T_MORNING", 99)], forward=True) == []

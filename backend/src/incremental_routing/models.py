@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 PathMode = Literal["walk", "bike"]
 
@@ -104,6 +104,26 @@ class TripDetail(BaseModel):
     stops: list[TripStop]
     # The trip's path from shapes.txt as [lon, lat] pairs, when the feed has one.
     shape: list[tuple[float, float]] | None = None
+
+
+class LineTrip(BaseModel):
+    """A trip, and the stop on it where you'd get on (forwards) or off (backwards)."""
+
+    trip_id: str
+    stop_sequence: int
+
+
+class LinesRequest(BaseModel):
+    direction: Literal["forward", "backward"]
+    trips: list[LineTrip] = Field(max_length=500)
+
+
+class LinePath(BaseModel):
+    trip_id: str
+    stop_sequence: int
+    # The part you could ride, as [lon, lat] pairs: from the stop to the end of the trip
+    # (forwards), or from its start to the stop (backwards). Simplified for drawing.
+    geometry: list[tuple[float, float]]
 
 
 class RouteRequest(BaseModel):

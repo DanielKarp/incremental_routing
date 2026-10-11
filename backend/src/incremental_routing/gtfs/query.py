@@ -5,16 +5,17 @@ from __future__ import annotations
 import datetime as dt
 import sqlite3
 from collections import Counter, defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from ..geo import bbox_deltas, estimate_access_s, haversine_m
+from ..geo import bbox_deltas, estimate_access_s, haversine_m, simplify_line
 from ..models import (
     AgencyCoverage,
     FeedInfo,
+    LinePath,
     NearbyStop,
     PathMode,
     RouteInfo,
@@ -31,6 +32,9 @@ from .timeutil import gtfs_to_datetime, seconds_since_origin
 ROUTE_COLUMNS = (
     "r.route_id, r.agency_name, r.short_name, r.long_name, r.route_type, r.color, r.text_color"
 )
+# Line previews are simplified to this, in metres: invisible at street zoom, and much lighter.
+LINE_SIMPLIFY_M = 10.0
+
 REBUILD = "Run `uv run ir-load-gtfs` in backend/ (add --skip-download to reuse downloaded feeds)."
 
 
@@ -163,25 +167,7 @@ class GtfsStore:
                 """,
                 (trip_id,),
             ).fetchall()
-            shape_rows = (
-                conn.execute(
-                    "SELECT lat, lon, dist FROM shapes WHERE shape_id = ? ORDER BY seq",
-                    (row["shape_id"],),
-                ).fetchall()
-                if row["shape_id"]
-                else []
-            )
-
-        indices: list[int | None] = [None] * len(stop_rows)
-        shape = None
-        if len(shape_rows) > 1:
-            indices = list(
-                stop_indices(
-                    [(p["lat"], p["lon"], p["dist"]) for p in shape_rows],
-                    [(s["lat"], s["lon"], s["shape_dist"]) for s in stop_rows],
-                )
-            )
-            shape = [(round(p["lon"], 6), round(p["lat"], 6)) for p in shape_rows]
+            shape, indices = _shape_with_stops(conn, row["shape_id"], stop_rows)
 
         stops = [
             TripStop(
@@ -211,6 +197,22 @@ class GtfsStore:
             stops=stops,
             shape=shape,
         )
+
+    def lines(self, trips: Sequence[tuple[str, int]], *, forward: bool) -> list[LinePath]:
+        """Where each trip could take you from its stop (forward), or bring you to it (backward).
+
+        Each path follows the trip's shape when it has one, and is simplified for drawing.
+        Unknown trips, and stops not on their trip, are left out.
+        """
+        paths: list[LinePath] = []
+        with self._connect() as conn:
+            for trip_id, stop_sequence in trips:
+                geometry = _ridable_path(conn, trip_id, stop_sequence, forward)
+                if geometry:
+                    paths.append(
+                        LinePath(trip_id=trip_id, stop_sequence=stop_sequence, geometry=geometry)
+                    )
+        return paths
 
     def _calls(
         self,
@@ -385,6 +387,59 @@ def _transfer_rule(
     if best is None:
         return None
     return TransferRule(type=best["transfer_type"], min_transfer_s=best["min_transfer_s"])
+
+
+def _shape_with_stops(
+    conn: sqlite3.Connection, shape_id: str | None, stop_rows: Sequence[sqlite3.Row]
+) -> tuple[list[tuple[float, float]] | None, list[int | None]]:
+    """The shape as [lon, lat] pairs, and where each stop falls on it (None when off it)."""
+    shape_rows = (
+        conn.execute(
+            "SELECT lat, lon, dist FROM shapes WHERE shape_id = ? ORDER BY seq", (shape_id,)
+        ).fetchall()
+        if shape_id
+        else []
+    )
+    if len(shape_rows) < 2:
+        return None, [None] * len(stop_rows)
+    indices = stop_indices(
+        [(p["lat"], p["lon"], p["dist"]) for p in shape_rows],
+        [(s["lat"], s["lon"], s["shape_dist"]) for s in stop_rows],
+    )
+    return [(round(p["lon"], 6), round(p["lat"], 6)) for p in shape_rows], indices
+
+
+def _ridable_path(
+    conn: sqlite3.Connection, trip_id: str, stop_sequence: int, forward: bool
+) -> list[tuple[float, float]] | None:
+    """The trip's path from the stop to its end (forward), or from its start to the stop."""
+    row = conn.execute("SELECT shape_id FROM trips WHERE trip_id = ?", (trip_id,)).fetchone()
+    if row is None:
+        return None
+    stop_rows = conn.execute(
+        """
+        SELECT st.stop_sequence, st.shape_dist, s.lat, s.lon
+        FROM stop_times st JOIN stops s ON s.stop_id = st.stop_id
+        WHERE st.trip_id = ? AND st.arrival_s IS NOT NULL
+        ORDER BY st.stop_sequence
+        """,
+        (trip_id,),
+    ).fetchall()
+    at = next((k for k, s in enumerate(stop_rows) if s["stop_sequence"] == stop_sequence), None)
+    if at is None:
+        return None
+    first, last = (at, len(stop_rows) - 1) if forward else (0, at)
+    shape, indices = _shape_with_stops(conn, row["shape_id"], stop_rows)
+
+    def point(k: int) -> tuple[float, float]:
+        return round(stop_rows[k]["lon"], 6), round(stop_rows[k]["lat"], 6)
+
+    start, end = indices[first], indices[last]
+    if shape and start is not None and end is not None:
+        line = [point(first), *shape[start : end + 1], point(last)]
+    else:
+        line = [point(k) for k in range(first, last + 1)]  # stop to stop
+    return simplify_line(line, LINE_SIMPLIFY_M)
 
 
 def _first_per_route(calls: list[TransitCall], n: int) -> list[TransitCall]:

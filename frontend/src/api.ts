@@ -130,6 +130,14 @@ export interface CallQuery {
   limit?: number;
 }
 
+/** The part of a trip you could ride from (or to) a stop, from /api/lines. */
+export interface LinePath {
+  trip_id: string;
+  stop_sequence: number;
+  /** [lon, lat] pairs. */
+  geometry: [number, number][];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -188,6 +196,15 @@ export const api = {
     request<TripDetail>(
       `/api/trip?${new URLSearchParams({ trip_id: tripId, service_date: serviceDate })}`,
     ),
+  lines: (
+    direction: 'forward' | 'backward',
+    trips: { trip_id: string; stop_sequence: number }[],
+  ) =>
+    request<LinePath[]>('/api/lines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction, trips }),
+    }),
   route: (mode: PathMode, origin: LatLon, destination: LatLon) =>
     request<RouteResult>('/api/route', {
       method: 'POST',

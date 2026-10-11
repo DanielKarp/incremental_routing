@@ -10,6 +10,7 @@ import {
   pathLegArriving,
   pinName,
   previewLine,
+  stopChoices,
   transitLeg,
   waitLeg,
 } from './build';
@@ -235,6 +236,19 @@ describe('transit lines from shapes.txt', () => {
       [-122.1, 37.41],
       [-122.1, 37.42],
     ]);
+  });
+});
+
+describe('choosing where to get off or on', () => {
+  it('offers the later stops forwards and the earlier ones backwards, where allowed', () => {
+    const seqs = (stops: { stop_sequence: number }[]) => stops.map((s) => s.stop_sequence);
+    expect(seqs(stopChoices(trip, 1, 'forward'))).toEqual([2, 3]);
+    expect(seqs(stopChoices(trip, 3, 'backward'))).toEqual([1, 2]);
+    const noDropOff = {
+      ...trip,
+      stops: trip.stops.map((s, i) => (i === 1 ? { ...s, can_alight: false } : s)),
+    };
+    expect(seqs(stopChoices(noDropOff, 1, 'forward'))).toEqual([3]);
   });
 });
 
