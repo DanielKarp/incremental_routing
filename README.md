@@ -6,6 +6,7 @@ sources, architecture, decisions and what's next.
 
 **Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
 (M8), with line previews on the map (M9).
+
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
 - While you choose a ride, the map shows where each line nearby goes. Pick lines and stops in
   the list or on the map.
@@ -19,6 +20,7 @@ sources, architecture, decisions and what's next.
 ## Run it with Docker
 
 This is the easy way, on a home server or on your own computer. You need:
+
 - Docker with Compose: Docker Engine on Linux, or Docker Desktop on Windows and macOS;
 - about 1 GB of disk;
 - a free 511.org API token: <https://511.org/open-data/token>.
@@ -31,6 +33,7 @@ docker compose up -d --build
 ```
 
 Open <http://localhost:8000>.
+
 - **First start.** The app downloads the transit data and builds its database, which takes
   about a minute. Reload the page once it's done.
 - **Data refresh.** The data is checked every few hours and downloaded again once it's a week
@@ -78,6 +81,7 @@ to keep or share. Cloudflare's guides cover the details:
 ### Settings
 
 Everything goes in `.env`; [.env.example](.env.example) lists each setting.
+
 - `API_511_KEY` is the only one you must set.
 - Walk and bike routes come from the public FOSSGIS Valhalla server (fair use, no key). Its bike
   times already allow for hills.
@@ -108,6 +112,7 @@ After `npm run build`, the backend also serves the built app at <http://127.0.0.
 does in Docker.
 
 **The transit data.**
+
 - It's 511.org's regional feed: one GTFS feed for every Bay Area operator. That's 41 agencies,
   including Caltrain, BART, VTA, Muni, AC Transit, SamTrans, Golden Gate Transit and the
   ferries.
