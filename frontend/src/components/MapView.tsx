@@ -48,6 +48,12 @@ export interface TripPreview {
   color?: string | null;
 }
 
+/** Something a right-click on the map offers to do there. */
+export interface MapMenuItem {
+  id: string;
+  label: string;
+}
+
 export interface MapHandle {
   /** A PNG data URL of the map fitted to the whole plan, or null if it can't be captured. */
   snapshot(): Promise<string | null>;
@@ -76,6 +82,9 @@ interface Props {
   onChooseLine: (key: string) => void;
   /** A stop of the trip being chosen was clicked. */
   onChooseStop: (sequence: number) => void;
+  /** What a right-click offers at the point clicked; none means no menu. */
+  menu: MapMenuItem[];
+  onMenu: (id: string, point: LatLon) => void;
 }
 
 /** What's under the pointer: a stop of the trip being chosen, or some line previews. */
@@ -94,6 +103,8 @@ export function MapView(props: Props) {
   const [styleReady, setStyleReady] = useState(false);
   // The lines under the pointer on the map: highlighted, but not framed (the map stays put).
   const [mapHover, setMapHover] = useState<string[]>([]);
+  // The view before a row in the list was pointed at, to go back to when the pointer leaves.
+  const viewBeforeFocus = useRef<maplibregl.CameraOptions | null>(null);
 
   useEffect(() => {
     latest.current = props;
@@ -122,12 +133,16 @@ export function MapView(props: Props) {
       setMapHover(keys);
       latest.current.onHoverLines(keys);
     };
-    // Asks which line was meant, where several meet.
-    let chooser: maplibregl.Popup | null = null;
+    // The menu open on the map, if any: which line (where several meet), or the right-click menu.
+    let menu: maplibregl.Popup | null = null;
     const choose = (key: string) => {
       hover([]);
       latest.current.onChooseLine(key);
     };
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') menu?.remove();
+    };
+    document.addEventListener('keydown', closeOnEscape);
 
     m.on('mousemove', (e) => {
       const hit = hitAt(m, e.point);
@@ -145,9 +160,9 @@ export function MapView(props: Props) {
       hover([]);
     });
     m.on('click', (e) => {
-      // A click away from an open chooser only closes it: it mustn't move the plan's start.
-      if (chooser?.isOpen()) {
-        chooser.remove();
+      // A click away from an open menu only closes it: it mustn't move the plan's start.
+      if (menu?.isOpen()) {
+        menu.remove();
         return;
       }
       const hit = hitAt(m, e.point);
@@ -163,8 +178,26 @@ export function MapView(props: Props) {
       } else if (hit.keys.length === 1) {
         choose(hit.keys[0]);
       } else {
-        chooser = showLineChooser(m, e.lngLat, hit.keys, lines, { choose, hover });
+        menu = showLineChooser(m, e.lngLat, hit.keys, lines, { choose, hover });
       }
+    });
+    m.on('contextmenu', (e) => {
+      const items = latest.current.menu;
+      if (!items.length) return;
+      e.originalEvent.preventDefault(); // No browser menu on top of ours.
+      tip.remove();
+      hover([]);
+      menu?.remove();
+      const point = { lat: e.lngLat.lat, lon: e.lngLat.lng };
+      menu = showMenu(
+        m,
+        e.lngLat,
+        null,
+        items.map((item) => ({
+          content: [item.label],
+          onChoose: () => latest.current.onMenu(item.id, point),
+        })),
+      );
     });
     m.on('load', () => {
       addOverlayLayers(m);
@@ -174,6 +207,7 @@ export function MapView(props: Props) {
     // Lets browser tests (and the console) reach the map in development builds.
     if (import.meta.env.DEV) Object.assign(window, { __map: m });
     return () => {
+      document.removeEventListener('keydown', closeOnEscape);
       m.remove();
       map.current = null;
       setStyleReady(false);
@@ -249,25 +283,29 @@ export function MapView(props: Props) {
     if (styleReady && source) source.setData(lineFeatures(lines));
   }, [styleReady, lines]);
 
-  // Frame every line once their paths arrive (a new list, or a new search).
-  const drawn = lines
-    .filter((l) => l.line)
-    .map((l) => l.key)
-    .join('|');
-  useEffect(() => {
-    const bounds = linesBounds(latest.current.lines);
-    if (map.current && bounds) map.current.fitBounds(bounds, { padding: 60, maxZoom: 15 });
-  }, [drawn]);
-
-  // Frame the line pointed at in the list; back to all of them when the pointer leaves.
+  // Frame the line pointed at in the list, and go back to the earlier view when the pointer
+  // leaves the list. The map doesn't move when a list loads: that happens after every change.
   useEffect(() => {
     const m = map.current;
     const all = latest.current.lines;
-    if (!m || !all.length) return;
+    if (!m || !all.length) {
+      viewBeforeFocus.current = null; // A trip was chosen, or the list went: nothing to go back to.
+      return;
+    }
     const timer = setTimeout(() => {
-      const target = focusLine ? all.filter((l) => l.key === focusLine) : all;
-      const bounds = linesBounds(target);
-      if (bounds) m.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 500 });
+      const bounds = focusLine && linesBounds(all.filter((l) => l.key === focusLine));
+      if (bounds) {
+        viewBeforeFocus.current ??= {
+          center: m.getCenter(),
+          zoom: m.getZoom(),
+          bearing: m.getBearing(),
+          pitch: m.getPitch(),
+        };
+        m.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 500 });
+      } else if (!focusLine && viewBeforeFocus.current) {
+        m.easeTo({ ...viewBeforeFocus.current, duration: 500 });
+        viewBeforeFocus.current = null;
+      }
     }, FOCUS_DELAY_MS);
     return () => clearTimeout(timer);
   }, [focusLine]);
@@ -488,6 +526,56 @@ function hitLabel(hit: Hit, lines: LinePreview[]): string {
   return labels.slice(0, MAX_LABELS).join('\n') + more;
 }
 
+interface MenuEntry {
+  content: (string | Node)[];
+  onChoose: () => void;
+  /** The pointer moved onto the entry (true) or off it. */
+  onPoint?: (pointing: boolean) => void;
+}
+
+/** A small menu at a point on the map. Choosing an entry closes it. */
+function showMenu(
+  m: maplibregl.Map,
+  at: maplibregl.LngLat,
+  heading: string | null,
+  entries: MenuEntry[],
+  onClose?: () => void,
+): maplibregl.Popup {
+  const popup = new maplibregl.Popup({
+    className: 'map-menu',
+    offset: 10,
+    closeButton: false,
+    closeOnClick: false, // The map's click handler closes it.
+  });
+  const list = document.createElement('div');
+  list.className = 'map-menu-list';
+  list.setAttribute('role', 'menu');
+  if (heading) {
+    const title = document.createElement('strong');
+    title.textContent = heading;
+    list.append(title);
+  }
+  for (const entry of entries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.setAttribute('role', 'menuitem');
+    button.append(...entry.content);
+    if (entry.onPoint) {
+      button.addEventListener('mouseenter', () => entry.onPoint?.(true));
+      button.addEventListener('mouseleave', () => entry.onPoint?.(false));
+    }
+    button.addEventListener('click', () => {
+      popup.remove();
+      entry.onChoose();
+    });
+    list.append(button);
+  }
+  if (onClose) popup.on('close', onClose);
+  popup.setLngLat(at).setDOMContent(list).addTo(m);
+  return popup;
+}
+
 /** Where lines overlap, a click asks which one. Pointing at a choice highlights its line. */
 function showLineChooser(
   m: maplibregl.Map,
@@ -496,37 +584,21 @@ function showLineChooser(
   lines: LinePreview[],
   on: { choose: (key: string) => void; hover: (keys: string[]) => void },
 ): maplibregl.Popup {
-  const popup = new maplibregl.Popup({
-    className: 'line-chooser',
-    offset: 10,
-    closeOnClick: false, // The map's click handler closes it.
-  });
-  const list = document.createElement('div');
-  list.className = 'line-chooser-list';
-  const heading = document.createElement('strong');
-  heading.textContent = 'Which line?';
-  list.append(heading);
-  for (const key of keys) {
+  const entries = keys.flatMap((key): MenuEntry[] => {
     const line = lines.find((l) => l.key === key);
-    if (!line) continue;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'secondary';
+    if (!line) return [];
     const swatch = document.createElement('span');
     swatch.className = isPale(line.color) ? 'swatch pale' : 'swatch';
     swatch.style.background = line.color ? `#${line.color}` : ACCENT;
-    button.append(swatch, document.createTextNode(line.label));
-    button.addEventListener('mouseenter', () => on.hover([key]));
-    button.addEventListener('mouseleave', () => on.hover([]));
-    button.addEventListener('click', () => {
-      popup.remove();
-      on.choose(key);
-    });
-    list.append(button);
-  }
-  popup.on('close', () => on.hover([]));
-  popup.setLngLat(at).setDOMContent(list).addTo(m);
-  return popup;
+    return [
+      {
+        content: [swatch, line.label],
+        onChoose: () => on.choose(key),
+        onPoint: (pointing) => on.hover(pointing ? [key] : []),
+      },
+    ];
+  });
+  return showMenu(m, at, 'Which line?', entries, () => on.hover([]));
 }
 
 /** A transit leg follows its shape when the feed has one, else runs stop to stop. */

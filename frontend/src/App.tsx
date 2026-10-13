@@ -4,20 +4,19 @@ import {
   type FeedInfo,
   type Health,
   type LatLon,
-  type LinePath,
   type PathMode,
   type RouteResult,
   type TransitCall,
 } from './api';
 import { TRIPS_PER_LINE, groupCalls } from './callGroups';
 import { Itinerary } from './components/Itinerary';
-import { type MapHandle, MapView, type TripPreview } from './components/MapView';
+import { type MapHandle, type MapMenuItem, MapView, type TripPreview } from './components/MapView';
 import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
 import { uncoveredOn } from './coverage';
-import { lineCall, linePreviews } from './linePreviews';
+import { type LinePreview, lineCall, linePreviews } from './linePreviews';
 import {
   NEAR_STOP_M,
   type LegsResult,
@@ -53,8 +52,10 @@ import { adjacentRide, transferContext, transferNote } from './plan/transfers';
 import type { Direction, Leg, LegMode, Place, Plan } from './plan/types';
 import { loadSession, saveSession } from './storage';
 import { localInputToIso, nowLocalInput, toLocalInput } from './time';
+import { type TransitSearch, useTransitList } from './transitList';
 
 const NO_LEGS: Leg[] = [];
+const NO_PREVIEWS: LinePreview[] = [];
 const RADIUS_MIN_M = 50;
 const RADIUS_MAX_M = 3000; // The backend's limit.
 // The backend's maximum too. With a few trips per line it holds every line downtown, even
@@ -88,11 +89,7 @@ export function App() {
   const [radiusM, setRadiusM] = useState(500);
   // How you get to (or from) the stop for a transit leg.
   const [access, setAccess] = useState<PathMode>('walk');
-  const [calls, setCalls] = useState<TransitCall[] | null>(null);
   const [selection, setSelection] = useState<TripSelection | null>(null);
-  // Where each listed line goes, for the map; loaded after the list itself.
-  const [linePaths, setLinePaths] = useState<LinePath[]>([]);
-  const linesRequest = useRef(0);
   // The line pointed at in the list (framed on the map), and those on the map (marked in the
   // list).
   const [listHover, setListHover] = useState<string | null>(null);
@@ -159,12 +156,38 @@ export function App() {
   const day = timeInput.slice(0, 10);
   const uncovered = uncoveredOn(feeds, day);
 
+  // The ride you'd change from (forwards) or to (backwards), for transfer rules.
+  const ride = plan ? adjacentRide(plan, direction) : null;
+
+  // While Transit is chosen, the departures (or arrivals) near the frontier are listed, and
+  // found again whenever anything they depend on changes.
+  const onIt = ride?.transit;
+  const transitSearch: TransitSearch | null =
+    mode === 'transit' && frontier && health?.gtfs_loaded !== false
+      ? {
+          direction,
+          query: {
+            point: { lat: frontier.place.lat, lon: frontier.place.lon },
+            time: frontier.time,
+            radiusM: Math.min(RADIUS_MAX_M, Math.max(RADIUS_MIN_M, radiusM || 500)),
+            access,
+            transfer: transferContext(ride, direction),
+            perRoute: TRIPS_PER_LINE,
+            limit: CALL_LIMIT,
+          },
+          // Don't offer the trip you're already on at this end of the plan.
+          skip: onIt && { tripId: onIt.tripId, serviceDate: onIt.serviceDate },
+        }
+      : null;
+  const transit = useTransitList(transitSearch);
+  const calls = transit.calls;
+
   const listing = forward ? 'departures' : 'arrivals';
   const lines = useMemo(() => (calls ? groupCalls(calls, listing) : []), [calls, listing]);
   // The lines are on the map while the list is showing; a chosen trip takes their place.
   const previews = useMemo(
-    () => (selection ? [] : linePreviews(lines, listing, linePaths)),
-    [selection, lines, listing, linePaths],
+    () => (selection ? NO_PREVIEWS : linePreviews(lines, listing, transit.paths)),
+    [selection, lines, listing, transit.paths],
   );
 
   const tripPreview: TripPreview | null = useMemo(() => {
@@ -188,41 +211,14 @@ export function App() {
     };
   }, [selection, direction]);
 
-  // The ride you'd change from (forwards) or to (backwards), for transfer rules.
-  const ride = plan ? adjacentRide(plan, direction) : null;
-
   const closeSummary = useCallback(() => setShowSummary(false), []);
 
   function resetBuilder() {
-    setCalls(null);
     setSelection(null);
     setPending(null);
-    forgetLines();
-  }
-
-  /** Clears the line previews, and drops any still loading. */
-  function forgetLines() {
-    linesRequest.current += 1;
-    setLinePaths([]);
+    // The rows pointed at may be gone; their mouse-leave events never come.
     setListHover(null);
     setMapHover([]);
-  }
-
-  /** Fetches where each listed line goes, for the map. The list doesn't wait for it. */
-  async function loadLines(shown: TransitCall[]) {
-    forgetLines();
-    const ticket = linesRequest.current;
-    const trips = groupCalls(shown, listing).map((group) => {
-      const call = lineCall(group, listing);
-      return { trip_id: call.trip_id, stop_sequence: call.stop_sequence };
-    });
-    if (!trips.length) return;
-    try {
-      const paths = await api.lines(direction, trips);
-      if (ticket === linesRequest.current) setLinePaths(paths);
-    } catch {
-      // The previews are extra: the list works without them.
-    }
   }
 
   function commit(next: Plan) {
@@ -279,7 +275,7 @@ export function App() {
     } else if (picking === 'path') {
       if (!busy) void choosePathPoint(point);
     } else {
-      setNotice('To pick a place on the map, choose Walk or Bike under Next leg.');
+      setNotice('To walk or bike somewhere, right-click it on the map.');
     }
   }
 
@@ -297,28 +293,51 @@ export function App() {
     }
   }
 
+  /** A walk or bike route between the frontier and a point, named after a nearby stop. */
+  async function routeAtFrontier(from: Plan, m: PathMode, point: LatLon): Promise<PendingPath> {
+    const frontierPlace = (forward ? planEnd(from) : planStart(from)).place;
+    const [route, nearest] = await Promise.all([
+      forward ? routeOrEstimate(m, frontierPlace, point) : routeOrEstimate(m, point, frontierPlace),
+      nearestStop(point),
+    ]);
+    return { mode: m, place: { ...point, name: pinName(point, nearest) }, route };
+  }
+
+  /** Adds a walk or bike leg between the frontier and its place. */
+  function addPath(to: Plan, { place, route }: PendingPath) {
+    commit(
+      forward
+        ? appendLegs(to, [pathLeg(planEnd(to), place, route)])
+        : prependLegs(to, [pathLegArriving(place, planStart(to), route)]),
+    );
+  }
+
   const choosePathPoint = (point: LatLon) =>
     run(async () => {
       if (!plan || (mode !== 'walk' && mode !== 'bike')) return;
-      const frontierPlace = (forward ? planEnd(plan) : planStart(plan)).place;
-      const [route, nearest] = await Promise.all([
-        forward
-          ? routeOrEstimate(mode, frontierPlace, point)
-          : routeOrEstimate(mode, point, frontierPlace),
-        nearestStop(point),
-      ]);
-      setPending({ mode, place: { ...point, name: pinName(point, nearest) }, route });
+      setPending(await routeAtFrontier(plan, mode, point));
     });
 
   function addPending() {
     if (!plan || !pending) return;
-    const place = { ...pending.place, name: pending.place.name?.trim() || pinName(pending.place) };
-    commit(
-      forward
-        ? appendLegs(plan, [pathLeg(planEnd(plan), place, pending.route)])
-        : prependLegs(plan, [pathLegArriving(place, planStart(plan), pending.route)]),
-    );
+    const name = pending.place.name?.trim() || pinName(pending.place);
+    addPath(plan, { ...pending, place: { ...pending.place, name } });
   }
+
+  /** From the map's right-click menu: walk or bike there (or from there), added at once. */
+  const addPathAt = (m: PathMode, point: LatLon) =>
+    run(async () => {
+      if (plan) addPath(plan, await routeAtFrontier(plan, m, point));
+    });
+
+  // What a right-click on the map offers, following After the end / Before the start.
+  const mapMenu: MapMenuItem[] =
+    plan && !movingAnchor
+      ? [
+          { id: 'walk', label: forward ? 'Walk here' : 'Walk from here' },
+          { id: 'bike', label: forward ? 'Bike here' : 'Bike from here' },
+        ]
+      : [];
 
   function addWait() {
     if (!plan || !(waitMinutes > 0)) return;
@@ -329,29 +348,6 @@ export function App() {
         : prependLegs(plan, [waitLeg(planStart(plan), seconds, 'backward')]),
     );
   }
-
-  const search = () =>
-    run(async () => {
-      if (!plan || !frontier) return;
-      setSelection(null);
-      const query = {
-        point: frontier.place,
-        time: frontier.time,
-        radiusM: Math.min(RADIUS_MAX_M, Math.max(RADIUS_MIN_M, radiusM || 500)),
-        access,
-        transfer: transferContext(ride, direction),
-        perRoute: TRIPS_PER_LINE,
-        limit: CALL_LIMIT,
-      };
-      const found = await (forward ? api.departures(query) : api.arrivals(query));
-      // Don't offer the trip you're already on at this end of the plan.
-      const onIt = ride?.transit;
-      const shown = found.filter(
-        (c) => !onIt || c.trip_id !== onIt.tripId || c.service_date !== onIt.serviceDate,
-      );
-      setCalls(shown);
-      void loadLines(shown);
-    });
 
   const chooseCall = (call: TransitCall) =>
     run(async () => {
@@ -410,7 +406,7 @@ export function App() {
     });
 
   function openSummary() {
-    resetBuilder(); // Clear previews so the map picture shows just the plan.
+    resetBuilder(); // So the map picture shows just the plan (the line previews hide too).
     setShowSummary(true);
   }
 
@@ -527,13 +523,11 @@ export function App() {
               radiusM={radiusM}
               onRadius={setRadiusM}
               access={access}
-              onAccess={(a) => {
-                setAccess(a);
-                setCalls(null); // Which trips are reachable depends on it.
-                forgetLines();
-              }}
-              onSearch={search}
+              onAccess={setAccess}
               calls={calls}
+              searching={transit.searching}
+              searchError={transit.error}
+              onRetrySearch={transit.retry}
               noteFor={(call) => transferNote(call, ride, direction)}
               selection={selection}
               onChooseCall={chooseCall}
@@ -563,7 +557,7 @@ export function App() {
           ref={mapRef}
           start={committed ? planStart(committed).place : anchorPlace}
           end={committed ? planEnd(committed).place : null}
-          lines={previews}
+          lines={showSummary ? NO_PREVIEWS : previews}
           focusLine={listHover}
           tripPreview={tripPreview}
           pendingPoint={pending?.place ?? null}
@@ -574,6 +568,10 @@ export function App() {
           onHoverLines={setMapHover}
           onChooseLine={chooseLine}
           onChooseStop={(sequence) => !busy && void chooseStop(sequence)}
+          menu={mapMenu}
+          onMenu={(id, point) => {
+            if (!busy && (id === 'walk' || id === 'bike')) void addPathAt(id, point);
+          }}
         />
       </div>
       {showSummary && committed && (

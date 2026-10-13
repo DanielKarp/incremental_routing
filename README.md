@@ -5,11 +5,12 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (every operator
 sources, architecture, decisions and what's next.
 
 **Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
-(M8), with line previews on the map (M9).
+(M8), with line previews on the map (M9) and fewer clicks (M10).
 
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
-- While you choose a ride, the map shows where each line nearby goes. Pick lines and stops in
-  the list or on the map.
+- The lines nearby are listed as soon as you choose Transit, and the map shows where each one
+  goes. Pick lines and stops in the list or on the map.
+- Right-click the map to walk or bike there.
 - Bike or walk to and from stops, and edit when walks, rides and waits leave or arrive.
 - Departures are listed by line. Transfer warnings come from the agencies' own rules.
 - Hilly bike rides show a simple height profile.
@@ -130,15 +131,16 @@ does in Docker.
    you need to be, or anywhere in between. Give it a name such as "Home".
 2. **Add legs** under *Next leg*. Choose *After the end* to plan forwards or *Before the
    start* to plan backwards, then a mode:
-   - **Transit:** pick how you'll reach the stop: *Get to the stop by Walking* or *Bike*
-     (when planning backwards, how you'll leave it). Then *Find departures* (or *Find
-     arrivals*). Each line nearby gets a row with its next three departures (or, backwards,
-     its last three arrivals).
+   - **Transit:** the lines nearby are listed straight away. Each gets a row with its next
+     three departures (or, backwards, its last three arrivals). The list updates itself when
+     you change how you'll reach the stop (*Get to the stop by Walking* or *Bike*; backwards,
+     how you'll leave it) or the search radius, and after every leg you add.
 
      The map shows those lines too, thin and faded in their own colours, each with a dot at
      the stop where you'd catch it. Forwards, a line runs from that stop to the end of its
      route; backwards, from the start of its route to the stop. Point at a row to highlight
-     its line and zoom to it, or point at a line on the map to see its name.
+     its line and zoom to it (the map goes back when you move away), or point at a line on
+     the map to see its name.
 
      Pick a time, or click a line's name for its next departure (or last arrival). You can
      also click the line itself on the map; where lines overlap, you're asked which one.
@@ -152,6 +154,11 @@ does in Docker.
    - **Walk / Bike:** click the map where you're going (or coming from), check the preview,
      name the place and add the leg. A bike ride that climbs or descends at least 20 m shows
      a small height profile, with its total climb and descent.
+
+     Quicker, from any mode: right-click the map and choose *Walk here* or *Bike here*
+     (backwards, *Walk from here* or *Bike from here*). The leg is added straight away,
+     named after a stop nearby (or its coordinates), and *Next leg* stays as it was. *Rename places* and *Undo*
+     fix a wrong name or click.
    - **Wait:** add a stop of a set number of minutes, e.g. for coffee.
 3. **Adjust** walk, bike and wait legs in the itinerary.
    - Change when they leave or arrive, or how long they take. An end that meets a ride

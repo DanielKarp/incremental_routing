@@ -309,6 +309,11 @@ button.secondary {
   flex: 1;
 }
 
+/* The search radius, beside the walk/bike toggle. */
+.field.radius input {
+  width: 7em;
+}
+
 .hint {
   color: var(--muted);
   font-style: italic;
@@ -624,8 +629,8 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
   background: var(--hover);
 }
 
-/* Map labels and the line chooser. MapLibre's popups are always white, so their text is set
-   dark even in dark mode. */
+/* Map labels and menus (which line; the right-click menu). MapLibre's popups are always
+   white, so their text is set dark even in dark mode. */
 .map-tip .maplibregl-popup-content {
   padding: 4px 8px;
   font-size: 0.8rem;
@@ -633,12 +638,12 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
   color: #1d2330;
 }
 
-.line-chooser .maplibregl-popup-content {
+.map-menu .maplibregl-popup-content {
   padding: 8px;
   color: #1d2330;
 }
 
-.line-chooser-list {
+.map-menu-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -646,7 +651,7 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
   overflow-y: auto;
 }
 
-.line-chooser button {
+.map-menu button {
   display: flex;
   align-items: center;
   gap: 6px;

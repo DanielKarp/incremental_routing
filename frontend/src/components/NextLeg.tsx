@@ -35,8 +35,11 @@ interface Props {
   /** How you get between the frontier and the stop: walking or cycling. */
   access: PathMode;
   onAccess: (access: PathMode) => void;
-  onSearch: () => void;
+  /** The departures (or arrivals) near the frontier: null until found. */
   calls: TransitCall[] | null;
+  searching: boolean;
+  searchError: string | null;
+  onRetrySearch: () => void;
   noteFor: (call: TransitCall) => TransferNote | null;
   selection: TripSelection | null;
   onChooseCall: (call: TransitCall) => void;
@@ -83,8 +86,9 @@ export function NextLeg(props: Props) {
       </div>
       <p className="muted">
         {forward
-          ? `Continuing from ${where} at ${formatTime(frontier.time)}`
-          : `Arriving at ${where} by ${formatTime(frontier.time)}`}
+          ? `Continuing from ${where} at ${formatTime(frontier.time)}.`
+          : `Arriving at ${where} by ${formatTime(frontier.time)}.`}{' '}
+        Right-click the map to walk or bike {forward ? 'there' : 'from there'}.
       </p>
       <div className="toggle" role="group" aria-label="Mode">
         {MODES.map((m) => (
@@ -119,25 +123,26 @@ function TransitPanel(p: Props) {
       />
     );
   }
+  const what = forward ? 'departures' : 'arrivals';
   return (
     <>
-      <div className="field">
-        {forward ? 'Get to the stop by' : 'Leave the stop by'}
-        <div className="toggle" role="group" aria-label="Getting to or from the stop">
-          {(['walk', 'bike'] as const).map((a) => (
-            <button
-              key={a}
-              type="button"
-              aria-pressed={p.access === a}
-              onClick={() => p.onAccess(a)}
-            >
-              {a === 'walk' ? 'Walking' : 'Bike'}
-            </button>
-          ))}
-        </div>
-      </div>
       <div className="row align-end">
-        <label className="field grow">
+        <div className="field grow">
+          {forward ? 'Get to the stop by' : 'Leave the stop by'}
+          <div className="toggle" role="group" aria-label="Getting to or from the stop">
+            {(['walk', 'bike'] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                aria-pressed={p.access === a}
+                onClick={() => p.onAccess(a)}
+              >
+                {a === 'walk' ? 'Walking' : 'Bike'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="field radius">
           Search radius (m)
           <input
             type="number"
@@ -148,25 +153,37 @@ function TransitPanel(p: Props) {
             onChange={(e) => p.onRadius(Number(e.target.value))}
           />
         </label>
-        <button type="button" disabled={p.busy} onClick={p.onSearch}>
-          {p.busy ? 'Working…' : forward ? 'Find departures' : 'Find arrivals'}
-        </button>
       </div>
-      {p.calls && (
-        <>
-          <h3>{forward ? 'Departures you can reach' : 'Arrivals that get you there'}</h3>
-          <CallList
-            calls={p.calls}
-            direction={forward ? 'departures' : 'arrivals'}
-            access={p.access}
-            noteFor={p.noteFor}
-            onSelect={p.onChooseCall}
-            onChooseLine={p.onChooseLine}
-            onHoverLine={p.onHoverLine}
-            highlight={p.highlightLines}
-            disabled={p.busy}
-          />
-        </>
+      {(p.calls || p.searching || p.searchError) && (
+        <h3>{forward ? 'Departures you can reach' : 'Arrivals that get you there'}</h3>
+      )}
+      {p.calls ? (
+        <CallList
+          calls={p.calls}
+          direction={what}
+          access={p.access}
+          noteFor={p.noteFor}
+          onSelect={p.onChooseCall}
+          onChooseLine={p.onChooseLine}
+          onHoverLine={p.onHoverLine}
+          highlight={p.highlightLines}
+          disabled={p.busy}
+        />
+      ) : p.searchError ? (
+        <div className="row align-end">
+          <p className="error grow" role="alert">
+            Couldn't find {what}: {p.searchError}
+          </p>
+          <button type="button" className="secondary" onClick={p.onRetrySearch}>
+            Try again
+          </button>
+        </div>
+      ) : (
+        p.searching && (
+          <p className="muted" role="status">
+            Finding {what}…
+          </p>
+        )
       )}
     </>
   );

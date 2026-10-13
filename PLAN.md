@@ -58,15 +58,17 @@ built from either end.
 1. Click the map and set a time. That's the anchor, and it becomes the frontier.
 2. Choose a mode for the next leg:
    - **Transit**: see departures from stops near the frontier after its time, grouped by line
-     (decision 8). Only trips you can still reach on foot or by bike are shown. The map draws
-     each of those lines from its stop onwards (decision 14). Pick a trip, in the list or by
-     clicking its line on the map. Then pick the stop to get off at from that trip's remaining
+     (decision 8). They're listed as soon as Transit is chosen, and again whenever anything
+     they depend on changes (decision 15). Only trips you can still reach on foot or by bike
+     are shown. The map draws each of those lines from its stop onwards (decision 14). Pick a
+     trip, in the list or by clicking its line on the map. Then pick the stop to get off at from that trip's remaining
      stops, in the list or on the map.
      - If the boarding stop isn't at the frontier, the app inserts a walk or bike ride to the
        stop. It starts right away, and a wait fills any time left before the departure.
    - **Walk / Bike**: click the destination. The router returns a path and duration. You can
      edit when the leg leaves or arrives, or how long it takes, and a hilly bike ride shows a
-     height profile.
+     height profile. From any mode, a right-click on the map adds a walk or bike leg there
+     at once (decision 16).
    - **Wait**: stay put for N minutes, e.g. a coffee stop.
 3. The new leg's end becomes the frontier, and step 2 repeats.
 4. Any time gap between two legs is filled with an automatic **wait** leg. For example, a bike
@@ -86,7 +88,7 @@ compute the start time.
 | Mode | Start / end chosen by | Times come from | Editable |
 | --- | --- | --- | --- |
 | Transit | Departure (or arrival) list or a line on the map, then a stop on that trip | Timetable | No: fixed by the schedule |
-| Walk, Bike | Frontier, then a map click | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2) |
+| Walk, Bike | Frontier, then a map click (or a right-click, from any mode) | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2) |
 | Wait | Same place at both ends | Gap between legs, or manual | Manual waits only |
 
 ## 4. Data model
@@ -304,6 +306,37 @@ fix them automatically.
 | M7 ✅ | Simplify and finish | 511 is the only transit source. Valhalla is the router, and its times are used as they are. Hilly bike rides show a height profile. The plan is brought up to date. |
 | M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. |
 | M9 ✅ | Line previews | While you choose a ride, the map shows every line in the list, faded in its own colour, with the stop to catch it. Pointing at a row highlights and frames its line, and pointing at a line marks its row. Lines, and the stop to get off at (or on), can be picked on the map. |
+| M10 ✅ | Fewer clicks | The departure (or arrival) list loads by itself. A right-click on the map adds a walk or bike leg there straight away. |
+
+### M10 notes
+
+- **Lists load by themselves** (decision 15).
+  - Transit's list is searched whenever the plan's end (or start), the direction, how you
+    reach the stop, the radius or the start time changes. Each search waits 300 ms after the
+    last change, so typing a radius searches once, when you pause.
+  - A list is shown only for the search it answers: while a newer one is under way, the
+    panel says *Finding departures…*. Coming back to Transit from another mode reuses the
+    list without searching again.
+  - A failed search says why, with *Try again*.
+  - The map no longer moves when a list loads, which now happens after every change.
+    Pointing at a row still frames its line, and the map goes back to where it was when the
+    pointer leaves the list.
+- **Right-click to walk or bike** (decision 16).
+  - The menu follows *After the end* / *Before the start*: *Walk here* and *Bike here*, or
+    *Walk from here* and *Bike from here*. It appears once there's a start point.
+  - The leg is routed and added at once, named after the nearest stop (or by coordinates),
+    and *Next leg* keeps its mode: after *Walk here* from the Transit panel, the departures
+    from the new end are listed.
+  - Escape, or a click elsewhere, closes the menu without doing anything else. Dragging
+    with the right button still rotates the map.
+- **Checked in a browser** on the 511 data, from Powell Street:
+  - the list appeared within 2 s of setting the start;
+  - typing a radius searched once, and returning from Walk mode searched none;
+  - *Walk here* to Civic Center (10 min) kept the Transit panel and listed 55 lines from
+    there; *Bike here* from the Wait panel kept it on Wait; *Walk from here* from Union
+    Square was added before the start;
+  - a search made to fail showed its error, and *Try again* recovered;
+  - no page errors.
 
 ### M9 notes
 
@@ -320,7 +353,7 @@ fix them automatically.
     goes for the stops of a trip being chosen.
 - **Pointing and clicking.**
   - Pointing at a row frames its line after a short pause, so sweeping down the list doesn't
-    throw the map around. Leaving the row frames all the lines again.
+    throw the map around. Leaving the list goes back to the earlier view (M10).
   - Pointing at a line on the map names it and marks its row without moving the map. Where
     lines overlap, all of them are highlighted and named.
   - Clicking a line picks its next trip (or last arrival). Where lines overlap, a small menu
@@ -599,6 +632,12 @@ fix them automatically.
     directions together show the whole line; where they differ, each shows only its own
     onward route. Previews are thin and see-through in the line's colour, so they can't be
     mistaken for planned rides.
+15. **Lists follow the plan.** There's no search button. The departure or arrival list is
+    found again whenever the plan or the search settings change. The map stays where you put
+    it when a list loads; only pointing at a row frames a line.
+16. **Right-click adds walk and bike legs at once.** The menu follows the direction toggle.
+    Its leg skips the preview and is named after a stop nearby (or by coordinates), and the
+    *Next leg* panel keeps its mode. *Undo* and *Rename places* fix a wrong click or name.
 
 **Risks:**
 
