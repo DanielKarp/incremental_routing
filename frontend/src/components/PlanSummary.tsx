@@ -18,7 +18,8 @@ export function PlanSummary({ plan, issues, mapImage, onClose }: Props) {
 
   useEffect(() => {
     closeButton.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    // Not when Escape has just closed a menu on the map (see MapView): one key, one thing.
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && onClose();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);

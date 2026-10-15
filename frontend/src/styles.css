@@ -165,19 +165,40 @@ footer {
   font-size: 0.75rem;
 }
 
+/* On a narrow screen the map sits above the panel and stays on screen: only the panel scrolls,
+   so what you choose in the list shows on the map. 100vh first, for browsers without dvh (the
+   height that leaves out a phone's address bar). */
 @media (max-width: 700px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: 50vh auto;
-    height: auto;
+    grid-template-rows: clamp(160px, 38vh, 50vh) minmax(0, 1fr);
+    grid-template-rows: clamp(160px, 38dvh, 50dvh) minmax(0, 1fr);
+    height: 100vh;
+    height: 100dvh;
   }
   .map {
     grid-row: 1;
+    /* Never taller than its row, which would cover the top of the panel. */
+    min-height: 0;
   }
   .panel {
     border-right: 0;
-    /* The page scrolls instead, so the undo bar can stay at the bottom of the screen. */
-    overflow-y: visible;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* A phone on its side is too short for both: the panel goes back beside the map. */
+@media (max-width: 700px) and (orientation: landscape) and (max-height: 500px) {
+  .app {
+    grid-template-columns: minmax(260px, 45%) 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .map {
+    grid-row: auto;
+  }
+  .panel {
+    border-top: 0;
+    border-right: 1px solid var(--border);
   }
 }
 
@@ -414,13 +435,6 @@ button.link {
 
 .undo-bar + footer {
   margin-top: 0;
-}
-
-@media (max-width: 700px) {
-  /* The page scrolls there, and has no padding to cover. */
-  .undo-bar {
-    bottom: 0;
-  }
 }
 
 /* Summary dialog. */
@@ -696,6 +710,11 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
   color: #1d2330;
 }
 
+.map-menu {
+  /* Over the map's controls, such as the attribution that opens over a narrow map. */
+  z-index: 3;
+}
+
 .map-menu .maplibregl-popup-content {
   padding: 8px;
   color: #1d2330;
@@ -707,6 +726,13 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
   gap: 4px;
   max-height: 40vh;
   overflow-y: auto;
+}
+
+/* On a narrow screen the map is short (see .app), so its menus are too, to fit inside it. */
+@media (max-width: 700px) {
+  .map-menu-list {
+    max-height: 30vh;
+  }
 }
 
 .map-menu button {

@@ -10,7 +10,7 @@ import {
 } from './api';
 import { TRIPS_PER_LINE, groupCalls } from './callGroups';
 import { Itinerary } from './components/Itinerary';
-import { type MapHandle, type MapMenuItem, MapView, type TripPreview } from './components/MapView';
+import { type MapHandle, MapView, type TripPreview } from './components/MapView';
 import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
@@ -19,6 +19,7 @@ import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
 import { isTypingIn, isUndoKey } from './keys';
 import { type LinePreview, lineCall, linePreviews } from './linePreviews';
+import { emptyClick, mapMenuItems } from './mapClicks';
 import {
   NEAR_STOP_M,
   type LegsResult,
@@ -56,7 +57,7 @@ import type { Direction, Leg, LegMode, Place, Plan } from './plan/types';
 import { loadHistory, loadSession, saveHistory, saveSession } from './storage';
 import { isPlausibleInput, localInputToIso, nowLocalInput, toLocalInput } from './time';
 import { type TransitSearch, useTransitList } from './transitList';
-import type { UndoLabel, UndoStep } from './undo';
+import { type UndoLabel, type UndoStep, undoesTime } from './undo';
 
 const NO_LEGS: Leg[] = [];
 const NO_PREVIEWS: LinePreview[] = [];
@@ -85,6 +86,7 @@ export function App() {
   // The point the plan grows from. Editable until the first leg is added.
   const [anchorPlace, setAnchorPlace] = useState<Place | null>(saved?.anchor ?? null);
   const [timeInput, setTimeInput] = useState(saved?.timeInput ?? nowLocalInput());
+  // Move was clicked: the next click on the map moves the start there.
   const [movingAnchor, setMovingAnchor] = useState(false);
   // Once legs exist the plan lives here; earlier versions are kept for undo, across reloads.
   const [committed, setCommitted] = useState<Plan | null>(saved?.plan ?? null);
@@ -172,9 +174,13 @@ export function App() {
   const forward = direction === 'forward';
   const frontier = plan ? (forward ? planEnd(plan) : planStart(plan)) : null;
   const pathMode = mode === 'walk' || mode === 'bike';
-  // What a map click does: set the point the plan grows from, or pick a walk/bike end point.
-  const picking =
-    !anchorPlace || movingAnchor ? 'anchor' : pathMode ? 'path' : committed ? null : 'anchor';
+  // What a click on empty map does: set (or move) the point the plan grows from, pick a walk or
+  // bike end point, or open the map's menu there.
+  const onEmptyClick = emptyClick({
+    hasStart: !!anchorPlace,
+    movingStart: movingAnchor,
+    pathMode,
+  });
 
   const day = timeInput.slice(0, 10);
   const uncovered = committed || anchorTime ? uncoveredOn(feeds, day) : [];
@@ -261,17 +267,21 @@ export function App() {
     setCommitted(next.legs.length ? next : null);
     // Renaming places renames the start point too.
     setAnchorPlace(next.anchor.place);
+    // Once there are legs the start stays put.
+    setMovingAnchor(false);
     resetBuilder();
   }
 
   function undo() {
-    const previous = history[history.length - 1]?.plan;
-    if (!previous) return;
+    const step = history[history.length - 1];
+    if (!step) return;
+    const previous = step.plan;
     setHistory((h) => h.slice(0, -1));
     setCommitted(previous.legs.length ? previous : null);
-    // The start point may differ (after undoing an import or a rename), so restore it too.
+    // The start point may differ (after undoing an import, a rename or a move), so restore it
+    // too. Its time as well, unless that has changed since by itself (see undoesTime).
     setAnchorPlace(previous.anchor.place);
-    setTimeInput(toLocalInput(previous.anchor.time));
+    if (undoesTime(step.label)) setTimeInput(toLocalInput(previous.anchor.time));
     setMovingAnchor(false);
     resetBuilder();
   }
@@ -280,12 +290,26 @@ export function App() {
   // the summary is open over the plan or a request is under way. Holding the keys down undoes
   // one step, not one for each repeat.
   const undoKey = useRef<() => void>(undefined);
+  // Escape steps back out of what you're doing: it cancels moving the start. It closes an open
+  // menu on the map first, and the summary next (they mark the key as used), and it's left to
+  // a field that has focus. It returns whether it did anything.
+  const escapeKey = useRef<() => boolean>(undefined);
   useEffect(() => {
     undoKey.current = () => !showSummary && !busy && undo();
+    escapeKey.current = () => {
+      if (showSummary || !movingAnchor) return false;
+      setMovingAnchor(false);
+      return true;
+    };
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !isUndoKey(e) || isTypingIn(e.target)) return;
+      if (e.defaultPrevented || isTypingIn(e.target)) return;
+      if (e.key === 'Escape') {
+        if (escapeKey.current?.()) e.preventDefault();
+        return;
+      }
+      if (!isUndoKey(e)) return;
       e.preventDefault();
       if (!e.repeat) undoKey.current?.();
     };
@@ -326,13 +350,19 @@ export function App() {
   }
 
   function pickOnMap(point: LatLon) {
-    if (picking === 'anchor') {
-      void chooseAnchor(point);
-    } else if (picking === 'path') {
-      if (!busy) void choosePathPoint(point);
-    } else {
-      setNotice('To walk or bike somewhere, right-click it on the map.');
-    }
+    if (onEmptyClick === 'start') moveAnchor(point);
+    else if (onEmptyClick === 'path' && !busy) void choosePathPoint(point);
+  }
+
+  /**
+   * Set the point the plan grows from, or move it there before the first leg: from Move, the
+   * map's menu or by dragging its pin. Undo puts it back. False if it can't move now.
+   */
+  function moveAnchor(point: LatLon): boolean {
+    if (committed || busy) return false;
+    remember('move start');
+    void chooseAnchor(point);
+    return true;
   }
 
   async function chooseAnchor(point: LatLon) {
@@ -381,20 +411,19 @@ export function App() {
     addPath(plan, { ...pending, place: { ...pending.place, name } });
   }
 
-  /** From the map's right-click menu: walk or bike there (or from there), added at once. */
+  /** From the map's menu: walk or bike there (or from there), added at once. */
   const addPathAt = (m: PathMode, point: LatLon) =>
     run(async () => {
       if (plan) addPath(plan, await routeAtFrontier(plan, m, point));
     });
 
-  // What a right-click on the map offers, following After the end / Before the start.
-  const mapMenu: MapMenuItem[] =
-    plan && !movingAnchor
-      ? [
-          { id: 'walk', label: forward ? 'Walk here' : 'Walk from here' },
-          { id: 'bike', label: forward ? 'Bike here' : 'Bike from here' },
-        ]
-      : [];
+  // What the map's menu offers (on a right-click, or a click that picks nothing): moving the
+  // start before the first leg, and walking or biking there, following the direction.
+  const mapMenu = mapMenuItems({
+    startMovable: !!anchorPlace && !committed,
+    canAddLegs: !!plan,
+    direction,
+  });
 
   function addWait() {
     if (!plan || !(waitMinutes > 0)) return;
@@ -531,6 +560,7 @@ export function App() {
               resetBuilder();
             }}
             onMove={() => setMovingAnchor(true)}
+            onCancelMove={() => setMovingAnchor(false)}
           />
 
           {committed && (
@@ -638,7 +668,9 @@ export function App() {
           tripPreview={tripPreview}
           pendingPoint={pending?.place ?? null}
           pendingRoute={pending?.route.geometry ?? null}
-          picking={picking !== null}
+          picking={onEmptyClick !== 'menu'}
+          startDraggable={!committed && !busy}
+          onMoveStart={moveAnchor}
           legs={committed?.legs ?? NO_LEGS}
           onPick={pickOnMap}
           onHoverLines={setMapHover}
@@ -646,7 +678,8 @@ export function App() {
           onChooseStop={(sequence) => !busy && void chooseStop(sequence)}
           menu={mapMenu}
           onMenu={(id, point) => {
-            if (!busy && (id === 'walk' || id === 'bike')) void addPathAt(id, point);
+            if (id === 'move') moveAnchor(point);
+            else if (!busy && (id === 'walk' || id === 'bike')) void addPathAt(id, point);
           }}
         />
       </div>

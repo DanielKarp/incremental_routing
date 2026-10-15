@@ -75,6 +75,8 @@ export function NextLeg(props: Props) {
   const { direction, mode, frontier } = props;
   const forward = direction === 'forward';
   const where = frontier.place.name || 'the start point';
+  // In Walk and Bike mode a click on the map picks where to go instead (see PathPanel).
+  const clickMenu = mode === 'transit' || mode === 'wait';
   return (
     <section className="next-leg">
       <h2>Next leg</h2>
@@ -89,8 +91,8 @@ export function NextLeg(props: Props) {
       <p className="muted">
         {forward
           ? `Continuing from ${where} at ${formatTime(frontier.time)}.`
-          : `Arriving at ${where} by ${formatTime(frontier.time)}.`}{' '}
-        Right-click the map to walk or bike {forward ? 'there' : 'from there'}.
+          : `Arriving at ${where} by ${formatTime(frontier.time)}.`}
+        {clickMenu && ` Click the map to walk or bike ${forward ? 'there' : 'from there'}.`}
       </p>
       <div className="toggle" role="group" aria-label="Mode">
         {MODES.map((m) => (

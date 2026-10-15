@@ -123,6 +123,16 @@ describe('undo history', () => {
     expect(loadHistory(null).map((s) => s.label)).toEqual(['add', 'rename', 'clear plan']);
   });
 
+  it('keeps moves of the start before the first leg', () => {
+    const NEAR = { lat: 37.4475, lon: -122.1585, name: 'Near Lytton Av & Ramona St' };
+    const moves: UndoStep[] = [
+      { label: 'move start', plan: empty },
+      { label: 'move start', plan: { ...empty, anchor: { ...empty.anchor, place: NEAR } } },
+    ];
+    saveHistory(moves, null);
+    expect(loadHistory(null)).toEqual(moves);
+  });
+
   it('drops a history saved with another plan', () => {
     // Saved before the last change: undoing would skip it.
     saveHistory(steps, renamed);

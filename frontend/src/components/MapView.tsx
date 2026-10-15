@@ -5,6 +5,7 @@ import { type Ref, type RefObject, useEffect, useImperativeHandle, useRef, useSt
 import type { LatLon } from '../api';
 import { isPale } from '../color';
 import type { LinePreview } from '../linePreviews';
+import { type MapMenuItem, SingleClick, isRepeatClick } from '../mapClicks';
 import type { Leg, Place } from '../plan/types';
 import { formatTime } from '../time';
 
@@ -22,6 +23,8 @@ const END = '#15803d';
 // Edges that are white for most routes are this instead for pale ones (see isPale).
 const PALE_EDGE = '#4b5563';
 const SNAPSHOT_TIMEOUT_MS = 10_000;
+// How far a menu sits from the point it was opened at (pixels).
+const MENU_OFFSET_PX = 10;
 // How far from the pointer (pixels) a line or stop still counts as under it.
 const POINTER_SLOP_PX = 6;
 // At most this many line names in the hover label.
@@ -45,12 +48,6 @@ export interface TripPreview {
   color?: string | null;
 }
 
-/** Something a right-click on the map offers to do there. */
-export interface MapMenuItem {
-  id: string;
-  label: string;
-}
-
 export interface MapHandle {
   /** A PNG data URL of the map fitted to the whole plan, or null if it can't be captured. */
   snapshot(): Promise<string | null>;
@@ -72,8 +69,12 @@ interface Props {
   /** A walk or bike leg being set up: its picked point and route. */
   pendingPoint: Place | null;
   pendingRoute: [number, number][] | null;
-  /** Whether a map click picks a point (shows a crosshair). */
+  /** Whether a click on empty map picks a point (shows a crosshair), rather than open the menu. */
   picking: boolean;
+  /** Whether the start pin can be dragged (before the first leg). */
+  startDraggable: boolean;
+  /** The start pin was dropped there. False if the start can't move now: the pin goes back. */
+  onMoveStart: (point: LatLon) => boolean;
   legs: Leg[];
   onPick: (point: LatLon) => void;
   /** The lines under the pointer on the map, if any. */
@@ -81,7 +82,10 @@ interface Props {
   onChooseLine: (key: string) => void;
   /** A stop of the trip being chosen was clicked. */
   onChooseStop: (sequence: number) => void;
-  /** What a right-click offers at the point clicked; none means no menu. */
+  /**
+   * What a right-click offers at the point clicked, as does a click on empty map that picks
+   * nothing; none means no menu.
+   */
   menu: MapMenuItem[];
   onMenu: (id: string, point: LatLon) => void;
 }
@@ -134,16 +138,41 @@ export function MapView(props: Props) {
       setMapHover(keys);
       latest.current.onHoverLines(keys);
     };
-    // The menu open on the map, if any: which line (where several meet), or the right-click menu.
+    // The menu open on the map, if any: which line (where several meet), or the map's menu.
     let menu: maplibregl.Popup | null = null;
     const choose = (key: string) => {
       hover([]);
       latest.current.onChooseLine(key);
     };
+    // Escape closes an open menu and does nothing else: the key is marked as used, so the
+    // summary and the panel leave it alone (see App).
     const closeOnEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') menu?.remove();
+      if (e.key !== 'Escape' || !menu?.isOpen()) return;
+      menu.remove();
+      e.preventDefault();
     };
     document.addEventListener('keydown', closeOnEscape);
+    /** Opens the map's menu at a point, if it offers anything. */
+    const openMenu = (at: maplibregl.LngLat): boolean => {
+      const items = latest.current.menu;
+      if (!items.length) return false;
+      tip.remove();
+      hover([]);
+      menu?.remove();
+      const point = { lat: at.lat, lon: at.lng };
+      menu = showMenu(
+        m,
+        at,
+        null,
+        items.map((item) => ({
+          content: [item.label],
+          onChoose: () => latest.current.onMenu(item.id, point),
+        })),
+      );
+      return true;
+    };
+    // A click on empty map waits to see whether it's half of a double-click, which only zooms.
+    const singleClick = new SingleClick();
 
     m.on('mousemove', (e) => {
       const hit = hitAt(m, e.point);
@@ -161,15 +190,23 @@ export function MapView(props: Props) {
       hover([]);
     });
     m.on('click', (e) => {
+      singleClick.cancel(); // The newest click counts.
       // A click away from an open menu only closes it: it mustn't move the plan's start.
       if (menu?.isOpen()) {
         menu.remove();
         return;
       }
+      // The second click of a double-click only zooms.
+      if (isRepeatClick(e.originalEvent)) return;
       const hit = hitAt(m, e.point);
-      const { lines, onChooseStop, onPick } = latest.current;
+      const { lines, onChooseStop } = latest.current;
       if (!hit) {
-        onPick({ lat: e.lngLat.lat, lon: e.lngLat.lng });
+        const at = e.lngLat;
+        singleClick.wait(() => {
+          const { picking, onPick } = latest.current;
+          if (picking) onPick({ lat: at.lat, lon: at.lng });
+          else openMenu(at);
+        });
         return;
       }
       tip.remove(); // What it labelled is about to change.
@@ -182,23 +219,14 @@ export function MapView(props: Props) {
         menu = showLineChooser(m, e.lngLat, hit.keys, lines, { choose, hover });
       }
     });
+    m.on('dblclick', () => singleClick.cancel());
+    // A touch soon after a tap is a double tap, which zooms (touch screens send no dblclick
+    // for it), or the start of some other gesture.
+    m.on('touchstart', () => singleClick.cancel());
     m.on('contextmenu', (e) => {
-      const items = latest.current.menu;
-      if (!items.length) return;
-      e.originalEvent.preventDefault(); // No browser menu on top of ours.
-      tip.remove();
-      hover([]);
-      menu?.remove();
-      const point = { lat: e.lngLat.lat, lon: e.lngLat.lng };
-      menu = showMenu(
-        m,
-        e.lngLat,
-        null,
-        items.map((item) => ({
-          content: [item.label],
-          onChoose: () => latest.current.onMenu(item.id, point),
-        })),
-      );
+      singleClick.cancel();
+      // No browser menu on top of ours.
+      if (openMenu(e.lngLat)) e.originalEvent.preventDefault();
     });
     m.on('load', () => {
       addOverlayLayers(m);
@@ -209,6 +237,7 @@ export function MapView(props: Props) {
     if (import.meta.env.DEV) Object.assign(window, { __map: m });
     return () => {
       document.removeEventListener('keydown', closeOnEscape);
+      singleClick.cancel();
       m.remove();
       map.current = null;
       setStyleReady(false);
@@ -241,7 +270,11 @@ export function MapView(props: Props) {
     [legs],
   );
 
-  useMarker(map, start, START);
+  useMarker(map, start, START, {
+    enabled: props.startDraggable,
+    title: 'Drag to move the start',
+    onDrop: (point) => latest.current.onMoveStart(point),
+  });
   useMarker(map, end, END);
   useMarker(map, pendingPoint, PENDING);
 
@@ -323,16 +356,61 @@ export function MapView(props: Props) {
   return <div ref={container} className="map" data-testid="map" />;
 }
 
-function useMarker(map: RefObject<maplibregl.Map | null>, place: Place | null, color: string) {
+/** A pin you can drag while `drag.enabled`: where it's dropped goes to `drag.onDrop`. */
+interface PinDrag {
+  enabled: boolean;
+  /** Shown on the pin while it can be dragged. */
+  title: string;
+  /** False if the place can't move now: the pin goes back. */
+  onDrop: (point: LatLon) => boolean;
+}
+
+function useMarker(
+  map: RefObject<maplibregl.Map | null>,
+  place: Place | null,
+  color: string,
+  drag?: PinDrag,
+) {
+  const at: [number, number] | null = place ? [place.lon, place.lat] : null;
+  const shown = at !== null;
+  // The pin moves with the place rather than being made again, so it keeps keyboard focus
+  // while it's dragged with the arrow keys.
+  const position = useRef(at);
+  const marker = useRef<maplibregl.Marker | null>(null);
+  const onDrop = useRef(drag?.onDrop);
+  useEffect(() => {
+    position.current = at;
+    onDrop.current = drag?.onDrop;
+  });
+  useEffect(() => {
+    if (!map.current || !position.current) return;
+    const pin = new maplibregl.Marker({ color }).setLngLat(position.current).addTo(map.current);
+    // A drag with the mouse or a finger ends here, and so does one with the arrow keys.
+    pin.on('dragend', () => {
+      const { lat, lng } = pin.getLngLat().wrap();
+      if (!onDrop.current?.({ lat, lon: lng }) && position.current) {
+        pin.setLngLat(position.current);
+      }
+    });
+    marker.current = pin;
+    return () => {
+      pin.remove();
+      marker.current = null;
+    };
+  }, [map, shown, color]);
   const lat = place?.lat;
   const lon = place?.lon;
   useEffect(() => {
-    if (!map.current || lat === undefined || lon === undefined) return;
-    const marker = new maplibregl.Marker({ color }).setLngLat([lon, lat]).addTo(map.current);
-    return () => {
-      marker.remove();
-    };
-  }, [map, lat, lon, color]);
+    if (lat !== undefined && lon !== undefined) marker.current?.setLngLat([lon, lat]);
+  }, [lat, lon]);
+  const title = drag?.enabled ? drag.title : null;
+  useEffect(() => {
+    const pin = marker.current;
+    if (!pin) return;
+    pin.setDraggable(title !== null);
+    if (title !== null) pin.getElement().title = title;
+    else pin.getElement().removeAttribute('title');
+  }, [title, shown]);
 }
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -547,7 +625,7 @@ function showMenu(
 ): maplibregl.Popup {
   const popup = new maplibregl.Popup({
     className: 'map-menu',
-    offset: 10,
+    offset: MENU_OFFSET_PX,
     closeButton: false,
     closeOnClick: false, // The map's click handler closes it.
   });
@@ -577,6 +655,16 @@ function showMenu(
   }
   if (onClose) popup.on('close', onClose);
   popup.setLngLat(at).setDOMContent(list).addTo(m);
+  // The menu goes above or below the point, wherever it fits. On a short map (a phone's) it
+  // might fit neither way, so then its list is shortened to fit the larger side (but not to
+  // less than two entries or so), and scrolls.
+  const y = m.project(at).y;
+  const around = popup.getElement().offsetHeight - list.offsetHeight + MENU_OFFSET_PX;
+  const room = Math.floor(Math.max(y, m.getContainer().clientHeight - y) - around);
+  if (list.offsetHeight > room) {
+    list.style.maxHeight = `${Math.max(room, 60)}px`;
+    popup.setLngLat(at); // Placed again for its new height.
+  }
   return popup;
 }
 

@@ -7,14 +7,17 @@ interface Props {
   timeInput: string;
   /** Once legs exist the start point can't change (clear or undo instead). */
   locked: boolean;
+  /** Move was clicked: the next click on the map moves the start. */
   moving: boolean;
   onName: (name: string) => void;
   onTime: (value: string) => void;
   onMove: () => void;
+  onCancelMove: () => void;
 }
 
 /** The point in space and time that the plan grows from, forwards or backwards. */
-export function StartSection({ anchor, timeInput, locked, moving, onName, onTime, onMove }: Props) {
+export function StartSection(props: Props) {
+  const { anchor, timeInput, locked, moving, onName, onTime, onMove, onCancelMove } = props;
   // While you type a year it's out of range for a moment, so that's only said once you leave.
   const [typing, setTyping] = useState(false);
   return (
@@ -32,17 +35,14 @@ export function StartSection({ anchor, timeInput, locked, moving, onName, onTime
           </label>
           <p className="muted">
             {anchor.lat.toFixed(5)}, {anchor.lon.toFixed(5)}
-            {!locked &&
-              (moving ? (
-                ' · click the map to move it'
-              ) : (
-                <>
-                  {' · '}
-                  <button type="button" className="link" onClick={onMove}>
-                    Move
-                  </button>
-                </>
-              ))}
+            {!locked && (
+              <>
+                {moving ? ' · click the map to move it · ' : ' · '}
+                <button type="button" className="link" onClick={moving ? onCancelMove : onMove}>
+                  {moving ? 'Cancel' : 'Move'}
+                </button>
+              </>
+            )}
           </p>
         </>
       ) : (

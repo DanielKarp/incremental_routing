@@ -19,6 +19,7 @@ export const UNDO_LABELS = [
   'switch to walk',
   'clear plan',
   'open plan',
+  'move start',
 ] as const;
 
 export type UndoLabel = (typeof UNDO_LABELS)[number];
@@ -31,6 +32,15 @@ export interface UndoStep {
 
 export function isUndoLabel(value: unknown): value is UndoLabel {
   return (UNDO_LABELS as readonly unknown[]).includes(value);
+}
+
+/**
+ * Whether undoing the step also sets the time back. Moving the start before the first leg
+ * doesn't: changing the time isn't a step of its own, so undoing a move keeps any time you've
+ * set since.
+ */
+export function undoesTime(label: UndoLabel): boolean {
+  return label !== 'move start';
 }
 
 /** The Undo button's text: "Undo rename", or plain "Undo" when there's nothing to undo. */
