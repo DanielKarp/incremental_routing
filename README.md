@@ -5,7 +5,7 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (every operator
 sources, architecture, decisions and what's next.
 
 **Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
-(M8), with line previews on the map (M9) and fewer clicks (M10).
+(M8), with line previews on the map (M9), fewer clicks (M10) and leg merging (M11).
 
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
 - The lines nearby are listed as soon as you choose Transit, and the map shows where each one
@@ -166,6 +166,8 @@ does in Docker.
      run into its neighbours.
    - *Switch to bike* / *Switch to walk* re-routes a leg.
    - *Rename places* changes a place's name everywhere it appears.
+   - Where two walks, two bike rides or two waits meet, *Merge into one…* joins them into one
+     leg. The times stay the same, and the place in between drops out of the plan.
    - **Remove** takes off the first or last leg, and **Undo** reverts any change.
 4. **Finish** with *Summary & export*. It shows a map of the whole trip and the itinerary.
    - Print both.

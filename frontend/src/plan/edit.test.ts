@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendLegs,
+  canMergeWithNext,
   departureWindow,
   durationAnchor,
   legBounds,
+  mergeWithNext,
   planPlaces,
   renamePlace,
   setLegDuration,
@@ -160,5 +162,143 @@ describe('renaming places', () => {
       ['Vienna LRT', 'Milpitas Station'],
     ]);
     expect(renamePlace(screenshot, HOME, 'My place').anchor.place.name).toBe('My place');
+  });
+});
+
+describe('merging two legs of the same kind', () => {
+  const PARK: Place = { lat: 37.335, lon: -121.885, name: 'Park' };
+  const path = (geometry: [number, number][], extra: Partial<PathInfo> = {}): PathInfo => ({
+    provider: 'valhalla',
+    distanceM: 500,
+    routedDurationS: 360,
+    geometry,
+    ...extra,
+  });
+  // Home to the park, then on to the station, then the train.
+  const toPark = leg('toPark', 'walk', HOME, '08:30', PARK, '08:37', {
+    fixed: 'start',
+    path: path([[-121.88, 37.33], [-121.885, 37.335]]),
+  });
+  const onward = leg('onward', 'walk', PARK, '08:37', VIENNA, '08:45', {
+    fixed: 'start',
+    path: path([[-121.885, 37.335], [-121.89, 37.34]], { distanceM: 700, routedDurationS: 480 }),
+  });
+  const walks = appendLegs({ anchor: toPark.start, legs: [] }, [toPark, onward, ride]);
+
+  it('joins two walks as they are: same times, both routes, and the middle place drops out', () => {
+    expect(canMergeWithNext(walks, 'toPark')).toBe(true);
+    const plan = ok(mergeWithNext(walks, 'toPark'));
+    expect(plan.legs.map((l) => [l.id, l.mode])).toEqual([
+      ['toPark', 'walk'],
+      ['wait-after-toPark', 'wait'],
+      ['ride', 'transit'],
+    ]);
+    const merged = plan.legs[0];
+    expect(merged).toMatchObject({ start: toPark.start, end: onward.end, fixed: 'start' });
+    expect(merged.path).toEqual({
+      provider: 'valhalla',
+      distanceM: 1200,
+      routedDurationS: 840,
+      geometry: [
+        [-121.88, 37.33],
+        [-121.885, 37.335],
+        [-121.89, 37.34],
+      ],
+    });
+    expect(times(plan, 'ride')).toEqual(times(walks, 'ride'));
+    expect(planPlaces(plan).map((p) => p.name)).toEqual([
+      'Home',
+      'Vienna Station',
+      'Milpitas Station',
+    ]);
+  });
+
+  it('joins hill profiles end to end, and drops one it can only have in part', () => {
+    const heights = (heightsM: number[]) => ({ elevation: { intervalM: 30, heightsM } });
+    const climb = path([[-121.88, 37.33]], heights([10, 25, 40]));
+    const descent = path([[-121.885, 37.335]], heights([40, 20]));
+    const ride1 = { ...toPark, mode: 'bike' as const, path: climb };
+    const ride2 = { ...onward, mode: 'bike' as const, path: descent };
+    const rides = appendLegs({ anchor: ride1.start, legs: [] }, [ride1, ride2]);
+    expect(ok(mergeWithNext(rides, 'toPark')).legs[0].path?.elevation).toEqual({
+      intervalM: 30,
+      heightsM: [10, 25, 40, 20],
+    });
+
+    const estimated = {
+      ...ride2,
+      path: { ...descent, provider: 'estimate', elevation: undefined },
+    };
+    const mixed = appendLegs({ anchor: ride1.start, legs: [] }, [ride1, estimated]);
+    const merged = ok(mergeWithNext(mixed, 'toPark')).legs[0].path;
+    expect(merged?.elevation).toBeUndefined();
+    expect(merged?.provider).toBe('estimate');
+  });
+
+  it('merges a wait you added with the automatic one after it, into one wait you own', () => {
+    // Off the train at 9:17, coffee until 9:30, then waiting for a 9:50 departure.
+    const coffee = leg('coffee', 'wait', MILPITAS, '09:17', MILPITAS, '09:30', { fixed: 'start' });
+    const back = leg('back', 'transit', MILPITAS, '09:50', VIENNA, '10:15');
+    const plan = appendLegs({ anchor: ride.start, legs: [] }, [ride, coffee, back]);
+    expect(plan.legs.map((l) => l.id)).toEqual(['ride', 'coffee', 'wait-after-coffee', 'back']);
+    expect(canMergeWithNext(plan, 'coffee')).toBe(true);
+    const merged = ok(mergeWithNext(plan, 'coffee'));
+    expect(merged.legs.map((l) => l.id)).toEqual(['ride', 'coffee', 'back']);
+    expect(merged.legs[1]).toMatchObject({ mode: 'wait', fixed: 'start' });
+    expect(merged.legs[1].auto).toBeUndefined();
+    expect(times(merged, 'coffee')).toEqual([t('09:17'), t('09:50')]);
+  });
+
+  it('keeps the wait you added, and its place, when the automatic one comes first', () => {
+    // Planned backwards: a 20 min wait at the office, 40 m from the station, before a 10:00
+    // meeting. The automatic wait sits at the station, where the ride ends.
+    const OFFICE: Place = { lat: 37.41036, lon: -121.89, name: 'Office' };
+    const meet = leg('meet', 'wait', OFFICE, '09:40', OFFICE, '10:00', { fixed: 'end' });
+    const plan = appendLegs({ anchor: ride.start, legs: [] }, [ride, meet]);
+    expect(plan.legs.map((l) => l.id)).toEqual(['ride', 'wait-after-ride', 'meet']);
+    expect(canMergeWithNext(plan, 'wait-after-ride')).toBe(true);
+    const merged = ok(mergeWithNext(plan, 'wait-after-ride'));
+    expect(merged.legs.map((l) => l.id)).toEqual(['ride', 'meet']);
+    expect(merged.legs[1]).toMatchObject({
+      fixed: 'end',
+      start: { place: OFFICE, time: ride.end.time },
+      end: { place: OFFICE, time: t('10:00') },
+    });
+  });
+
+  it('merges nothing when the leg after it is no longer the one the button was for', () => {
+    // Three walks: a double click on the first button must not swallow the third walk too.
+    const third = leg('third', 'walk', VIENNA, '08:45', VIENNA, '08:46', { fixed: 'start' });
+    const three = appendLegs({ anchor: toPark.start, legs: [] }, [toPark, onward, third]);
+    const once = ok(mergeWithNext(three, 'toPark', 'onward'));
+    expect(once.legs.map((l) => l.id)).toEqual(['toPark', 'third']);
+    expect(mergeWithNext(once, 'toPark', 'onward')).toEqual({
+      ok: false,
+      reason: 'Those legs have changed, so nothing was merged.',
+    });
+    // Asked for on purpose, the next pair still merges.
+    expect(ok(mergeWithNext(once, 'toPark', 'third')).legs.map((l) => l.id)).toEqual(['toPark']);
+  });
+
+  it('only offers two legs of the same kind that meet', () => {
+    const bikeOn = { ...onward, mode: 'bike' as const };
+    const mixed = appendLegs({ anchor: toPark.start, legs: [] }, [toPark, bikeOn]);
+    expect(canMergeWithNext(mixed, 'toPark')).toBe(false);
+    expect(mergeWithNext(mixed, 'toPark')).toEqual({
+      ok: false,
+      reason: 'Only two walks, two bike rides or two waits that meet can be merged.',
+    });
+
+    const rides = appendLegs({ anchor: ride.start, legs: [] }, [
+      ride,
+      leg('ride2', 'transit', MILPITAS, '09:17', VIENNA, '09:40'),
+    ]);
+    expect(canMergeWithNext(rides, 'ride')).toBe(false);
+    expect(canMergeWithNext(walks, 'ride')).toBe(false); // nothing after the last leg
+    expect(canMergeWithNext(walks, 'onward')).toBe(false); // a wait, then the ride
+
+    const apart = { ...onward, start: { ...onward.start, place: CAFE } };
+    const gap = appendLegs({ anchor: toPark.start, legs: [] }, [toPark, apart]);
+    expect(canMergeWithNext(gap, 'toPark')).toBe(false);
   });
 });

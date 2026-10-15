@@ -88,8 +88,8 @@ compute the start time.
 | Mode | Start / end chosen by | Times come from | Editable |
 | --- | --- | --- | --- |
 | Transit | Departure (or arrival) list or a line on the map, then a stop on that trip | Timetable | No: fixed by the schedule |
-| Walk, Bike | Frontier, then a map click (or a right-click, from any mode) | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2) |
-| Wait | Same place at both ends | Gap between legs, or manual | Manual waits only |
+| Walk, Bike | Frontier, then a map click (or a right-click, from any mode) | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2). Two in a row of the same mode can merge (decision 17) |
+| Wait | Same place at both ends | Gap between legs, or manual | Manual waits only. Any two waits in a row can merge |
 
 ## 4. Data model
 
@@ -307,6 +307,33 @@ fix them automatically.
 | M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. |
 | M9 ✅ | Line previews | While you choose a ride, the map shows every line in the list, faded in its own colour, with the stop to catch it. Pointing at a row highlights and frames its line, and pointing at a line marks its row. Lines, and the stop to get off at (or on), can be picked on the map. |
 | M10 ✅ | Fewer clicks | The departure (or arrival) list loads by itself. A right-click on the map adds a walk or bike leg there straight away. |
+| M11 ✅ | Merge legs | Where two walks, two bike rides or two waits meet, a button between them joins them into one leg. |
+
+### M11 notes
+
+- **When it's offered.** Between two legs in a row of the same mode, walk, bike or wait, that
+  meet at the same place (within 75 m). Never for transit, and never between different modes:
+  a walk next to a bike ride, or a wait next to a walk, gets no button.
+- **What a merge does** (decision 17).
+  - Walks and bike rides keep both routes: one leg from the first start to the second end,
+    whose distance, routed time and geometry add up. Hill profiles join end to end, and a
+    profile only one of the two had is dropped, rather than shown for part of the ride.
+  - Any two waits merge, automatic ones included. A wait you added followed by the automatic
+    wait before a departure becomes one wait you own, from the first start to the departure.
+    A merged wait stays at your wait's place, even when the automatic one before it was at a
+    stop a few metres away.
+  - The merged leg keeps the id and planned-from end of the leg you chose, so later time edits
+    behave as before. *Undo* splits it again.
+- **One merge per click.** Each button is tied to its pair of legs. A double-click, or a held
+  Enter key, merges that pair only, even when the merged leg could merge with the next one.
+- **Reviewed, then checked in a browser.**
+  - Four reviewers looked at the change (plan rules, interface, the request itself, tests),
+    and two skeptics checked each finding. Two confirmed findings were fixed: the wait's
+    place, and double merges. The button now also names both legs for screen readers.
+  - A plan with a coffee wait, Caltrain, two walks, two bike rides and two waits showed
+    exactly four buttons. Merging all four went from nine legs to five, with the plan's
+    start and end times unchanged.
+  - A double-click, and a held Enter, on the first of three walks merged two of them.
 
 ### M10 notes
 
@@ -638,6 +665,9 @@ fix them automatically.
 16. **Right-click adds walk and bike legs at once.** The menu follows the direction toggle.
     Its leg skips the preview and is named after a stop nearby (or by coordinates), and the
     *Next leg* panel keeps its mode. *Undo* and *Rename places* fix a wrong click or name.
+17. **Merging joins legs as they are.** Two walks, bike rides or waits in a row become one leg
+    that follows both routes, so no times change and nothing else in the plan moves. It isn't
+    re-routed; a direct route would be a new leg. Automatic waits merge too.
 
 **Risks:**
 

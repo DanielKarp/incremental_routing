@@ -38,6 +38,7 @@ import {
   type EditResult,
   appendLegs,
   findIssues,
+  mergeWithNext,
   planEnd,
   planStart,
   prependLegs,
@@ -480,6 +481,10 @@ export function App() {
               onSetStart={(legId, time) => applyEdit(setLegStart(committed, legId, time))}
               onSetEnd={(legId, time) => applyEdit(setLegEnd(committed, legId, time))}
               onSwitchMode={switchMode}
+              onMerge={(legId, nextId) => {
+                const refusal = applyEdit(mergeWithNext(committed, legId, nextId));
+                if (refusal) setError(refusal);
+              }}
               onRename={(place, name) => commit(renamePlace(committed, place, name))}
               onRemove={(legId) => commit(removeLeg(committed, legId))}
               onUndo={undo}

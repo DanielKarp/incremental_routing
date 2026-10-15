@@ -248,6 +248,78 @@ export function setLegPath(plan: Plan, legId: string, mode: 'walk' | 'bike', pat
   };
 }
 
+/**
+ * Whether a leg can be merged with the leg right after it: two walks, two bike rides or two
+ * waits (yours or automatic) that meet at the same place.
+ */
+export function canMergeWithNext(plan: Plan, legId: string): boolean {
+  const i = plan.legs.findIndex((l) => l.id === legId);
+  const [a, b] = [plan.legs[i], plan.legs[i + 1]];
+  return (
+    i >= 0 &&
+    b !== undefined &&
+    a.mode === b.mode &&
+    a.mode !== 'transit' &&
+    distanceM(a.end.place, b.start.place) <= SAME_PLACE_M
+  );
+}
+
+/**
+ * Merge a walk, bike or wait leg with the same kind of leg right after it. The merged leg runs
+ * from the first's start to the second's end along both routes, so no times change; the place
+ * in between drops out of the plan. A wait merged with an automatic one becomes yours, at your
+ * wait's place. With `nextId`, nothing is merged unless that is still the leg after `legId`.
+ */
+export function mergeWithNext(plan: Plan, legId: string, nextId?: string): EditResult {
+  const after = plan.legs[plan.legs.findIndex((l) => l.id === legId) + 1];
+  if (nextId !== undefined && after?.id !== nextId) {
+    return { ok: false, reason: 'Those legs have changed, so nothing was merged.' };
+  }
+  if (!canMergeWithNext(plan, legId)) {
+    return {
+      ok: false,
+      reason: 'Only two walks, two bike rides or two waits that meet can be merged.',
+    };
+  }
+  const i = plan.legs.findIndex((l) => l.id === legId);
+  const [a, b] = [plan.legs[i], plan.legs[i + 1]];
+  // The merged leg is one you chose: it keeps that leg's id and the end it was planned from.
+  const owner = a.auto ? b : a;
+  const merged: Leg = { id: owner.id, mode: a.mode, start: a.start, end: b.end };
+  if (a.mode === 'wait') {
+    // A wait stays in one place: yours, when an automatic wait at a stop nearby comes first.
+    merged.start = { place: owner.start.place, time: a.start.time };
+    merged.end = { place: owner.end.place, time: b.end.time };
+  }
+  const fixed = a.auto || b.auto ? owner.fixed : (a.fixed ?? b.fixed);
+  if (fixed) merged.fixed = fixed;
+  if (a.path && b.path) merged.path = joinPaths(a.path, b.path);
+  const legs = [...plan.legs.slice(0, i), merged, ...plan.legs.slice(i + 2)];
+  return { ok: true, plan: { ...plan, legs: withWaits(legs) } };
+}
+
+/** Two routes, one after the other, as one: distances, times and heights add up. */
+function joinPaths(a: PathInfo, b: PathInfo): PathInfo {
+  const joint = a.geometry[a.geometry.length - 1];
+  const next = b.geometry[0];
+  const sameJoint = joint && next && joint[0] === next[0] && joint[1] === next[1];
+  const path: PathInfo = {
+    provider: a.provider === 'estimate' || b.provider === 'estimate' ? 'estimate' : a.provider,
+    distanceM: a.distanceM + b.distanceM,
+    routedDurationS: a.routedDurationS + b.routedDurationS,
+    geometry: [...a.geometry, ...(sameJoint ? b.geometry.slice(1) : b.geometry)],
+  };
+  // A profile needs heights all the way along, at one spacing. The second route's first height
+  // is the first route's last, at the place they meet.
+  if (a.elevation && b.elevation && a.elevation.intervalM === b.elevation.intervalM) {
+    path.elevation = {
+      intervalM: a.elevation.intervalM,
+      heightsM: [...a.elevation.heightsM, ...b.elevation.heightsM.slice(1)],
+    };
+  }
+  return path;
+}
+
 const samePlace = (a: Place, b: Place) =>
   a.lat === b.lat && a.lon === b.lon && (a.stopId ?? null) === (b.stopId ?? null);
 

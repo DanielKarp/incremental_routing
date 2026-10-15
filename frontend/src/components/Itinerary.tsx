@@ -1,8 +1,9 @@
-import { type KeyboardEvent, useState } from 'react';
+import { Fragment, type KeyboardEvent, useState } from 'react';
 import { legNotes, legTitle, placeName } from '../plan/files';
 import { hillProfile } from '../plan/hills';
 import {
   type LegBounds,
+  canMergeWithNext,
   departureWindow,
   durationAnchor,
   isEndLeg,
@@ -29,6 +30,8 @@ interface Props extends LegEdits {
   plan: Plan;
   issues: PlanIssue[];
   onSwitchMode: (legId: string) => void;
+  /** Merge a walk, bike or wait leg with the same kind of leg right after it, `nextId`. */
+  onMerge: (legId: string, nextId: string) => void;
   onRename: (place: Place, name: string) => void;
   onRemove: (legId: string) => void;
   onUndo: () => void;
@@ -47,56 +50,69 @@ export function Itinerary(props: Props) {
     <section>
       <h2>Itinerary</h2>
       <ol className="itinerary">
-        {plan.legs.map((leg) => (
-          <li key={leg.id} className={`leg leg-${leg.mode}`}>
-            <span className="leg-times">
-              {formatTimeOnDay(leg.start.time, start.time)}
-              <br />
-              {formatTimeOnDay(leg.end.time, start.time)}
-            </span>
-            <div className="leg-body">
-              <LegSummary leg={leg} />
-              {editable(leg) && (
-                <LegTimesEditor
-                  key={`${leg.id}:${leg.mode}:${leg.start.time}:${leg.end.time}`}
-                  plan={plan}
-                  leg={leg}
-                  edits={props}
-                  disabled={props.disabled}
-                />
-              )}
-              {issues
-                .filter((i) => i.legId === leg.id && i.kind !== 'bikes-not-allowed')
-                .map((i) => (
-                  <p key={i.kind} className={`issue issue-${i.severity}`}>
-                    {i.message}
-                  </p>
-                ))}
-            </div>
-            <div className="leg-actions">
-              {(leg.mode === 'walk' || leg.mode === 'bike') && (
-                <button
-                  type="button"
-                  className="link"
-                  disabled={props.disabled}
-                  onClick={() => props.onSwitchMode(leg.id)}
-                >
-                  {leg.mode === 'walk' ? 'Switch to bike' : 'Switch to walk'}
-                </button>
-              )}
-              {!leg.auto && isEndLeg(plan, leg.id) && (
-                <button
-                  type="button"
-                  className="link remove"
-                  disabled={props.disabled}
-                  aria-label={`Remove: ${legTitle(leg)}`}
-                  onClick={() => props.onRemove(leg.id)}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          </li>
+        {plan.legs.map((leg, i) => (
+          <Fragment key={leg.id}>
+            <li className={`leg leg-${leg.mode}`}>
+              <span className="leg-times">
+                {formatTimeOnDay(leg.start.time, start.time)}
+                <br />
+                {formatTimeOnDay(leg.end.time, start.time)}
+              </span>
+              <div className="leg-body">
+                <LegSummary leg={leg} />
+                {editable(leg) && (
+                  <LegTimesEditor
+                    key={`${leg.id}:${leg.mode}:${leg.start.time}:${leg.end.time}`}
+                    plan={plan}
+                    leg={leg}
+                    edits={props}
+                    disabled={props.disabled}
+                  />
+                )}
+                {issues
+                  .filter((i) => i.legId === leg.id && i.kind !== 'bikes-not-allowed')
+                  .map((i) => (
+                    <p key={i.kind} className={`issue issue-${i.severity}`}>
+                      {i.message}
+                    </p>
+                  ))}
+              </div>
+              <div className="leg-actions">
+                {(leg.mode === 'walk' || leg.mode === 'bike') && (
+                  <button
+                    type="button"
+                    className="link"
+                    disabled={props.disabled}
+                    onClick={() => props.onSwitchMode(leg.id)}
+                  >
+                    {leg.mode === 'walk' ? 'Switch to bike' : 'Switch to walk'}
+                  </button>
+                )}
+                {!leg.auto && isEndLeg(plan, leg.id) && (
+                  <button
+                    type="button"
+                    className="link remove"
+                    disabled={props.disabled}
+                    aria-label={`Remove: ${legTitle(leg)}`}
+                    onClick={() => props.onRemove(leg.id)}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </li>
+            {canMergeWithNext(plan, leg.id) && (
+              <MergeButton
+                // Keyed by the pair: after a merge, the button for the next pair is a new one,
+                // so a held Enter key can't carry on into it.
+                key={`${leg.id}>${plan.legs[i + 1].id}`}
+                first={leg}
+                second={plan.legs[i + 1]}
+                disabled={props.disabled}
+                onMerge={props.onMerge}
+              />
+            )}
+          </Fragment>
         ))}
       </ol>
       <p className="muted">
@@ -133,6 +149,42 @@ export function Itinerary(props: Props) {
     </section>
   );
 }
+
+/** Between two walks, two bike rides or two waits: merges them into one. */
+function MergeButton(props: {
+  first: Leg;
+  second: Leg;
+  disabled?: boolean;
+  onMerge: (legId: string, nextId: string) => void;
+}) {
+  const { first, second } = props;
+  const into = `into one ${MERGED_NAMES[first.mode]}`;
+  return (
+    <li className={`leg-merge leg-merge-${first.mode}`}>
+      <button
+        type="button"
+        className="link"
+        disabled={props.disabled}
+        aria-label={`Merge ${legTitle(first)} and ${legTitle(second)} ${into}`}
+        onClick={(e) => {
+          // The second click of a double-click would merge the next pair too.
+          if (e.detail > 1) return;
+          props.onMerge(first.id, second.id);
+        }}
+      >
+        Merge {into}
+      </button>
+    </li>
+  );
+}
+
+// What two merged legs become: "Merge into one bike ride".
+const MERGED_NAMES: Record<Leg['mode'], string> = {
+  walk: 'walk',
+  bike: 'bike ride',
+  wait: 'wait',
+  transit: 'ride',
+};
 
 const editable = (leg: Leg) =>
   leg.mode === 'walk' || leg.mode === 'bike' || (leg.mode === 'wait' && !leg.auto);

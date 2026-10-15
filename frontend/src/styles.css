@@ -492,6 +492,24 @@ button.link {
   width: 4.5em;
 }
 
+/* Between two walks, two bike rides or two waits: offers to merge them. The line on the left
+   carries on through it, so the itinerary still reads as one timeline. */
+.leg-merge {
+  /* Lines up with the leg text: the time column (4.5em) plus the leg's padding and gap. */
+  padding: 2px 0 2px calc(4.5em + 16px);
+  border-left: 4px solid var(--border);
+}
+
+.leg-merge-walk,
+.leg-merge-bike {
+  border-left-style: dashed;
+}
+
+/* Wait legs are set smaller, so their time column is narrower. */
+.leg-merge-wait {
+  font-size: 0.85rem;
+}
+
 .leg-actions {
   display: flex;
   flex-direction: column;
