@@ -270,6 +270,27 @@ export function setLegPath(plan: Plan, legId: string, mode: 'walk' | 'bike', pat
 }
 
 /**
+ * After setLegPath: when the new route didn't fit with the end the leg keeps (see
+ * durationAnchor), so that end moved instead, what it is now. "Walking takes 25 min, so it now
+ * leaves at 8:22 AM." Null when the leg kept that end.
+ */
+export function switchMoved(before: Plan, after: Plan, legId: string): string | null {
+  const old = before.legs.find((l) => l.id === legId);
+  const now = after.legs.find((l) => l.id === legId);
+  if (!old || !now) return null;
+  const doing = now.mode === 'bike' ? 'Cycling' : 'Walking';
+  const takes = `${doing} takes ${formatDuration(legDurationS(now))}`;
+  if (durationAnchor(before, legId) === 'start') {
+    return now.start.time === old.start.time
+      ? null
+      : `${takes}, so it now leaves at ${formatTime(now.start.time)}.`;
+  }
+  return now.end.time === old.end.time
+    ? null
+    : `${takes}, so it now arrives at ${formatTime(now.end.time)}.`;
+}
+
+/**
  * Whether a leg can be merged with the leg right after it: two walks, two bike rides or two
  * waits (yours or automatic) that meet at the same place.
  */

@@ -19,7 +19,17 @@ import { atLocalTime, formatClock, formatDuration, formatTime, formatTimeOnDay }
 import { HillProfile } from './HillProfile';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
 
-/** Each edit returns an error message if it was refused. */
+/**
+ * Something to say under one leg, about what you just did to it: why a change was refused, or
+ * what else a change moved.
+ */
+export interface LegMessage {
+  legId: string;
+  text: string;
+  tone: 'error' | 'warning';
+}
+
+/** Each edit returns an error message if it was refused, to show under the leg (LegMessage). */
 export interface LegEdits {
   onSetDuration: (legId: string, seconds: number) => string | null;
   onSetStart: (legId: string, time: string) => string | null;
@@ -40,6 +50,8 @@ interface Props extends LegEdits {
   onSummary: () => void;
   /** While a request is in flight, edits wait so they can't race it. */
   disabled?: boolean;
+  /** Shown under its leg until the next action. */
+  message?: LegMessage | null;
 }
 
 export function Itinerary(props: Props) {
@@ -87,6 +99,14 @@ export function Itinerary(props: Props) {
                       {i.message}
                     </p>
                   ))}
+                {props.message?.legId === leg.id && (
+                  <p
+                    className={`issue issue-${props.message.tone}`}
+                    role={props.message.tone === 'error' ? 'alert' : 'status'}
+                  >
+                    {props.message.text}
+                  </p>
+                )}
               </div>
               <div className="leg-actions">
                 {(leg.mode === 'walk' || leg.mode === 'bike') && (
@@ -271,11 +291,10 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
   const [start, setStart] = useState(formatClock(leg.start.time));
   const [end, setEnd] = useState(formatClock(leg.end.time));
   const [duration, setDuration] = useState(String(minutes));
-  const [error, setError] = useState<string | null>(null);
   const isWait = leg.mode === 'wait';
 
+  // A refused edit puts the times back; the itinerary says why, under the leg.
   function commit(refusal: string | null) {
-    setError(refusal);
     if (refusal) {
       setStart(formatClock(leg.start.time));
       setEnd(formatClock(leg.end.time));
@@ -336,7 +355,6 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
         </label>
       </div>
       <p className="muted">{hint(plan, leg, bounds, maxS)}</p>
-      {error && <p className="issue issue-error">{error}</p>}
     </div>
   );
 }

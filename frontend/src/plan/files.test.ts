@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addedText,
   legNotes,
   legTitle,
   parsePlanJson,
@@ -81,6 +82,21 @@ describe('JSON plan files', () => {
       ok: false,
       reason: 'The plan is damaged: two legs share an id.',
     });
+  });
+});
+
+describe('saying what was just added', () => {
+  it('names the ride, which the walk to its stop comes with', () => {
+    expect(addedText([walk, train])).toBe(
+      'Express, Palo Alto Caltrain 7:43 AM → Millbrae Caltrain 8:04 AM',
+    );
+  });
+
+  it('or the walk, bike ride or wait on its own', () => {
+    expect(addedText([walk])).toBe('Walk, Home, sweet "home" 7:30 AM → Palo Alto Caltrain 7:35 AM');
+    const end = { ...train.end, time: t('15:19') };
+    const wait: Leg = { id: 'wait-1', mode: 'wait', start: train.end, end };
+    expect(addedText([wait])).toBe('Wait 15 min at Millbrae Caltrain, 8:04 AM → 8:19 AM');
   });
 });
 

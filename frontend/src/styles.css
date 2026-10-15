@@ -328,6 +328,10 @@ button.secondary {
   align-items: flex-end;
 }
 
+.row.align-center {
+  align-items: center;
+}
+
 .grow {
   flex: 1;
 }
@@ -383,6 +387,33 @@ button.link {
   padding-top: 12px;
 }
 
+/* The heading, toggles and messages above the list. */
+.next-leg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* What the panel scrolls into view keeps clear of the bar with Undo at its foot. */
+.next-leg-controls,
+.builder-messages,
+.pending,
+.missed {
+  scroll-margin: 12px 0 72px;
+}
+
+/* "Added: …", under the heading after a leg is added. */
+.added {
+  font-size: 0.85rem;
+  color: var(--bike);
+}
+
+.builder-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .pending {
   display: flex;
   flex-direction: column;
@@ -390,6 +421,25 @@ button.link {
   padding: 8px;
   border: 1px dashed #7c3aed;
   border-radius: 6px;
+}
+
+.wait-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A wait of a set length, added in one click. */
+button.chip {
+  padding: 4px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The trip picked can't be made: why, and the line's trip that can. */
+.missed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .trip-stops {

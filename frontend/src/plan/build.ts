@@ -6,9 +6,11 @@ import type {
   RouteInfo,
   RouteResult,
   Stop,
+  TransitCall,
   TripDetail,
   TripStop,
 } from '../api';
+import { formatDuration, formatTime } from '../time';
 import { SAME_PLACE_M, addSeconds, distanceM, newLegId, toMs } from './plan';
 import type { Direction, Leg, PathInfo, Place, Waypoint } from './types';
 
@@ -38,6 +40,19 @@ export function pinName(point: { lat: number; lon: number }, nearest?: NearbySto
 /** Whether getting between a place and a stop needs a walk leg of its own. */
 export function needsConnector(from: Place, stop: Place): boolean {
   return distanceM(from, stop) > SAME_PLACE_M;
+}
+
+/**
+ * Where the walk or bike ride between the frontier and a stop goes: from the frontier to the
+ * stop forwards, from the stop to the frontier backwards. Null when the stop is at the frontier.
+ */
+export function connectorEnds(
+  frontier: Place,
+  stop: Place,
+  direction: Direction,
+): { from: Place; to: Place } | null {
+  if (!needsConnector(frontier, stop)) return null;
+  return direction === 'forward' ? { from: frontier, to: stop } : { from: stop, to: frontier };
 }
 
 /** Stand-in for a router result: straight-line distance with a detour factor. */
@@ -200,6 +215,56 @@ export function previewLine(trip: TripDetail, stopSequence: number, direction: D
   return trip.stops
     .filter((s) => (direction === 'forward' ? s.stop_sequence >= stopSequence : s.stop_sequence <= stopSequence))
     .map((s): [number, number] => [s.stop.lon, s.stop.lat]);
+}
+
+/** A trip picked from the list that the routed walk or bike ride to (or from) its stop misses. */
+export interface MissedTrip {
+  /** "The walk to Millbrae takes 14 min, so you'd miss the 10:27 AM." */
+  reason: string;
+  /**
+   * The line's listed trip the route does make: its next one forwards, its latest one
+   * backwards. Null when none of them makes it, which the reason then says.
+   */
+  instead: TransitCall | null;
+}
+
+/**
+ * Whether the routed walk or bike ride between the frontier and a picked trip's stop makes the
+ * trip. Forwards it leaves the plan's end at once and must reach the stop by the departure;
+ * backwards it leaves the stop on arrival and must reach the plan's start by its time. The list
+ * only estimates that, so a listed trip can turn out to be missed. `line` holds the trips listed
+ * for the picked one's line (see groupCalls). Null when the trip is made.
+ */
+export function missedTrip(
+  frontier: Waypoint,
+  call: TransitCall,
+  line: TransitCall[],
+  route: RouteResult,
+  direction: Direction,
+): MissedTrip | null {
+  const forward = direction === 'forward';
+  const durationS = pathDurationS(route);
+  const makes = (c: TransitCall) =>
+    forward
+      ? toMs(frontier.time) + durationS * 1000 <= toMs(c.departure)
+      : toMs(c.arrival) + durationS * 1000 <= toMs(frontier.time);
+  if (makes(call)) return null;
+  // The route only fits trips from the same stop.
+  const made = line
+    .filter((c) => c.stop.stop_id === call.stop.stop_id && makes(c))
+    .sort((a, b) =>
+      forward ? toMs(a.departure) - toMs(b.departure) : toMs(b.arrival) - toMs(a.arrival),
+    );
+  const way = `${ACCESS_WORDS[route.mode]} ${forward ? 'to' : 'from'} ${call.stop.name}`;
+  const takes = `The ${way} takes ${formatDuration(durationS)}`;
+  const reason = forward
+    ? `${takes}, so you'd miss the ${formatTime(call.departure)}.`
+    : `${takes}, so the ${formatTime(call.arrival)} gets you there too late.`;
+  if (made.length) return { reason, instead: made[0] };
+  const none = forward
+    ? "None of this line's listed departures leaves late enough."
+    : "None of this line's listed arrivals is early enough.";
+  return { reason: `${reason} ${none}`, instead: null };
 }
 
 export type LegsResult = { ok: true; legs: Leg[] } | { ok: false; reason: string };

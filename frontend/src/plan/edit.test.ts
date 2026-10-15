@@ -12,6 +12,7 @@ import {
   setLegEnd,
   setLegPath,
   setLegStart,
+  switchMoved,
 } from './plan';
 import type { Leg, PathInfo, Place, Plan } from './types';
 
@@ -132,6 +133,32 @@ describe('switching between walking and cycling', () => {
   it('leaves earlier when keeping the departure would miss the next leg', () => {
     const plan = ok(setLegPath(screenshot, 'walk', 'walk', route(25)));
     expect(times(plan, 'walk')).toEqual([t('08:22'), t('08:47')]);
+  });
+
+  it('says so when the end it keeps had to move', () => {
+    const later = ok(setLegPath(screenshot, 'walk', 'walk', route(25)));
+    expect(switchMoved(screenshot, later, 'walk')).toBe(
+      'Walking takes 25 min, so it now leaves at 8:22 AM.',
+    );
+    // Keeping the departure, only the arrival moves, as it would for any change of duration.
+    const bike = ok(setLegPath(screenshot, 'walk', 'bike', route(6)));
+    expect(switchMoved(screenshot, bike, 'walk')).toBeNull();
+  });
+
+  it('backwards, says when the arrival it keeps had to move', () => {
+    // Planned from its arrival at 08:35, after a wait you added until 08:20 and before the
+    // 08:52 ride. Cycling 20 min can't keep that arrival without leaving before 08:20.
+    const coffee = leg('coffee', 'wait', HOME, '08:00', HOME, '08:20', { fixed: 'end' });
+    const toStop = leg('to', 'walk', HOME, '08:25', VIENNA, '08:35', { fixed: 'end' });
+    const plan = appendLegs({ anchor: coffee.start, legs: [] }, [coffee, toStop, ride]);
+    expect(durationAnchor(plan, 'to')).toBe('end');
+    const bike = ok(setLegPath(plan, 'to', 'bike', route(20)));
+    expect(times(bike, 'to')).toEqual([t('08:25'), t('08:45')]);
+    expect(switchMoved(plan, bike, 'to')).toBe(
+      'Cycling takes 20 min, so it now arrives at 8:45 AM.',
+    );
+    const quick = ok(setLegPath(plan, 'to', 'bike', route(4)));
+    expect(switchMoved(plan, quick, 'to')).toBeNull();
   });
 
   it('refuses when it fits neither way', () => {

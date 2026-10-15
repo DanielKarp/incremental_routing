@@ -30,6 +30,24 @@ export function legTitle(leg: Leg): string {
   return `${MODE_NAMES[leg.mode]} to ${placeName(leg.end.place)}`;
 }
 
+/**
+ * What one add under Next leg put in the plan, from its legs: the ride, when there is one (the
+ * walk to or from its stop comes with it), else the walk, bike ride or wait.
+ * "Limited, Palo Alto Caltrain 9:10 AM → Millbrae 9:33 AM", "Wait 15 min at Millbrae, 9:33 AM →
+ * 9:48 AM".
+ */
+export function addedText(legs: Leg[]): string {
+  const leg = legs.find((l) => l.transit) ?? legs.find((l) => !l.auto);
+  if (!leg) return '';
+  const [start, end] = [formatTime(leg.start.time), formatTime(leg.end.time)];
+  if (leg.mode === 'wait') {
+    const minutes = formatDuration(legDurationS(leg));
+    return `Wait ${minutes} at ${placeName(leg.start.place)}, ${start} → ${end}`;
+  }
+  const what = leg.transit ? leg.transit.routeName : MODE_NAMES[leg.mode];
+  return `${what}, ${placeName(leg.start.place)} ${start} → ${placeName(leg.end.place)} ${end}`;
+}
+
 /** Short facts about a leg beyond its places and times. */
 export function legNotes(leg: Leg): string[] {
   const notes: string[] = [];

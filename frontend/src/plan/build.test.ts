@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { NearbyStop, RouteResult, TripDetail, TripStop } from '../api';
+import type { NearbyStop, RouteResult, TransitCall, TripDetail, TripStop } from '../api';
 import {
   alightingLegs,
   boardingLegs,
+  connectorEnds,
   estimatedRoute,
+  missedTrip,
   needsConnector,
   pathInfo,
   pathLeg,
@@ -279,5 +281,93 @@ describe('getting to the stop by bike', () => {
   it('adds a bike leg to the stop', () => {
     const result = boardingLegs(nearAlpha, trip, 1, 3, { ...walkOf(120), mode: 'bike' });
     expect(result.ok && result.legs.map((l) => l.mode)).toEqual(['bike', 'transit']);
+  });
+});
+
+describe('checking the routed walk when a trip is picked', () => {
+  // A line's next three departures from Alpha, at 08:00, 08:15 and 08:30 (PDT).
+  const call = (hhmm: string, stopId = 'tr:Alpha'): TransitCall => ({
+    trip_id: `tr:T${hhmm}`,
+    service_date: '2026-10-12',
+    route: trip.route,
+    headsign: 'Delta',
+    stop: {
+      stop_id: stopId,
+      feed_id: 'tr',
+      name: 'Alpha',
+      lat: 37.4,
+      lon: -122.1,
+      parent_station: null,
+      distance_m: 330,
+      access_s: 300,
+    },
+    stop_sequence: 1,
+    arrival: `2026-10-12T${hhmm}:00-07:00`,
+    departure: `2026-10-12T${hhmm}:00-07:00`,
+    bikes_allowed: 1,
+  });
+  const line = [call('08:00'), call('08:15'), call('08:30')];
+
+  it('says nothing when the walk makes the trip', () => {
+    // Leaving at 07:50, a 10-min walk reaches the stop at 08:00 exactly.
+    expect(missedTrip(nearAlpha, line[0], line, walkOf(10 * 60), 'forward')).toBeNull();
+  });
+
+  it("offers the line's next trip the walk makes", () => {
+    // 14 min (rounded up from 13.5) gets there at 08:04.
+    expect(missedTrip(nearAlpha, line[0], line, walkOf(13.5 * 60), 'forward')).toEqual({
+      reason: "The walk to Alpha takes 14 min, so you'd miss the 8:00 AM.",
+      instead: line[1],
+    });
+    const bike = { ...walkOf(30 * 60), mode: 'bike' as const };
+    expect(missedTrip(nearAlpha, line[0], line, bike, 'forward')).toMatchObject({
+      reason: "The bike ride to Alpha takes 30 min, so you'd miss the 8:00 AM.",
+      instead: line[2],
+    });
+  });
+
+  it('says when none of the listed trips can be made', () => {
+    expect(missedTrip(nearAlpha, line[0], line, walkOf(45 * 60), 'forward')).toEqual({
+      reason:
+        "The walk to Alpha takes 45 min, so you'd miss the 8:00 AM. None of this line's listed " +
+        'departures leaves late enough.',
+      instead: null,
+    });
+  });
+
+  it('only offers trips from the same stop, which the route goes to', () => {
+    const elsewhere = [line[0], call('08:15', 'tr:Other')];
+    expect(missedTrip(nearAlpha, line[0], elsewhere, walkOf(14 * 60), 'forward')?.instead).toBe(
+      null,
+    );
+  });
+
+  it("backwards: offers the line's latest arrival that still gets you there", () => {
+    // The walk from the stop must reach the plan's start, 08:30, in time.
+    const plan: Waypoint = { place: nearCharlie.place, time: '2026-10-12T15:30:00.000Z' };
+    expect(missedTrip(plan, line[2], line, walkOf(5 * 60), 'backward')).toEqual({
+      reason: 'The walk from Alpha takes 5 min, so the 8:30 AM gets you there too late.',
+      instead: line[1],
+    });
+    expect(missedTrip(plan, line[1], line, walkOf(15 * 60), 'backward')).toBeNull();
+    expect(missedTrip(plan, line[2], line, walkOf(40 * 60), 'backward')).toEqual({
+      reason:
+        'The walk from Alpha takes 40 min, so the 8:30 AM gets you there too late. None of ' +
+        "this line's listed arrivals is early enough.",
+      instead: null,
+    });
+  });
+
+  it('routes from the frontier forwards and from the stop backwards, when there is a walk', () => {
+    const stopAt = { lat: 37.4, lon: -122.1, name: 'Alpha' };
+    expect(connectorEnds(nearAlpha.place, stopAt, 'forward')).toEqual({
+      from: nearAlpha.place,
+      to: stopAt,
+    });
+    expect(connectorEnds(nearAlpha.place, stopAt, 'backward')).toEqual({
+      from: stopAt,
+      to: nearAlpha.place,
+    });
+    expect(connectorEnds(atAlpha.place, stopAt, 'forward')).toBeNull();
   });
 });

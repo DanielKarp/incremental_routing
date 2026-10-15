@@ -9,9 +9,14 @@ import {
   type TransitCall,
 } from './api';
 import { TRIPS_PER_LINE, groupCalls } from './callGroups';
-import { Itinerary } from './components/Itinerary';
+import { Itinerary, type LegMessage } from './components/Itinerary';
 import { type MapHandle, MapView, type TripPreview } from './components/MapView';
-import { NextLeg, type PendingPath, type TripSelection } from './components/NextLeg';
+import {
+  type AddedLegs,
+  NextLeg,
+  type PendingPath,
+  type TripSelection,
+} from './components/NextLeg';
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
@@ -22,11 +27,11 @@ import { type LinePreview, lineCall, linePreviews } from './linePreviews';
 import { emptyClick, mapMenuItems } from './mapClicks';
 import {
   NEAR_STOP_M,
-  type LegsResult,
   alightingLegs,
   boardingLegs,
+  connectorEnds,
   estimatedRoute,
-  needsConnector,
+  missedTrip,
   pathInfo,
   pathLeg,
   pathLegArriving,
@@ -36,7 +41,7 @@ import {
   stopPlace,
   waitLeg,
 } from './plan/build';
-import { parsePlanJson } from './plan/files';
+import { addedText, parsePlanJson } from './plan/files';
 import {
   type EditResult,
   appendLegs,
@@ -51,9 +56,10 @@ import {
   setLegEnd,
   setLegPath,
   setLegStart,
+  switchMoved,
 } from './plan/plan';
 import { adjacentRide, transferContext, transferNote } from './plan/transfers';
-import type { Direction, Leg, LegMode, Place, Plan } from './plan/types';
+import type { Direction, Leg, LegMode, Place, Plan, Waypoint } from './plan/types';
 import { loadHistory, loadSession, saveHistory, saveSession } from './storage';
 import { isPlausibleInput, localInputToIso, nowLocalInput, toLocalInput } from './time';
 import { type TransitSearch, useTransitList } from './transitList';
@@ -75,6 +81,23 @@ async function nearestStop(point: LatLon) {
     return (await api.nearbyStops(point, NEAR_STOP_M))[0] ?? null;
   } catch {
     return null; // Only used for a default name.
+  }
+}
+
+/** A walk or bike route, or a straight-line estimate when the router fails, and why. */
+interface Routed {
+  route: RouteResult;
+  fallback: string | null;
+}
+
+async function routeWithFallback(m: PathMode, from: Place, to: Place): Promise<Routed> {
+  try {
+    return { route: await api.route(m, from, to), fallback: null };
+  } catch (e) {
+    return {
+      route: estimatedRoute(m, from, to),
+      fallback: `Routing unavailable (${(e as Error).message}); using a straight-line estimate.`,
+    };
   }
 }
 
@@ -105,11 +128,29 @@ export function App() {
   const [listDwell, setListDwell] = useState<string | null>(null);
   const [mapHover, setMapHover] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingPath | null>(null);
+  // Each walk or bike route asked for counts up, so only the latest answer is used.
+  const pathRequest = useRef(0);
   const [waitMinutes, setWaitMinutes] = useState(10);
+  // The mode chosen before Wait, which Next leg goes back to once the wait is added.
+  const modeBeforeWait = useRef<LegMode>('transit');
+  // The walk or bike ride to the stop of the trip picked (from it, planning backwards). It's
+  // routed as soon as the trip is picked, so the stop list can say if it misses the trip, and
+  // choosing a stop uses it. Kept for the next pick at the same stop, unless it's an estimate.
+  const connector = useRef<{ key: string; routed: Promise<Routed>; estimated?: boolean } | null>(
+    null,
+  );
+  const [connectorDone, setConnectorDone] = useState<{ key: string; routed: Routed } | null>(null);
 
   const [busy, setBusy] = useState(false);
+  // What's gone wrong, or is worth knowing: about the app or a file you opened (at the top of
+  // the panel), about what you're doing under Next leg (shown there), or about one leg.
+  const [alert, setAlert] = useState<{ text: string; tone: 'error' | 'notice' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [legMessage, setLegMessage] = useState<LegMessage | null>(null);
+  // What the last add under Next leg was, said there until the plan next changes.
+  const [added, setAdded] = useState<AddedLegs | null>(null);
+  const addCount = useRef(0);
   const [showSummary, setShowSummary] = useState(false);
   // A picture of the map for the summary and print: undefined while drawing, null if none.
   const [mapImage, setMapImage] = useState<string | null | undefined>(null);
@@ -123,7 +164,7 @@ export function App() {
         setHealth(h);
         if (h.gtfs_loaded) return api.feeds().then(setFeeds);
       })
-      .catch((e: Error) => setError(`Backend unreachable: ${e.message}`));
+      .catch((e: Error) => setAlert({ text: `Backend unreachable: ${e.message}`, tone: 'error' }));
   }, []);
 
   useEffect(() => {
@@ -245,10 +286,27 @@ export function App() {
   function resetBuilder() {
     setSelection(null);
     setPending(null);
+    pathRequest.current++; // A walk or bike route still on its way is no longer wanted.
     // The rows pointed at may be gone; their mouse-leave events never come.
     setListHover(null);
     setListDwell(null);
     setMapHover([]);
+  }
+
+  /**
+   * A new action starts: what was said about the last one goes, under Next leg and under a leg.
+   * Not inside commit(), which would drop a notice the same action has just given.
+   */
+  function clearMessages() {
+    setError(null);
+    setNotice(null);
+    setLegMessage(null);
+  }
+
+  /** Say why a change to a leg was refused, under that leg (or under Next leg if it's gone). */
+  function refuseLeg(legId: string, text: string) {
+    if (plan?.legs.some((l) => l.id === legId)) setLegMessage({ legId, text, tone: 'error' });
+    else setError(text);
   }
 
   /**
@@ -270,12 +328,23 @@ export function App() {
     // Once there are legs the start stays put.
     setMovingAnchor(false);
     resetBuilder();
+    setAdded(null); // Said only until the plan next changes.
+  }
+
+  /**
+   * Commit legs added under Next leg (`legs`, already in `next`). Next leg says what they were
+   * and comes back into view (see NextLeg).
+   */
+  function commitAdd(next: Plan, legs: Leg[]) {
+    commit(next, 'add');
+    setAdded({ id: ++addCount.current, text: addedText(legs) });
   }
 
   function undo() {
     const step = history[history.length - 1];
     if (!step) return;
     const previous = step.plan;
+    clearMessages();
     setHistory((h) => h.slice(0, -1));
     setCommitted(previous.legs.length ? previous : null);
     // The start point may differ (after undoing an import, a rename or a move), so restore it
@@ -284,21 +353,25 @@ export function App() {
     if (undoesTime(step.label)) setTimeInput(toLocalInput(previous.anchor.time));
     setMovingAnchor(false);
     resetBuilder();
+    setAdded(null);
   }
 
   // Ctrl+Z (Cmd+Z on a Mac) undoes too, but not in a field, which keeps its own undo, nor while
   // the summary is open over the plan or a request is under way. Holding the keys down undoes
   // one step, not one for each repeat.
   const undoKey = useRef<() => void>(undefined);
-  // Escape steps back out of what you're doing: it cancels moving the start. It closes an open
-  // menu on the map first, and the summary next (they mark the key as used), and it's left to
-  // a field that has focus. It returns whether it did anything.
+  // Escape steps back out of what you're doing: it cancels moving the start, or else a walk or
+  // bike leg waiting to be added. It closes an open menu on the map first, and the summary next
+  // (they mark the key as used), and it's left to a field that has focus. It returns whether it
+  // did anything.
   const escapeKey = useRef<() => boolean>(undefined);
   useEffect(() => {
     undoKey.current = () => !showSummary && !busy && undo();
     escapeKey.current = () => {
-      if (showSummary || !movingAnchor) return false;
-      setMovingAnchor(false);
+      if (showSummary) return false;
+      if (movingAnchor) setMovingAnchor(false);
+      else if (pending) cancelPending();
+      else return false;
       return true;
     };
   });
@@ -320,33 +393,34 @@ export function App() {
   /** Remove every leg but keep the start point. Undo brings them back. */
   function clear() {
     if (!plan) return;
+    clearMessages();
     remember('clear plan');
     setCommitted(null);
     // A plan without legs starts forwards, as after a reload.
     setDirection('forward');
     resetBuilder();
+    setAdded(null);
   }
 
-  async function run(task: () => Promise<void>) {
+  /** Runs an action that waits for the backend. What goes wrong is said by `fail`. */
+  async function run(task: () => Promise<void>, fail: (reason: string) => void = setError) {
     setBusy(true);
-    setError(null);
-    setNotice(null);
+    setAlert(null);
+    clearMessages();
     try {
       await task();
     } catch (e) {
-      setError((e as Error).message);
+      fail((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
+  /** A walk or bike route for Next leg; if it's only estimated, Next leg says so. */
   async function routeOrEstimate(m: PathMode, from: Place, to: Place): Promise<RouteResult> {
-    try {
-      return await api.route(m, from, to);
-    } catch (e) {
-      setNotice(`Routing unavailable (${(e as Error).message}); using a straight-line estimate.`);
-      return estimatedRoute(m, from, to);
-    }
+    const { route, fallback } = await routeWithFallback(m, from, to);
+    if (fallback) setNotice(fallback);
+    return route;
   }
 
   function pickOnMap(point: LatLon) {
@@ -360,6 +434,7 @@ export function App() {
    */
   function moveAnchor(point: LatLon): boolean {
     if (committed || busy) return false;
+    clearMessages();
     remember('move start');
     void chooseAnchor(point);
     return true;
@@ -379,11 +454,18 @@ export function App() {
     }
   }
 
-  /** A walk or bike route between the frontier and a point, named after a nearby stop. */
-  async function routeAtFrontier(from: Plan, m: PathMode, point: LatLon): Promise<PendingPath> {
+  /** A walk or bike route between the frontier and a place, in the direction of travel. */
+  function routeAtFrontier(from: Plan, m: PathMode, place: Place): Promise<RouteResult> {
     const frontierPlace = (forward ? planEnd(from) : planStart(from)).place;
+    return forward
+      ? routeOrEstimate(m, frontierPlace, place)
+      : routeOrEstimate(m, place, frontierPlace);
+  }
+
+  /** A walk or bike route between the frontier and a point, named after a nearby stop. */
+  async function pathToPoint(from: Plan, m: PathMode, point: LatLon): Promise<PendingPath> {
     const [route, nearest] = await Promise.all([
-      forward ? routeOrEstimate(m, frontierPlace, point) : routeOrEstimate(m, point, frontierPlace),
+      routeAtFrontier(from, m, point),
       nearestStop(point),
     ]);
     return { mode: m, place: { ...point, name: pinName(point, nearest) }, route };
@@ -391,30 +473,46 @@ export function App() {
 
   /** Adds a walk or bike leg between the frontier and its place. */
   function addPath(to: Plan, { place, route }: PendingPath) {
-    commit(
-      forward
-        ? appendLegs(to, [pathLeg(planEnd(to), place, route)])
-        : prependLegs(to, [pathLegArriving(place, planStart(to), route)]),
-      'add',
-    );
+    const leg = forward
+      ? pathLeg(planEnd(to), place, route)
+      : pathLegArriving(place, planStart(to), route);
+    commitAdd(forward ? appendLegs(to, [leg]) : prependLegs(to, [leg]), [leg]);
   }
 
   const choosePathPoint = (point: LatLon) =>
     run(async () => {
       if (!plan || (mode !== 'walk' && mode !== 'bike')) return;
-      setPending(await routeAtFrontier(plan, mode, point));
+      const request = ++pathRequest.current;
+      const picked = await pathToPoint(plan, mode, point);
+      // Not if you've picked another point, changed mode or added a leg meanwhile.
+      if (request === pathRequest.current) setPending(picked);
+    });
+
+  /** The point picked for a walk or bike leg, routed the other way, keeping its name. */
+  const reroutePending = (picked: PendingPath, m: PathMode) =>
+    run(async () => {
+      if (!plan) return;
+      const request = ++pathRequest.current;
+      const route = await routeAtFrontier(plan, m, picked.place);
+      // The name may have been edited meanwhile, so only the route and mode change.
+      if (request === pathRequest.current) setPending((p) => p && { ...p, mode: m, route });
     });
 
   function addPending() {
-    if (!plan || !pending) return;
+    if (!plan || !pending || busy || pending.mode !== mode) return;
     const name = pending.place.name?.trim() || pinName(pending.place);
     addPath(plan, { ...pending, place: { ...pending.place, name } });
+  }
+
+  function cancelPending() {
+    setPending(null);
+    pathRequest.current++;
   }
 
   /** From the map's menu: walk or bike there (or from there), added at once. */
   const addPathAt = (m: PathMode, point: LatLon) =>
     run(async () => {
-      if (plan) addPath(plan, await routeAtFrontier(plan, m, point));
+      if (plan) addPath(plan, await pathToPoint(plan, m, point));
     });
 
   // What the map's menu offers (on a right-click, or a click that picks nothing): moving the
@@ -425,25 +523,71 @@ export function App() {
     direction,
   });
 
-  function addWait() {
-    if (!plan || !(waitMinutes > 0)) return;
-    const seconds = Math.round(waitMinutes * 60);
-    commit(
-      forward
-        ? appendLegs(plan, [waitLeg(planEnd(plan), seconds, 'forward')])
-        : prependLegs(plan, [waitLeg(planStart(plan), seconds, 'backward')]),
-      'add',
-    );
+  /**
+   * Choose the mode under Next leg. With a point picked for a walk or bike leg, switching
+   * between Walk and Bike routes that point again; anything else starts the leg over.
+   */
+  function chooseMode(m: LegMode) {
+    clearMessages();
+    if (m === 'wait' && mode !== 'wait') modeBeforeWait.current = mode;
+    const keep = pending && m !== mode && (m === 'walk' || m === 'bike') ? pending : null;
+    setMode(m);
+    resetBuilder(); // Which also drops a route still on its way.
+    if (keep && (m === 'walk' || m === 'bike')) {
+      setPending(keep); // Shown, but not added, until it's routed for this mode.
+      if (keep.mode !== m) void reroutePending(keep, m);
+    }
   }
 
-  const chooseCall = (call: TransitCall) =>
-    run(async () => {
+  /** From the Wait panel. Next leg then goes back to the mode you had before Wait. */
+  function addWait(minutes: number) {
+    if (!plan || !(minutes > 0) || busy) return;
+    clearMessages();
+    const seconds = Math.round(minutes * 60);
+    const leg = forward
+      ? waitLeg(planEnd(plan), seconds, 'forward')
+      : waitLeg(planStart(plan), seconds, 'backward');
+    commitAdd(forward ? appendLegs(plan, [leg]) : prependLegs(plan, [leg]), [leg]);
+    setMode(modeBeforeWait.current);
+  }
+
+  /** The walk or bike ride between the frontier and a trip's stop, if one is needed. */
+  function connectorFor(call: TransitCall, at: Waypoint | null = frontier) {
+    const ends = at && connectorEnds(at.place, stopPlace(call.stop), direction);
+    if (!ends) return null;
+    const key = JSON.stringify([access, ends.from.lat, ends.from.lon, ends.to.lat, ends.to.lon]);
+    return { ...ends, key };
+  }
+
+  /** Starts routing the connection to (or from) a trip's stop, or reuses one for that stop. */
+  function routeConnector(call: TransitCall) {
+    const c = connectorFor(call);
+    if (!c) return;
+    const known = connector.current;
+    if (known?.key === c.key && !known.estimated) return;
+    const entry: { key: string; routed: Promise<Routed>; estimated?: boolean } = {
+      key: c.key,
+      routed: routeWithFallback(access, c.from, c.to),
+    };
+    connector.current = entry;
+    void entry.routed.then((routed) => {
+      // An estimate is used for this pick, but the next one tries the router again.
+      entry.estimated = !!routed.fallback;
+      if (connector.current === entry) setConnectorDone({ key: c.key, routed });
+    });
+  }
+
+  const chooseCall = (call: TransitCall) => {
+    // The stops are listed without waiting for this route.
+    routeConnector(call);
+    return run(async () => {
       setSelection({ call, trip: await api.trip(call.trip_id, call.service_date) });
       // The rows pointed at are gone now; their mouse-leave events never come.
       setListHover(null);
       setListDwell(null);
       setMapHover([]);
     });
+  };
 
   /** A line picked by name, in the list or on the map: its next trip (or last arrival). */
   function chooseLine(key: string) {
@@ -451,48 +595,82 @@ export function App() {
     if (group && !busy) void chooseCall(lineCall(group, listing));
   }
 
+  // The route to (or from) the picked trip's stop, once it's known, and whether it misses the
+  // trip; if so, the stop list offers the line's trip it does make.
+  const pickedConnector = selection ? connectorFor(selection.call) : null;
+  const pickedRoute =
+    pickedConnector && connectorDone?.key === pickedConnector.key ? connectorDone.routed : null;
+  const missed = selection && frontier && pickedRoute ? missedCall(selection.call) : null;
+
+  function missedCall(call: TransitCall) {
+    if (!frontier || !pickedRoute) return null;
+    const same = (c: TransitCall) =>
+      c.trip_id === call.trip_id &&
+      c.service_date === call.service_date &&
+      c.stop_sequence === call.stop_sequence;
+    const line = lines.find((l) => l.calls.some(same))?.calls ?? [call];
+    return missedTrip(frontier, call, line, pickedRoute.route, direction);
+  }
+
   const chooseStop = (stopSequence: number) =>
     run(async () => {
       if (!plan || !selection) return;
       const { call, trip } = selection;
-      const callStop = stopPlace(call.stop);
-      let result: LegsResult;
-      if (forward) {
-        const from = planEnd(plan);
-        const toStop = needsConnector(from.place, callStop)
-          ? await routeOrEstimate(access, from.place, callStop)
-          : null;
-        result = boardingLegs(from, trip, call.stop_sequence, stopSequence, toStop);
-        if (result.ok) commit(appendLegs(plan, result.legs), 'add');
-      } else {
-        const to = planStart(plan);
-        const fromStop = needsConnector(callStop, to.place)
-          ? await routeOrEstimate(access, callStop, to.place)
-          : null;
-        result = alightingLegs(to, trip, stopSequence, call.stop_sequence, fromStop);
-        if (result.ok) commit(prependLegs(plan, result.legs), 'add');
+      const at = forward ? planEnd(plan) : planStart(plan);
+      // The route found when the trip was picked, or one found now.
+      const c = connectorFor(call, at);
+      let routed: Routed | null = null;
+      if (c) {
+        const known = connector.current;
+        routed = await (known?.key === c.key
+          ? known.routed
+          : routeWithFallback(access, c.from, c.to));
+        if (routed.fallback) setNotice(routed.fallback);
       }
+      const result = forward
+        ? boardingLegs(at, trip, call.stop_sequence, stopSequence, routed?.route ?? null)
+        : alightingLegs(at, trip, stopSequence, call.stop_sequence, routed?.route ?? null);
       if (!result.ok) setError(result.reason);
+      else {
+        const next = forward ? appendLegs(plan, result.legs) : prependLegs(plan, result.legs);
+        commitAdd(next, result.legs);
+      }
     });
 
-  /** Commit an edit to a leg, or return why it was refused. */
-  function applyEdit(result: EditResult, label: UndoLabel): string | null {
-    if (!result.ok) return result.reason;
+  /** Commit an edit to a leg, or say under the leg why it was refused and return that. */
+  function applyEdit(result: EditResult, label: UndoLabel, legId: string): string | null {
+    clearMessages();
+    if (!result.ok) {
+      refuseLeg(legId, result.reason);
+      return result.reason;
+    }
     commit(result.plan, label);
     return null;
   }
 
-  /** Re-route a walk or bike leg the other way: walk <-> bike, keeping its place in the plan. */
+  /**
+   * Re-route a walk or bike leg the other way: walk <-> bike, keeping its place in the plan.
+   * Under the leg it says why it can't, or what else moved, or that the route is estimated.
+   */
   const switchMode = (legId: string) =>
-    run(async () => {
-      const leg = plan?.legs.find((l) => l.id === legId);
-      if (!plan || !leg || (leg.mode !== 'walk' && leg.mode !== 'bike')) return;
-      const other = leg.mode === 'walk' ? 'bike' : 'walk';
-      const route = await routeOrEstimate(other, leg.start.place, leg.end.place);
-      const label = other === 'bike' ? 'switch to bike' : 'switch to walk';
-      const refusal = applyEdit(setLegPath(plan, legId, other, pathInfo(route)), label);
-      if (refusal) setError(refusal);
-    });
+    run(
+      async () => {
+        const leg = plan?.legs.find((l) => l.id === legId);
+        if (!plan || !leg || (leg.mode !== 'walk' && leg.mode !== 'bike')) return;
+        const other = leg.mode === 'walk' ? 'bike' : 'walk';
+        const { route, fallback } = await routeWithFallback(other, leg.start.place, leg.end.place);
+        const label = other === 'bike' ? 'switch to bike' : 'switch to walk';
+        const result = setLegPath(plan, legId, other, pathInfo(route));
+        if (!result.ok) {
+          refuseLeg(legId, result.reason);
+          return;
+        }
+        commit(result.plan, label);
+        const said = [fallback, switchMoved(plan, result.plan, legId)].filter(Boolean).join(' ');
+        if (said) setLegMessage({ legId, text: said, tone: 'warning' });
+      },
+      (reason) => refuseLeg(legId, reason),
+    );
 
   function openSummary() {
     resetBuilder(); // So the map picture shows just the plan (the line previews hide too).
@@ -504,8 +682,9 @@ export function App() {
     e.target.value = ''; // So choosing the same file again still triggers a change.
     if (!file) return;
     const parsed = parsePlanJson(await file.text());
+    clearMessages();
     if (!parsed.ok) {
-      setError(parsed.reason);
+      setAlert({ text: parsed.reason, tone: 'error' });
       return;
     }
     // The history of the plan you had is dropped, but Undo can still bring that plan back.
@@ -515,8 +694,8 @@ export function App() {
     setTimeInput(toLocalInput(parsed.plan.anchor.time));
     setMovingAnchor(false);
     resetBuilder();
-    setError(null);
-    setNotice(`Opened ${file.name}.`);
+    setAdded(null);
+    setAlert({ text: `Opened ${file.name}.`, tone: 'notice' });
   }
 
   return (
@@ -548,6 +727,14 @@ export function App() {
               <code>ir-load-gtfs</code>.
             </p>
           )}
+          {alert && (
+            <p
+              className={alert.tone === 'error' ? 'error' : 'warning'}
+              role={alert.tone === 'error' ? 'alert' : 'status'}
+            >
+              {alert.text}
+            </p>
+          )}
 
           <StartSection
             anchor={anchorPlace}
@@ -557,6 +744,7 @@ export function App() {
             onName={(name) => setAnchorPlace((p) => (p ? { ...p, name } : p))}
             onTime={(value) => {
               setTimeInput(value);
+              clearMessages();
               resetBuilder();
             }}
             onMove={() => setMovingAnchor(true)}
@@ -569,35 +757,30 @@ export function App() {
               issues={issues}
               direction={direction}
               onSetDuration={(legId, s) =>
-                applyEdit(setLegDuration(committed, legId, s), 'time change')
+                applyEdit(setLegDuration(committed, legId, s), 'time change', legId)
               }
               onSetStart={(legId, time) =>
-                applyEdit(setLegStart(committed, legId, time), 'time change')
+                applyEdit(setLegStart(committed, legId, time), 'time change', legId)
               }
               onSetEnd={(legId, time) =>
-                applyEdit(setLegEnd(committed, legId, time), 'time change')
+                applyEdit(setLegEnd(committed, legId, time), 'time change', legId)
               }
               onSwitchMode={switchMode}
-              onMerge={(legId, nextId) => {
-                const refusal = applyEdit(mergeWithNext(committed, legId, nextId), 'merge');
-                if (refusal) setError(refusal);
+              onMerge={(legId, nextId) =>
+                applyEdit(mergeWithNext(committed, legId, nextId), 'merge', legId)
+              }
+              onRename={(place, name) => {
+                clearMessages();
+                commit(renamePlace(committed, place, name), 'rename');
               }}
-              onRename={(place, name) => commit(renamePlace(committed, place, name), 'rename')}
-              onRemove={(legId) => commit(removeFrom(committed, legId, direction), 'remove')}
+              onRemove={(legId) => {
+                clearMessages();
+                commit(removeFrom(committed, legId, direction), 'remove');
+              }}
               onSummary={openSummary}
+              message={legMessage}
               disabled={busy}
             />
-          )}
-
-          {notice && (
-            <p className="warning" role="status">
-              {notice}
-            </p>
-          )}
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
           )}
 
           {plan && frontier && (
@@ -608,12 +791,13 @@ export function App() {
               busy={busy}
               onDirection={(d) => {
                 setDirection(d);
+                clearMessages();
                 resetBuilder();
               }}
-              onMode={(m) => {
-                setMode(m);
-                resetBuilder();
-              }}
+              onMode={chooseMode}
+              added={added}
+              error={error}
+              notice={notice ?? pickedRoute?.fallback ?? null}
               radiusM={radiusM}
               onRadius={setRadiusM}
               access={access}
@@ -624,19 +808,23 @@ export function App() {
               onRetrySearch={transit.retry}
               noteFor={(call) => transferNote(call, ride, direction)}
               selection={selection}
+              missed={missed}
               onChooseCall={chooseCall}
               onChooseLine={chooseLine}
               onHoverLine={setListHover}
               onDwellLine={setListDwell}
               highlightLines={mapHover}
               onChooseStop={chooseStop}
-              onBackToCalls={() => setSelection(null)}
+              onBackToCalls={() => {
+                clearMessages();
+                setSelection(null);
+              }}
               pending={pending}
               onPendingName={(name) =>
                 setPending((p) => (p ? { ...p, place: { ...p.place, name } } : p))
               }
               onAddPending={addPending}
-              onCancelPending={() => setPending(null)}
+              onCancelPending={cancelPending}
               waitMinutes={waitMinutes}
               onWaitMinutes={setWaitMinutes}
               onAddWait={addWait}
