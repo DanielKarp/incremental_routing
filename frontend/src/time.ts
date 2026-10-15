@@ -102,6 +102,19 @@ export function atLocalTime(reference: string, hhmm: string): string {
   return best!;
 }
 
+// While you type a year, the time field reads 0002, 0020, 0202 and so on, or 202609 if you
+// type on. A date more than this many years from today is taken as one still being typed.
+export const PLAUSIBLE_YEARS = 5;
+
+/**
+ * Whether a datetime-local value is a whole date and time, in a year within PLAUSIBLE_YEARS
+ * of this one (in PLAN_TZ). Anything else counts as not typed yet.
+ */
+export function isPlausibleInput(value: string, now: Date = new Date()): boolean {
+  const match = /^(\d{4})-\d{2}-\d{2}T\d{2}:\d{2}$/.exec(value);
+  return !!match && Math.abs(Number(match[1]) - zonedParts(now).year) <= PLAUSIBLE_YEARS;
+}
+
 /** A datetime-local value read as PLAN_TZ wall time, as an ISO instant. */
 export function localInputToIso(value: string): string {
   const [y, mo, d, h, mi] = value.split(/[-T:]/).map(Number);

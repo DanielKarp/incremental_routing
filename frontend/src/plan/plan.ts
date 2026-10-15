@@ -1,7 +1,7 @@
 // Pure plan operations. The UI calls these; nothing here touches the network or React.
 
 import { formatDuration, formatTime } from '../time';
-import type { FixedEnd, Leg, PathInfo, Place, Plan, PlanIssue, Waypoint } from './types';
+import type { Direction, FixedEnd, Leg, PathInfo, Place, Plan, PlanIssue, Waypoint } from './types';
 
 /** Consecutive legs whose endpoints are closer than this are treated as the same place. */
 export const SAME_PLACE_M = 75;
@@ -56,6 +56,27 @@ export function isEndLeg(plan: Plan, legId: string): boolean {
 
 export function removeLeg(plan: Plan, legId: string): Plan {
   return { ...plan, legs: withWaits(plan.legs.filter((l) => l.id !== legId)) };
+}
+
+/**
+ * The legs that go with a leg you chose when you remove it, in travel order. A leg at either
+ * end of the plan, or a wait you added, goes alone: an automatic wait fills the time it leaves.
+ * Any other leg takes every leg beyond it in the planning direction with it (after it when
+ * planning forwards, before it when planning backwards), since removing it alone would leave a
+ * gap in the plan.
+ */
+export function removedWith(plan: Plan, legId: string, direction: Direction): Leg[] {
+  const i = plan.legs.findIndex((l) => l.id === legId);
+  const leg = plan.legs[i];
+  if (!leg || leg.auto || isEndLeg(plan, legId)) return [];
+  if (leg.mode === 'wait' && distanceM(leg.start.place, leg.end.place) <= SAME_PLACE_M) return [];
+  return direction === 'forward' ? plan.legs.slice(i + 1) : plan.legs.slice(0, i);
+}
+
+/** Remove a leg you chose, with the legs that go with it (see removedWith). */
+export function removeFrom(plan: Plan, legId: string, direction: Direction): Plan {
+  const gone = new Set([legId, ...removedWith(plan, legId, direction).map((l) => l.id)]);
+  return { ...plan, legs: withWaits(plan.legs.filter((l) => !gone.has(l.id))) };
 }
 
 export type EditResult = { ok: true; plan: Plan } | { ok: false; reason: string };

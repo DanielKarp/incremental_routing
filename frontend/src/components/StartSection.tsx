@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { Place } from '../plan/types';
+import { PLAUSIBLE_YEARS, isPlausibleInput } from '../time';
 
 interface Props {
   anchor: Place | null;
@@ -13,6 +15,8 @@ interface Props {
 
 /** The point in space and time that the plan grows from, forwards or backwards. */
 export function StartSection({ anchor, timeInput, locked, moving, onName, onTime, onMove }: Props) {
+  // While you type a year it's out of range for a moment, so that's only said once you leave.
+  const [typing, setTyping] = useState(false);
   return (
     <section>
       <h2>Plan from</h2>
@@ -54,8 +58,13 @@ export function StartSection({ anchor, timeInput, locked, moving, onName, onTime
           value={timeInput}
           disabled={locked}
           onChange={(e) => onTime(e.target.value)}
+          onFocus={() => setTyping(true)}
+          onBlur={() => setTyping(false)}
         />
       </label>
+      {!locked && !typing && timeInput && !isPlausibleInput(timeInput) && (
+        <p className="hint">Choose a date within {PLAUSIBLE_YEARS} years of today.</p>
+      )}
       {locked && <p className="muted">Undo or clear the plan to change where it starts from.</p>}
     </section>
   );

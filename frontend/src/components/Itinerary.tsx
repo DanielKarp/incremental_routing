@@ -6,15 +6,15 @@ import {
   canMergeWithNext,
   departureWindow,
   durationAnchor,
-  isEndLeg,
   legBounds,
   legDurationS,
   maxDurationS,
   planEnd,
   planPlaces,
   planStart,
+  removedWith,
 } from '../plan/plan';
-import type { Leg, Place, Plan, PlanIssue } from '../plan/types';
+import type { Direction, Leg, Place, Plan, PlanIssue } from '../plan/types';
 import { atLocalTime, formatClock, formatDuration, formatTime, formatTimeOnDay } from '../time';
 import { HillProfile } from './HillProfile';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
@@ -29,14 +29,14 @@ export interface LegEdits {
 interface Props extends LegEdits {
   plan: Plan;
   issues: PlanIssue[];
+  /** Which end of the plan you're extending: removing a leg in the middle takes those beyond it. */
+  direction: Direction;
   onSwitchMode: (legId: string) => void;
   /** Merge a walk, bike or wait leg with the same kind of leg right after it, `nextId`. */
   onMerge: (legId: string, nextId: string) => void;
   onRename: (place: Place, name: string) => void;
+  /** Remove a leg you chose, and the legs that go with it (see removedWith). */
   onRemove: (legId: string) => void;
-  onUndo: () => void;
-  canUndo: boolean;
-  onClear: () => void;
   onSummary: () => void;
   /** While a request is in flight, edits wait so they can't race it. */
   disabled?: boolean;
@@ -46,6 +46,17 @@ export function Itinerary(props: Props) {
   const { plan, issues } = props;
   const start = planStart(plan);
   const end = planEnd(plan);
+  // How many legs go with a leg you chose when you remove it: those beyond one in the middle.
+  const beyond = (leg: Leg) => (leg.auto ? 0 : removedWith(plan, leg.id, props.direction).length);
+  const removeButton = (leg: Leg) => (
+    <RemoveButton
+      leg={leg}
+      beyond={beyond(leg)}
+      direction={props.direction}
+      disabled={props.disabled}
+      onRemove={props.onRemove}
+    />
+  );
   return (
     <section>
       <h2>Itinerary</h2>
@@ -88,18 +99,9 @@ export function Itinerary(props: Props) {
                     {leg.mode === 'walk' ? 'Switch to bike' : 'Switch to walk'}
                   </button>
                 )}
-                {!leg.auto && isEndLeg(plan, leg.id) && (
-                  <button
-                    type="button"
-                    className="link remove"
-                    disabled={props.disabled}
-                    aria-label={`Remove: ${legTitle(leg)}`}
-                    onClick={() => props.onRemove(leg.id)}
-                  >
-                    Remove
-                  </button>
-                )}
+                {!leg.auto && !beyond(leg) && removeButton(leg)}
               </div>
+              {beyond(leg) > 0 && removeButton(leg)}
             </li>
             {canMergeWithNext(plan, leg.id) && (
               <MergeButton
@@ -134,19 +136,44 @@ export function Itinerary(props: Props) {
         <button type="button" onClick={props.onSummary}>
           Summary &amp; export
         </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={props.disabled || !props.canUndo}
-          onClick={props.onUndo}
-        >
-          Undo
-        </button>
-        <button type="button" className="secondary" disabled={props.disabled} onClick={props.onClear}>
-          Clear plan
-        </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * Removes a leg you chose. A leg in the middle takes the `beyond` legs after it (or before it,
+ * planning backwards) with it, which its text says. That one sits at the foot of the row, away
+ * from Switch to walk / bike, and shows only on the row you point at or move into, so a stray
+ * click can't take half the trip (Undo brings it all back).
+ */
+function RemoveButton(props: {
+  leg: Leg;
+  beyond: number;
+  direction: Direction;
+  disabled?: boolean;
+  onRemove: (legId: string) => void;
+}) {
+  const { leg, beyond } = props;
+  const side = props.direction === 'forward' ? 'after' : 'before';
+  return (
+    <button
+      type="button"
+      className={beyond ? 'link remove remove-beyond' : 'link remove'}
+      disabled={props.disabled}
+      aria-label={
+        beyond
+          ? `Remove ${legTitle(leg)} and the ${beyond} ${beyond === 1 ? 'leg' : 'legs'} ${side} it`
+          : `Remove: ${legTitle(leg)}`
+      }
+      onClick={(e) => {
+        // The second click of a double-click would remove the leg that took its place.
+        if (e.detail > 1) return;
+        props.onRemove(leg.id);
+      }}
+    >
+      {beyond ? `Remove this and the ${beyond === 1 ? 'one' : beyond} ${side}` : 'Remove'}
+    </button>
   );
 }
 

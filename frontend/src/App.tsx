@@ -15,7 +15,9 @@ import { NextLeg, type PendingPath, type TripSelection } from './components/Next
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
+import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
+import { isTypingIn, isUndoKey } from './keys';
 import { type LinePreview, lineCall, linePreviews } from './linePreviews';
 import {
   NEAR_STOP_M,
@@ -42,7 +44,7 @@ import {
   planEnd,
   planStart,
   prependLegs,
-  removeLeg,
+  removeFrom,
   renamePlace,
   setLegDuration,
   setLegEnd,
@@ -51,9 +53,10 @@ import {
 } from './plan/plan';
 import { adjacentRide, transferContext, transferNote } from './plan/transfers';
 import type { Direction, Leg, LegMode, Place, Plan } from './plan/types';
-import { loadSession, saveSession } from './storage';
-import { localInputToIso, nowLocalInput, toLocalInput } from './time';
+import { loadHistory, loadSession, saveHistory, saveSession } from './storage';
+import { isPlausibleInput, localInputToIso, nowLocalInput, toLocalInput } from './time';
 import { type TransitSearch, useTransitList } from './transitList';
+import type { UndoLabel, UndoStep } from './undo';
 
 const NO_LEGS: Leg[] = [];
 const NO_PREVIEWS: LinePreview[] = [];
@@ -62,6 +65,9 @@ const RADIUS_MAX_M = 3000; // The backend's limit.
 // The backend's maximum too. With a few trips per line it holds every line downtown, even
 // within 3 km (about 360 trips at Civic Center).
 const CALL_LIMIT = 500;
+// The undo history can be large, so it's saved this long after it last changed (or when you
+// leave the page) rather than at every change, as the plan is.
+const HISTORY_SAVE_DELAY_MS = 1000;
 
 async function nearestStop(point: LatLon) {
   try {
@@ -80,12 +86,12 @@ export function App() {
   const [anchorPlace, setAnchorPlace] = useState<Place | null>(saved?.anchor ?? null);
   const [timeInput, setTimeInput] = useState(saved?.timeInput ?? nowLocalInput());
   const [movingAnchor, setMovingAnchor] = useState(false);
-  // Once legs exist the plan lives here; earlier versions are kept for undo.
+  // Once legs exist the plan lives here; earlier versions are kept for undo, across reloads.
   const [committed, setCommitted] = useState<Plan | null>(saved?.plan ?? null);
-  const [history, setHistory] = useState<Plan[]>([]);
+  const [history, setHistory] = useState<UndoStep[]>(() => (saved ? loadHistory(saved.plan) : []));
 
   // Building the next leg.
-  const [direction, setDirection] = useState<Direction>('forward');
+  const [direction, setDirection] = useState<Direction>(saved?.direction ?? 'forward');
   const [mode, setMode] = useState<LegMode>('transit');
   const [radiusM, setRadiusM] = useState(500);
   // How you get to (or from) the stop for a transit leg.
@@ -119,9 +125,26 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    saveSession({ anchor: anchorPlace, timeInput, plan: committed });
+    saveSession({ anchor: anchorPlace, timeInput, plan: committed, direction });
     setMapImage(null); // Any earlier picture of the plan is out of date.
-  }, [anchorPlace, timeInput, committed]);
+  }, [anchorPlace, timeInput, committed, direction]);
+
+  useEffect(() => {
+    let unsaved = true;
+    const save = () => {
+      if (unsaved) saveHistory(history, committed);
+      unsaved = false;
+    };
+    const timer = setTimeout(save, HISTORY_SAVE_DELAY_MS);
+    const onHide = () => document.visibilityState === 'hidden' && save();
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [history, committed]);
 
   useEffect(() => {
     if (!showSummary) return;
@@ -133,13 +156,11 @@ export function App() {
     };
   }, [showSummary]);
 
-  const anchorTime = useMemo(() => {
-    try {
-      return localInputToIso(timeInput);
-    } catch {
-      return null; // Half-typed or cleared time field.
-    }
-  }, [timeInput]);
+  const anchorTime = useMemo(
+    // Not while the field is half-typed or cleared, or its year is still being typed.
+    () => (isPlausibleInput(timeInput) ? localInputToIso(timeInput) : null),
+    [timeInput],
+  );
 
   const plan: Plan | null = useMemo(() => {
     if (committed) return committed;
@@ -156,7 +177,7 @@ export function App() {
     !anchorPlace || movingAnchor ? 'anchor' : pathMode ? 'path' : committed ? null : 'anchor';
 
   const day = timeInput.slice(0, 10);
-  const uncovered = uncoveredOn(feeds, day);
+  const uncovered = committed || anchorTime ? uncoveredOn(feeds, day) : [];
 
   // The ride you'd change from (forwards) or to (backwards), for transfer rules.
   const ride = plan ? adjacentRide(plan, direction) : null;
@@ -224,29 +245,61 @@ export function App() {
     setMapHover([]);
   }
 
-  function commit(next: Plan) {
+  /**
+   * Keep the plan as it is now, start point and time included, so Undo can bring it back.
+   * `label` names the change about to be made: the button then reads "Undo <label>". Call it
+   * before changing the start of a plan without legs; changes to legs go through commit.
+   */
+  function remember(label: UndoLabel) {
+    if (plan) setHistory((h) => [...h, { label, plan }]);
+  }
+
+  /** Make `next` the plan, after a change named `label`. Undo goes back to the plan before. */
+  function commit(next: Plan, label: UndoLabel) {
     if (!plan) return;
-    setHistory((h) => [...h, plan]);
+    remember(label);
     setCommitted(next.legs.length ? next : null);
+    // Renaming places renames the start point too.
+    setAnchorPlace(next.anchor.place);
     resetBuilder();
   }
 
   function undo() {
-    const previous = history[history.length - 1];
+    const previous = history[history.length - 1]?.plan;
     if (!previous) return;
     setHistory((h) => h.slice(0, -1));
     setCommitted(previous.legs.length ? previous : null);
-    // The start point may differ (after undoing an import), so restore it too.
+    // The start point may differ (after undoing an import or a rename), so restore it too.
     setAnchorPlace(previous.anchor.place);
     setTimeInput(toLocalInput(previous.anchor.time));
+    setMovingAnchor(false);
     resetBuilder();
   }
+
+  // Ctrl+Z (Cmd+Z on a Mac) undoes too, but not in a field, which keeps its own undo, nor while
+  // the summary is open over the plan or a request is under way. Holding the keys down undoes
+  // one step, not one for each repeat.
+  const undoKey = useRef<() => void>(undefined);
+  useEffect(() => {
+    undoKey.current = () => !showSummary && !busy && undo();
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !isUndoKey(e) || isTypingIn(e.target)) return;
+      e.preventDefault();
+      if (!e.repeat) undoKey.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /** Remove every leg but keep the start point. Undo brings them back. */
   function clear() {
     if (!plan) return;
-    setHistory((h) => [...h, plan]);
+    remember('clear plan');
     setCommitted(null);
+    // A plan without legs starts forwards, as after a reload.
+    setDirection('forward');
     resetBuilder();
   }
 
@@ -312,6 +365,7 @@ export function App() {
       forward
         ? appendLegs(to, [pathLeg(planEnd(to), place, route)])
         : prependLegs(to, [pathLegArriving(place, planStart(to), route)]),
+      'add',
     );
   }
 
@@ -349,6 +403,7 @@ export function App() {
       forward
         ? appendLegs(plan, [waitLeg(planEnd(plan), seconds, 'forward')])
         : prependLegs(plan, [waitLeg(planStart(plan), seconds, 'backward')]),
+      'add',
     );
   }
 
@@ -379,22 +434,22 @@ export function App() {
           ? await routeOrEstimate(access, from.place, callStop)
           : null;
         result = boardingLegs(from, trip, call.stop_sequence, stopSequence, toStop);
-        if (result.ok) commit(appendLegs(plan, result.legs));
+        if (result.ok) commit(appendLegs(plan, result.legs), 'add');
       } else {
         const to = planStart(plan);
         const fromStop = needsConnector(callStop, to.place)
           ? await routeOrEstimate(access, callStop, to.place)
           : null;
         result = alightingLegs(to, trip, stopSequence, call.stop_sequence, fromStop);
-        if (result.ok) commit(prependLegs(plan, result.legs));
+        if (result.ok) commit(prependLegs(plan, result.legs), 'add');
       }
       if (!result.ok) setError(result.reason);
     });
 
   /** Commit an edit to a leg, or return why it was refused. */
-  function applyEdit(result: EditResult): string | null {
+  function applyEdit(result: EditResult, label: UndoLabel): string | null {
     if (!result.ok) return result.reason;
-    commit(result.plan);
+    commit(result.plan, label);
     return null;
   }
 
@@ -405,7 +460,8 @@ export function App() {
       if (!plan || !leg || (leg.mode !== 'walk' && leg.mode !== 'bike')) return;
       const other = leg.mode === 'walk' ? 'bike' : 'walk';
       const route = await routeOrEstimate(other, leg.start.place, leg.end.place);
-      const refusal = applyEdit(setLegPath(plan, legId, other, pathInfo(route)));
+      const label = other === 'bike' ? 'switch to bike' : 'switch to walk';
+      const refusal = applyEdit(setLegPath(plan, legId, other, pathInfo(route)), label);
       if (refusal) setError(refusal);
     });
 
@@ -423,7 +479,8 @@ export function App() {
       setError(parsed.reason);
       return;
     }
-    if (plan) setHistory((h) => [...h, plan]);
+    // The history of the plan you had is dropped, but Undo can still bring that plan back.
+    setHistory(plan ? [{ label: 'open plan', plan }] : []);
     setCommitted(parsed.plan.legs.length ? parsed.plan : null);
     setAnchorPlace(parsed.plan.anchor.place);
     setTimeInput(toLocalInput(parsed.plan.anchor.time));
@@ -480,27 +537,26 @@ export function App() {
             <Itinerary
               plan={committed}
               issues={issues}
-              onSetDuration={(legId, s) => applyEdit(setLegDuration(committed, legId, s))}
-              onSetStart={(legId, time) => applyEdit(setLegStart(committed, legId, time))}
-              onSetEnd={(legId, time) => applyEdit(setLegEnd(committed, legId, time))}
+              direction={direction}
+              onSetDuration={(legId, s) =>
+                applyEdit(setLegDuration(committed, legId, s), 'time change')
+              }
+              onSetStart={(legId, time) =>
+                applyEdit(setLegStart(committed, legId, time), 'time change')
+              }
+              onSetEnd={(legId, time) =>
+                applyEdit(setLegEnd(committed, legId, time), 'time change')
+              }
               onSwitchMode={switchMode}
               onMerge={(legId, nextId) => {
-                const refusal = applyEdit(mergeWithNext(committed, legId, nextId));
+                const refusal = applyEdit(mergeWithNext(committed, legId, nextId), 'merge');
                 if (refusal) setError(refusal);
               }}
-              onRename={(place, name) => commit(renamePlace(committed, place, name))}
-              onRemove={(legId) => commit(removeLeg(committed, legId))}
-              onUndo={undo}
-              canUndo={history.length > 0}
-              onClear={clear}
+              onRename={(place, name) => commit(renamePlace(committed, place, name), 'rename')}
+              onRemove={(legId) => commit(removeFrom(committed, legId, direction), 'remove')}
               onSummary={openSummary}
               disabled={busy}
             />
-          )}
-          {!committed && history.length > 0 && (
-            <button type="button" className="secondary" onClick={undo}>
-              Undo
-            </button>
           )}
 
           {notice && (
@@ -554,6 +610,16 @@ export function App() {
               waitMinutes={waitMinutes}
               onWaitMinutes={setWaitMinutes}
               onAddWait={addWait}
+            />
+          )}
+
+          {(committed || history.length > 0) && (
+            <UndoBar
+              history={history}
+              onUndo={undo}
+              canClear={!!committed}
+              onClear={clear}
+              disabled={busy}
             />
           )}
 

@@ -9,7 +9,9 @@ import {
   planStart,
   prependLeg,
   prependLegs,
+  removeFrom,
   removeLeg,
+  removedWith,
   setLegDuration,
 } from './plan';
 import type { Leg, Place, Plan } from './types';
@@ -83,6 +85,67 @@ describe('building a plan', () => {
   it('rebuilds waits when a leg is removed', () => {
     const plan = removeLeg(commute, 'bike');
     expect(plan.legs.map((l) => l.id)).toEqual(['train', 'walk']);
+  });
+});
+
+describe('removing legs', () => {
+  // Home -> Station by bike, a coffee at the station, then the train and a walk.
+  const coffee: Leg = {
+    ...leg('coffee', 'wait', STATION, '07:50', STATION, '07:55'),
+    fixed: 'start',
+  };
+  const withCoffee = appendLegs(emptyPlan, [bike, coffee, train, walk]);
+  const ids = (legs: Leg[]) => legs.map((l) => l.id);
+
+  it('removes a leg at either end of the plan alone', () => {
+    expect(removedWith(commute, 'walk', 'forward')).toEqual([]);
+    expect(removedWith(commute, 'bike', 'forward')).toEqual([]);
+    expect(ids(removeFrom(commute, 'walk', 'forward').legs)).toEqual([
+      'bike',
+      'wait-after-bike',
+      'train',
+    ]);
+    expect(ids(removeFrom(commute, 'bike', 'backward').legs)).toEqual(['train', 'walk']);
+  });
+
+  it('removes a wait you added alone, wherever it is, and fills the time it leaves', () => {
+    expect(ids(withCoffee.legs)).toEqual(['bike', 'coffee', 'wait-after-coffee', 'train', 'walk']);
+    expect(removedWith(withCoffee, 'coffee', 'forward')).toEqual([]);
+    expect(removedWith(withCoffee, 'coffee', 'backward')).toEqual([]);
+    const plan = removeFrom(withCoffee, 'coffee', 'forward');
+    expect(ids(plan.legs)).toEqual(['bike', 'wait-after-bike', 'train', 'walk']);
+    expect(plan.legs[1]).toMatchObject({ auto: true, start: bike.end, end: train.start });
+    expect(findIssues(plan)).toEqual([]);
+  });
+
+  it('takes the legs after a leg in the middle when planning forwards', () => {
+    expect(ids(removedWith(withCoffee, 'train', 'forward'))).toEqual(['walk']);
+    expect(ids(removeFrom(withCoffee, 'train', 'forward').legs)).toEqual(['bike', 'coffee']);
+  });
+
+  it('takes the legs before a leg in the middle when planning backwards', () => {
+    // Every row above it goes, the automatic wait included.
+    expect(ids(removedWith(withCoffee, 'train', 'backward'))).toEqual([
+      'bike',
+      'coffee',
+      'wait-after-coffee',
+    ]);
+    expect(ids(removeFrom(withCoffee, 'train', 'backward').legs)).toEqual(['walk']);
+  });
+
+  it('never removes automatic waits', () => {
+    expect(removedWith(withCoffee, 'wait-after-coffee', 'forward')).toEqual([]);
+    expect(isEndLeg(withCoffee, 'wait-after-coffee')).toBe(false);
+  });
+
+  it('removes a wait whose ends are apart as any other leg in the middle', () => {
+    const moved: Leg = { ...coffee, end: { place: CITY, time: coffee.end.time } };
+    const plan = appendLegs(emptyPlan, [bike, moved, train, walk]);
+    expect(ids(removedWith(plan, 'coffee', 'forward'))).toEqual([
+      'wait-after-coffee',
+      'train',
+      'walk',
+    ]);
   });
 });
 

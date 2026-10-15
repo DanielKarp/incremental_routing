@@ -176,6 +176,8 @@ footer {
   }
   .panel {
     border-right: 0;
+    /* The page scrolls instead, so the undo bar can stay at the bottom of the screen. */
+    overflow-y: visible;
   }
 }
 
@@ -381,6 +383,44 @@ button.link {
 
 .leg .remove {
   align-self: start;
+}
+
+/* Remove for a leg in the middle, which takes the legs beyond it too. It sits at the foot of the
+   row, away from Switch to walk / bike, and shows only on the row you point at or move into with
+   the keyboard, so a stray click can't take half the trip. Touch screens, which can't point,
+   always show it. */
+.leg .remove-beyond {
+  grid-column: 2 / -1;
+  justify-self: end;
+}
+
+@media (hover: hover) {
+  .leg:not(:hover, :focus-within) .remove-beyond {
+    opacity: 0;
+  }
+}
+
+/* Undo and Clear plan, pinned to the bottom of the panel while there's more of it below. */
+.undo-bar {
+  position: sticky;
+  /* Over the panel's padding, which would otherwise show what scrolls under it. */
+  bottom: -16px;
+  z-index: 1;
+  margin: auto -16px 0;
+  padding: 8px 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.undo-bar + footer {
+  margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  /* The page scrolls there, and has no padding to cover. */
+  .undo-bar {
+    bottom: 0;
+  }
 }
 
 /* Summary dialog. */

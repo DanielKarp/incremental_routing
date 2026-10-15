@@ -147,13 +147,32 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * An error's `detail` as text. FastAPI sends a message, or for a request it can't accept (422)
+ * a list of the fields at fault: "Invalid time: input should be a valid datetime or date."
+ */
+export function errorDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  const fields = Array.isArray(detail)
+    ? detail.flatMap((d: { loc?: unknown; msg?: unknown }) => {
+        if (typeof d?.msg !== 'string') return [];
+        // Where the field was sent (query, body, path) goes without saying.
+        const loc = Array.isArray(d.loc) ? d.loc.slice(1) : [];
+        // "Field required" reads on as "field required", but "JSON" stays as it is.
+        const msg = /^[A-Z][a-z]/.test(d.msg) ? d.msg[0].toLowerCase() + d.msg.slice(1) : d.msg;
+        return [`Invalid ${loc.length ? loc.join('.') : 'request'}: ${msg}.`];
+      })
+    : [];
+  return fields.length ? fields.join(' ') : JSON.stringify(detail);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+      if (body?.detail !== undefined) detail = errorDetail(body.detail);
     } catch {
       // Not JSON; keep the status text.
     }
