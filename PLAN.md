@@ -379,8 +379,10 @@ fix them automatically.
     routes), get a thin dark edge in place of the white one so they still show. The same
     goes for the stops of a trip being chosen.
 - **Pointing and clicking.**
-  - Pointing at a row frames its line after a short pause, so sweeping down the list doesn't
-    throw the map around. Leaving the list goes back to the earlier view (M10).
+  - Pointing at a row highlights its line at once. The map frames it only once the pointer
+    has rested on the row for 0.4 s (or keyboard focus has stayed in the row), so sweeping
+    across the list or scrolling it never moves the map: rows that scroll under a still
+    pointer don't count. Leaving the list goes back to the earlier view after 0.3 s (M10).
   - Pointing at a line on the map names it and marks its row without moving the map. Where
     lines overlap, all of them are highlighted and named.
   - Clicking a line picks its next trip (or last arrival). Where lines overlap, a small menu
@@ -661,7 +663,7 @@ fix them automatically.
     mistaken for planned rides.
 15. **Lists follow the plan.** There's no search button. The departure or arrival list is
     found again whenever the plan or the search settings change. The map stays where you put
-    it when a list loads; only pointing at a row frames a line.
+    it when a list loads; only resting the pointer on a row frames a line.
 16. **Right-click adds walk and bike legs at once.** The menu follows the direction toggle.
     Its leg skips the preview and is named after a stop nearby (or by coordinates), and the
     *Next leg* panel keeps its mode. *Undo* and *Rename places* fix a wrong click or name.

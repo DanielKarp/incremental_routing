@@ -139,8 +139,9 @@ does in Docker.
      The map shows those lines too, thin and faded in their own colours, each with a dot at
      the stop where you'd catch it. Forwards, a line runs from that stop to the end of its
      route; backwards, from the start of its route to the stop. Point at a row to highlight
-     its line and zoom to it (the map goes back when you move away), or point at a line on
-     the map to see its name.
+     its line, and rest there a moment to zoom to it (the map goes back when you move away).
+     Scrolling the list, or sweeping the pointer across it, leaves the map where it is. Point
+     at a line on the map to see its name.
 
      Pick a time, or click a line's name for its next departure (or last arrival). You can
      also click the line itself on the map; where lines overlap, you're asked which one.

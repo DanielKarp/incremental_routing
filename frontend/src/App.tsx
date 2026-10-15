@@ -91,9 +91,10 @@ export function App() {
   // How you get to (or from) the stop for a transit leg.
   const [access, setAccess] = useState<PathMode>('walk');
   const [selection, setSelection] = useState<TripSelection | null>(null);
-  // The line pointed at in the list (framed on the map), and those on the map (marked in the
-  // list).
+  // The line pointed at in the list (highlighted on the map), the one it rested on (framed on
+  // the map), and those pointed at on the map (marked in the list).
   const [listHover, setListHover] = useState<string | null>(null);
+  const [listDwell, setListDwell] = useState<string | null>(null);
   const [mapHover, setMapHover] = useState<string[]>([]);
   const [pending, setPending] = useState<PendingPath | null>(null);
   const [waitMinutes, setWaitMinutes] = useState(10);
@@ -219,6 +220,7 @@ export function App() {
     setPending(null);
     // The rows pointed at may be gone; their mouse-leave events never come.
     setListHover(null);
+    setListDwell(null);
     setMapHover([]);
   }
 
@@ -355,6 +357,7 @@ export function App() {
       setSelection({ call, trip: await api.trip(call.trip_id, call.service_date) });
       // The rows pointed at are gone now; their mouse-leave events never come.
       setListHover(null);
+      setListDwell(null);
       setMapHover([]);
     });
 
@@ -538,6 +541,7 @@ export function App() {
               onChooseCall={chooseCall}
               onChooseLine={chooseLine}
               onHoverLine={setListHover}
+              onDwellLine={setListDwell}
               highlightLines={mapHover}
               onChooseStop={chooseStop}
               onBackToCalls={() => setSelection(null)}
@@ -564,6 +568,7 @@ export function App() {
           end={committed ? planEnd(committed).place : null}
           lines={showSummary ? NO_PREVIEWS : previews}
           focusLine={listHover}
+          frameLine={listDwell}
           tripPreview={tripPreview}
           pendingPoint={pending?.place ?? null}
           pendingRoute={pending?.route.geometry ?? null}

@@ -22,9 +22,6 @@ const END = '#15803d';
 // Edges that are white for most routes are this instead for pale ones (see isPale).
 const PALE_EDGE = '#4b5563';
 const SNAPSHOT_TIMEOUT_MS = 10_000;
-// Pointing at a row frames its line after this pause, so sweeping down the list doesn't
-// throw the map around.
-const FOCUS_DELAY_MS = 150;
 // How far from the pointer (pixels) a line or stop still counts as under it.
 const POINTER_SLOP_PX = 6;
 // At most this many line names in the hover label.
@@ -67,8 +64,10 @@ interface Props {
   end: Place | null;
   /** While choosing a trip: every line in the list, drawn faintly with the stop to catch it. */
   lines: LinePreview[];
-  /** The line pointed at in the list: highlighted and framed. */
+  /** The line pointed at in the list: highlighted. */
   focusLine: string | null;
+  /** The line the pointer rested on in the list (see CallList): framed. */
+  frameLine: string | null;
   tripPreview: TripPreview | null;
   /** A walk or bike leg being set up: its picked point and route. */
   pendingPoint: Place | null;
@@ -93,7 +92,8 @@ type Hit =
   | { kind: 'lines'; keys: string[] };
 
 export function MapView(props: Props) {
-  const { ref, start, end, lines, focusLine, tripPreview, pendingPoint, pendingRoute } = props;
+  const { ref, start, end, lines, focusLine, frameLine, tripPreview } = props;
+  const { pendingPoint, pendingRoute } = props;
   const { picking, legs } = props;
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -103,8 +103,9 @@ export function MapView(props: Props) {
   const [styleReady, setStyleReady] = useState(false);
   // The lines under the pointer on the map: highlighted, but not framed (the map stays put).
   const [mapHover, setMapHover] = useState<string[]>([]);
-  // The view before a row in the list was pointed at, to go back to when the pointer leaves.
-  const viewBeforeFocus = useRef<maplibregl.CameraOptions | null>(null);
+  // The view before a line in the list was framed, to go back to when the pointer leaves, and
+  // the plan's legs then.
+  const viewBeforeFocus = useRef<{ view: maplibregl.CameraOptions; legs: Leg[] } | null>(null);
 
   useEffect(() => {
     latest.current = props;
@@ -283,32 +284,35 @@ export function MapView(props: Props) {
     if (styleReady && source) source.setData(lineFeatures(lines));
   }, [styleReady, lines]);
 
-  // Frame the line pointed at in the list, and go back to the earlier view when the pointer
-  // leaves the list. The map doesn't move when a list loads: that happens after every change.
+  // Frame the line the pointer rested on in the list, and go back to the earlier view when
+  // the pointer leaves the list. Lines merely passed over, or scrolled past, are highlighted
+  // but not framed. The map doesn't move when a list loads: that happens after every change.
+  // A line's path can arrive after the pointer has rested on its row; it's framed then.
+  const framable = !!frameLine && lines.some((l) => l.key === frameLine && l.line);
   useEffect(() => {
     const m = map.current;
-    const all = latest.current.lines;
-    if (!m || !all.length) {
-      viewBeforeFocus.current = null; // A trip was chosen, or the list went: nothing to go back to.
-      return;
-    }
-    const timer = setTimeout(() => {
-      const bounds = focusLine && linesBounds(all.filter((l) => l.key === focusLine));
-      if (bounds) {
-        viewBeforeFocus.current ??= {
+    if (!m) return;
+    const { lines: all, legs: now, tripPreview: trip } = latest.current;
+    const bounds = frameLine && linesBounds(all.filter((l) => l.key === frameLine));
+    if (bounds) {
+      viewBeforeFocus.current ??= {
+        view: {
           center: m.getCenter(),
           zoom: m.getZoom(),
           bearing: m.getBearing(),
           pitch: m.getPitch(),
-        };
-        m.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 500 });
-      } else if (!focusLine && viewBeforeFocus.current) {
-        m.easeTo({ ...viewBeforeFocus.current, duration: 500 });
-        viewBeforeFocus.current = null;
+        },
+        legs: now,
+      };
+      m.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 500 });
+    } else if (!frameLine && viewBeforeFocus.current) {
+      // Not when a trip was just chosen, or the plan changed: the map shows those instead.
+      if (!trip && viewBeforeFocus.current.legs === now) {
+        m.easeTo({ ...viewBeforeFocus.current.view, duration: 500 });
       }
-    }, FOCUS_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [focusLine]);
+      viewBeforeFocus.current = null;
+    }
+  }, [frameLine, framable]);
 
   // As a string, so the effect runs only when the lines change.
   const highlight = JSON.stringify(mapHover.length ? mapHover : focusLine ? [focusLine] : []);

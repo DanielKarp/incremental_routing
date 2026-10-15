@@ -1,5 +1,6 @@
 import type { PathMode, TransitCall } from '../api';
 import { TRIPS_PER_LINE, groupCalls } from '../callGroups';
+import { useHoverIntent } from '../hoverIntent';
 import { lineCall } from '../linePreviews';
 import { routeLabel } from '../plan/build';
 import type { TransferNote } from '../plan/transfers';
@@ -19,6 +20,11 @@ interface Props {
   onChooseLine?: (key: string) => void;
   /** The pointer or keyboard focus moved onto a line's row, or off it (null). */
   onHoverLine?: (key: string | null) => void;
+  /**
+   * The pointer rested on a line's row, or keyboard focus stayed on it: the line is of
+   * interest, not just passed over. Null once the pointer leaves the list.
+   */
+  onDwellLine?: (key: string | null) => void;
   /** The lines pointed at on the map: their rows are marked. */
   highlight?: string[];
   disabled?: boolean;
@@ -32,6 +38,7 @@ export function CallList(props: Props) {
   const { calls, direction, access, noteFor, onSelect, onChooseLine, onHoverLine, highlight } =
     props;
   const { disabled } = props;
+  const intent = useHoverIntent<string>(props.onDwellLine);
   if (!calls.length) return <p className="muted">No trips found in this window.</p>;
   const timeOf = (c: TransitCall) =>
     formatTime(direction === 'departures' ? c.departure : c.arrival);
@@ -42,7 +49,17 @@ export function CallList(props: Props) {
         line. Pick a time, or a line (here or on the map) for its{' '}
         {direction === 'departures' ? 'next trip' : 'last arrival'}.
       </p>
-      <ul className="calls">
+      <ul
+        className="calls"
+        onPointerLeave={() => intent.leave()}
+        onBlur={(e) => {
+          // Focus left the list, rather than moving to another row or button in it.
+          if (!e.currentTarget.contains(e.relatedTarget)) {
+            onHoverLine?.(null);
+            intent.leave();
+          }
+        }}
+      >
         {groupCalls(calls, direction).map((group) => {
           const { key, calls: trips } = group;
           const { route, headsign, stop } = trips[0];
@@ -68,6 +85,16 @@ export function CallList(props: Props) {
               className={`call-group${highlight?.includes(key) ? ' highlighted' : ''}`}
               onMouseEnter={() => onHoverLine?.(key)}
               onMouseLeave={() => onHoverLine?.(null)}
+              onPointerMove={(e) => {
+                // A finger isn't pointing, and a move of nothing is a browser's echo of a scroll.
+                if (e.pointerType !== 'touch' && (e.movementX || e.movementY)) {
+                  intent.move(key, e.clientX, e.clientY);
+                }
+              }}
+              onFocus={() => {
+                onHoverLine?.(key);
+                intent.focus(key);
+              }}
             >
               {onChooseLine ? (
                 <button
@@ -78,8 +105,6 @@ export function CallList(props: Props) {
                     direction === 'departures' ? 'off' : 'on'
                   }`}
                   onClick={() => onChooseLine(key)}
-                  onFocus={() => onHoverLine?.(key)}
-                  onBlur={() => onHoverLine?.(null)}
                 >
                   {name}
                 </button>

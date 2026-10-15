@@ -46,6 +46,8 @@ interface Props {
   /** A line was picked by name (in the list or on the map). */
   onChooseLine: (key: string) => void;
   onHoverLine: (key: string | null) => void;
+  /** A line in the list is of interest (see CallList), or none is. */
+  onDwellLine: (key: string | null) => void;
   /** The lines pointed at on the map. */
   highlightLines: string[];
   onChooseStop: (stopSequence: number) => void;
@@ -166,6 +168,7 @@ function TransitPanel(p: Props) {
           onSelect={p.onChooseCall}
           onChooseLine={p.onChooseLine}
           onHoverLine={p.onHoverLine}
+          onDwellLine={p.onDwellLine}
           highlight={p.highlightLines}
           disabled={p.busy}
         />
