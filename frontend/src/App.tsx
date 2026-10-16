@@ -65,6 +65,7 @@ import {
   prependLegs,
   removeFrom,
   renamePlace,
+  samePlace,
   setLegDuration,
   setLegEnd,
   setLegPath,
@@ -158,6 +159,10 @@ export function App() {
   const [pending, setPending] = useState<PendingPath | null>(null);
   // Each walk or bike route asked for counts up, so only the latest answer is used.
   const pathRequest = useRef(0);
+  // The point last clicked for a walk or bike leg, while its route is on its way (see chooseMode).
+  const picking = useRef<{ request: number; point: LatLon } | null>(null);
+  // Each trip picked counts up too, so a trip that comes after you've moved on isn't shown.
+  const tripRequest = useRef(0);
   const [waitMinutes, setWaitMinutes] = useState(10);
   // The mode chosen before Wait, which Next leg goes back to once the wait is added.
   const modeBeforeWait = useRef<LegMode>('transit');
@@ -174,15 +179,18 @@ export function App() {
   // Back was chosen: the list is put back as soon as it shows.
   const [returning, setReturning] = useState<ListLeft | null>(null);
 
-  const [busy, setBusy] = useState(false);
+  // How many requests are under way (see run). They can overlap: a point routed by bike, say,
+  // and then by walk again before the first answer comes.
+  const [requests, setRequests] = useState(0);
+  const busy = requests > 0;
   // What's gone wrong, or is worth knowing: about the app or a file you opened (at the top of
   // the panel), about what you're doing under Next leg (shown there), or about one leg.
   const [alert, setAlert] = useState<{ text: string; tone: 'error' | 'notice' } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [legMessage, setLegMessage] = useState<LegMessage | null>(null);
-  // What the last add under Next leg was, said there until the plan next changes.
-  const [added, setAdded] = useState<AddedLegs | null>(null);
+  // What the last add under Next leg was (and its legs), said there until the plan next changes.
+  const [added, setAdded] = useState<(AddedLegs & { legIds: string[] }) | null>(null);
   const addCount = useRef(0);
   const [showSummary, setShowSummary] = useState(false);
   // A picture of the map for the summary and print: undefined while drawing, null if none.
@@ -352,6 +360,7 @@ export function App() {
     setReturning(null);
     setPending(null);
     pathRequest.current++; // A walk or bike route still on its way is no longer wanted.
+    tripRequest.current++; // Nor is a trip.
     // The rows pointed at may be gone; their mouse-leave events never come.
     setListHover(null);
     setListDwell(null);
@@ -390,8 +399,11 @@ export function App() {
     if (before) setHistory((h) => [...h, { label, plan: before }]);
   }
 
-  /** Make `next` the plan, after a change named `label`. Undo goes back to the plan before. */
-  function commit(next: Plan, label: UndoLabel) {
+  /**
+   * Make `next` the plan, after a change named `label`. Undo goes back to the plan before.
+   * What you were doing under Next leg starts over, unless the change moves nothing (a rename).
+   */
+  function commit(next: Plan, label: UndoLabel, { movesNothing = false } = {}) {
     if (!plan) return;
     remember(label);
     setCommitted(next.legs.length ? next : null);
@@ -399,6 +411,7 @@ export function App() {
     setAnchorPlace(next.anchor.place);
     // Once there are legs the start stays put.
     setMovingAnchor(false);
+    if (movesNothing) return;
     resetBuilder();
     setAdded(null); // Said only until the plan next changes.
   }
@@ -409,7 +422,7 @@ export function App() {
    */
   function commitAdd(next: Plan, legs: Leg[]) {
     commit(next, 'add');
-    setAdded({ id: ++addCount.current, text: addedText(legs) });
+    setAdded({ id: ++addCount.current, text: addedText(legs), legIds: legs.map((l) => l.id) });
   }
 
   function undo() {
@@ -493,7 +506,7 @@ export function App() {
 
   /** Runs an action that waits for the backend. What goes wrong is said by `fail`. */
   async function run(task: () => Promise<void>, fail: (reason: string) => void = setError) {
-    setBusy(true);
+    setRequests((n) => n + 1);
     setAlert(null);
     clearMessages();
     try {
@@ -501,15 +514,8 @@ export function App() {
     } catch (e) {
       fail((e as Error).message);
     } finally {
-      setBusy(false);
+      setRequests((n) => n - 1);
     }
-  }
-
-  /** A walk or bike route for Next leg; if it's only estimated, Next leg says so. */
-  async function routeOrEstimate(m: PathMode, from: Place, to: Place): Promise<RouteResult> {
-    const { route, fallback } = await routeWithFallback(m, from, to);
-    if (fallback) setNotice(fallback);
-    return route;
   }
 
   function pickOnMap(point: LatLon) {
@@ -546,25 +552,33 @@ export function App() {
     }
   }
 
-  /** A walk or bike route between the frontier and a place, in the direction of travel. */
-  function routeAtFrontier(from: Plan, m: PathMode, place: Place): Promise<RouteResult> {
+  /**
+   * A walk or bike route between the frontier and a place, in the direction of travel, and why
+   * it's only estimated if it is. Next leg says that only if the route is still wanted.
+   */
+  function routeAtFrontier(from: Plan, m: PathMode, place: Place): Promise<Routed> {
     const frontierPlace = (forward ? planEnd(from) : planStart(from)).place;
     return forward
-      ? routeOrEstimate(m, frontierPlace, place)
-      : routeOrEstimate(m, place, frontierPlace);
+      ? routeWithFallback(m, frontierPlace, place)
+      : routeWithFallback(m, place, frontierPlace);
   }
 
   /**
    * A walk or bike route between the frontier and a point, named after a place you named in
    * the plan nearby (see namedPlaceNear), or else after a nearby stop.
    */
-  async function pathToPoint(from: Plan, m: PathMode, point: LatLon): Promise<PendingPath> {
+  async function pathToPoint(
+    from: Plan,
+    m: PathMode,
+    point: LatLon,
+  ): Promise<{ path: PendingPath; fallback: string | null }> {
     const named = namedPlaceNear(from, point, direction);
-    const [route, nearest] = await Promise.all([
+    const [{ route, fallback }, nearest] = await Promise.all([
       routeAtFrontier(from, m, named ?? point),
       named ? null : nearestStop(point),
     ]);
-    return { mode: m, place: named ?? { ...point, name: pinName(point, nearest) }, route };
+    const place = named ?? { ...point, name: pinName(point, nearest) };
+    return { path: { mode: m, place, route }, fallback };
   }
 
   /** Adds a walk or bike leg between the frontier and its place. */
@@ -575,13 +589,17 @@ export function App() {
     commitAdd(forward ? appendLegs(to, [leg]) : prependLegs(to, [leg]), [leg]);
   }
 
-  const choosePathPoint = (point: LatLon) =>
+  const choosePathPoint = (point: LatLon, m: LegMode = mode) =>
     run(async () => {
-      if (!plan || (mode !== 'walk' && mode !== 'bike')) return;
+      if (!plan || (m !== 'walk' && m !== 'bike')) return;
       const request = ++pathRequest.current;
-      const picked = await pathToPoint(plan, mode, point);
+      picking.current = { request, point };
+      const { path, fallback } = await pathToPoint(plan, m, point);
       // Not if you've picked another point, changed mode or added a leg meanwhile.
-      if (request === pathRequest.current) setPending(picked);
+      if (request !== pathRequest.current) return;
+      picking.current = null;
+      setPending(path);
+      setNotice(fallback);
     });
 
   /** The point picked for a walk or bike leg, routed the other way, keeping its name. */
@@ -589,9 +607,11 @@ export function App() {
     run(async () => {
       if (!plan) return;
       const request = ++pathRequest.current;
-      const route = await routeAtFrontier(plan, m, picked.place);
+      const { route, fallback } = await routeAtFrontier(plan, m, picked.place);
+      if (request !== pathRequest.current) return;
       // The name may have been edited meanwhile, so only the route and mode change.
-      if (request === pathRequest.current) setPending((p) => p && { ...p, mode: m, route });
+      setPending((p) => p && { ...p, mode: m, route });
+      setNotice(fallback);
     });
 
   function addPending() {
@@ -603,6 +623,7 @@ export function App() {
   }
 
   function cancelPending() {
+    clearMessages(); // Such as that its route is only estimated.
     setPending(null);
     pathRequest.current++;
   }
@@ -610,7 +631,10 @@ export function App() {
   /** From the map's menu: walk or bike there (or from there), added at once. */
   const addPathAt = (m: PathMode, point: LatLon) =>
     run(async () => {
-      if (plan) addPath(plan, await pathToPoint(plan, m, point));
+      if (!plan) return;
+      const { path, fallback } = await pathToPoint(plan, m, point);
+      addPath(plan, path);
+      setNotice(fallback);
     });
 
   // What the map's menu offers (on a right-click, or a click that picks nothing): moving the
@@ -626,18 +650,21 @@ export function App() {
 
   /**
    * Choose the mode under Next leg. With a point picked for a walk or bike leg, switching
-   * between Walk and Bike routes that point again; anything else starts the leg over.
+   * between Walk and Bike routes that point again: the one you clicked last, even while its
+   * route is on its way. Anything else starts the leg over, and the mode you're in already
+   * changes nothing.
    */
   function chooseMode(m: LegMode) {
+    if (m === mode) return;
     clearMessages();
-    if (m === 'wait' && mode !== 'wait') modeBeforeWait.current = mode;
-    const keep = pending && m !== mode && (m === 'walk' || m === 'bike') ? pending : null;
+    if (m === 'wait') modeBeforeWait.current = mode;
+    const clicked = picking.current?.request === pathRequest.current ? picking.current.point : null;
     setMode(m);
     resetBuilder(); // Which also drops a route still on its way.
-    if (keep && (m === 'walk' || m === 'bike')) {
-      setPending(keep); // Shown, but not added, until it's routed for this mode.
-      if (keep.mode !== m) void reroutePending(keep, m);
-    }
+    if (m !== 'walk' && m !== 'bike') return;
+    if (pending) setPending(pending); // Shown, but not added, until it's routed for this mode.
+    if (clicked) void choosePathPoint(clicked, m);
+    else if (pending && pending.mode !== m) void reroutePending(pending, m);
   }
 
   /** From the Wait panel. Next leg then goes back to the mode you had before Wait. */
@@ -689,8 +716,12 @@ export function App() {
     }
     // The stops are listed without waiting for this route.
     routeConnector(call);
+    const request = ++tripRequest.current;
     return run(async () => {
-      setSelection({ call, trip: await api.trip(call.trip_id, call.service_date) });
+      const trip = await api.trip(call.trip_id, call.service_date);
+      // Not if you've changed mode or direction, or picked another trip, meanwhile.
+      if (request !== tripRequest.current) return;
+      setSelection({ call, trip });
       // The rows pointed at are gone now; their mouse-leave events never come.
       setListHover(null);
       setListDwell(null);
@@ -772,11 +803,24 @@ export function App() {
       }
     });
 
-  /** Rename a place everywhere it appears in the plan, as one step for Undo. */
+  /**
+   * Rename a place everywhere it appears in the plan, as one step for Undo. Nothing moves, so
+   * what you're doing under Next leg carries on: the stop chooser stays open, and a walk or bike
+   * leg waiting to be added stays, as does what was added last. So a click on Add, which saves
+   * the name as it leaves the field, still lands on Add.
+   */
   function rename(place: Place, name: string) {
     if (!committed) return;
     clearMessages();
-    commit(renamePlace(committed, place, name), 'rename');
+    const next = renamePlace(committed, place, name);
+    commit(next, 'rename', { movesNothing: true });
+    // What Next leg says was added, and a leg waiting to go to that place, take the new name.
+    setAdded(
+      (a) => a && { ...a, text: addedText(next.legs.filter((l) => a.legIds.includes(l.id))) },
+    );
+    setPending((p) =>
+      p && samePlace(p.place, place) ? { ...p, place: withName(p.place, name) } : p,
+    );
   }
 
   /** Commit an edit to a leg, or say under the leg why it was refused and return that. */
@@ -939,6 +983,7 @@ export function App() {
               frontier={frontier}
               busy={busy}
               onDirection={(d) => {
+                if (d === direction) return; // The end you're at already.
                 setDirection(d);
                 clearMessages();
                 resetBuilder();

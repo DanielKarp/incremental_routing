@@ -9,6 +9,8 @@ describe('telling pointing at a row from passing over it', () => {
     vi.useFakeTimers();
     wanted = [];
     intent = new HoverIntent<string>((key) => wanted.push(key));
+    // The pointer comes over the list. Its first move only says where it is (see 'a new list').
+    intent.move('N', 0, 0);
   });
   afterEach(() => {
     intent.dispose();
@@ -70,6 +72,21 @@ describe('telling pointing at a row from passing over it', () => {
     intent.move('KT', 100, 100 + 2 * REST_PX);
     vi.advanceTimersByTime(DWELL_MS);
     expect(wanted).toEqual(['KT']);
+  });
+
+  it('wants nothing that a new list brings up under the pointer, until the pointer moves', () => {
+    // Back from the stop chooser puts a row where the pointer was, and a hand on the mouse
+    // nudges it.
+    intent.dispose();
+    intent = new HoverIntent<string>((key) => wanted.push(key));
+    intent.move('N', 100, 100);
+    intent.move('N', 102, 101);
+    vi.advanceTimersByTime(5 * DWELL_MS);
+    expect(wanted).toEqual([]);
+
+    intent.move('N', 100, 100 + 3 * REST_PX); // Moving the pointer, though, means it.
+    vi.advanceTimersByTime(DWELL_MS);
+    expect(wanted).toEqual(['N']);
   });
 
   it('keeps the row it wanted while the list scrolls', () => {

@@ -37,7 +37,7 @@ export interface TripSelection {
   trip: TripDetail;
 }
 
-/** What the last add under Next leg put in the plan (see addedText); each add makes a new one. */
+/** What the last add under Next leg put in the plan (see addedText); each add has a new id. */
 export interface AddedLegs {
   id: number;
   text: string;
@@ -134,12 +134,14 @@ export function NextLeg(props: Props) {
   useEffect(() => bringIntoView(messages.current), [error, notice]);
   // After an add, the controls for the next leg come into view: the panel scrolls no further
   // than it takes, so a short itinerary stays in sight. The button you used is gone (a stop,
-  // Add walk leg), so keyboard focus comes here rather than to the top of the page.
+  // Add walk leg), so keyboard focus comes here rather than to the top of the page. Only after
+  // an add: a rename since then changes the names in what was added, and nothing else.
+  const addedId = added?.id;
   useEffect(() => {
-    if (!added) return;
+    if (addedId === undefined) return;
     bringIntoView(controls.current);
     if (document.activeElement === document.body) heading.current?.focus({ preventScroll: true });
-  }, [added]);
+  }, [addedId]);
   return (
     <section className="next-leg">
       <div className="next-leg-controls" ref={controls}>

@@ -29,7 +29,8 @@ export function focusQuietly(el: { focus(options?: FocusOptions): void }) {
 /**
  * Tells pointing at a row on purpose from passing over it: the row the pointer rests on, or
  * keyboard focus stays on, becomes wanted after DWELL_MS. Sweeping across rows on the way
- * somewhere else, or rows scrolling under a pointer that hasn't moved, wants nothing.
+ * somewhere else, or rows scrolling (or the list coming up) under a pointer that hasn't moved,
+ * wants nothing.
  * `onWant` hears of each change: a row's key, or null once the pointer leaves the list.
  */
 export class HoverIntent<K> {
@@ -42,6 +43,11 @@ export class HoverIntent<K> {
   private wanted: K | null = null;
   /** Where the pointer came to rest, or was when the list last scrolled. */
   private restAt: { x: number; y: number } | null = null;
+  /**
+   * Whether the pointer has moved over the list yet. A new list can come up under it, when it
+   * loads or when you go back to it, just as rows scroll under it.
+   */
+  private pointedAt = false;
 
   constructor(onWant: (key: K | null) => void) {
     this.onWant = onWant;
@@ -50,6 +56,13 @@ export class HoverIntent<K> {
   /** The pointer moved over a row. */
   move(key: K, x: number, y: number) {
     clearTimeout(this.leaving);
+    if (!this.pointedAt) {
+      // The first move only says where the pointer is, as after a scroll: a row is wanted once
+      // the pointer has moved from there, and rested.
+      this.pointedAt = true;
+      this.restAt = { x, y };
+      return;
+    }
     const still =
       this.restAt !== null && Math.hypot(x - this.restAt.x, y - this.restAt.y) <= REST_PX;
     // Still resting on the same row; or a row the list scrolled under a pointer that hasn't
