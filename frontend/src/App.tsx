@@ -42,6 +42,7 @@ import {
   connectorEnds,
   estimatedRoute,
   missedTrip,
+  namedPlaceNear,
   pathInfo,
   pathLeg,
   pathLegArriving,
@@ -66,7 +67,9 @@ import {
   setLegEnd,
   setLegPath,
   setLegStart,
+  startsAtAnchor,
   switchMoved,
+  withName,
 } from './plan/plan';
 import { adjacentRide, transferContext, transferNote } from './plan/transfers';
 import type { Direction, Leg, LegMode, Place, Plan, Waypoint } from './plan/types';
@@ -527,13 +530,17 @@ export function App() {
       : routeOrEstimate(m, place, frontierPlace);
   }
 
-  /** A walk or bike route between the frontier and a point, named after a nearby stop. */
+  /**
+   * A walk or bike route between the frontier and a point, named after a place you named in
+   * the plan nearby (see namedPlaceNear), or else after a nearby stop.
+   */
   async function pathToPoint(from: Plan, m: PathMode, point: LatLon): Promise<PendingPath> {
+    const named = namedPlaceNear(from, point, direction);
     const [route, nearest] = await Promise.all([
-      routeAtFrontier(from, m, point),
-      nearestStop(point),
+      routeAtFrontier(from, m, named ?? point),
+      named ? null : nearestStop(point),
     ]);
-    return { mode: m, place: { ...point, name: pinName(point, nearest) }, route };
+    return { mode: m, place: named ?? { ...point, name: pinName(point, nearest) }, route };
   }
 
   /** Adds a walk or bike leg between the frontier and its place. */
@@ -565,8 +572,10 @@ export function App() {
 
   function addPending() {
     if (!plan || !pending || busy || pending.mode !== mode) return;
-    const name = pending.place.name?.trim() || pinName(pending.place);
-    addPath(plan, { ...pending, place: { ...pending.place, name } });
+    const typed = pending.place.name?.trim();
+    // A name cleared in the card is named after its coordinates, which aren't yours.
+    const place = typed ? { ...pending.place, name: typed } : withName(pending.place, '');
+    addPath(plan, { ...pending, place: { ...place, name: place.name || pinName(place) } });
   }
 
   function cancelPending() {
@@ -734,6 +743,13 @@ export function App() {
       }
     });
 
+  /** Rename a place everywhere it appears in the plan, as one step for Undo. */
+  function rename(place: Place, name: string) {
+    if (!committed) return;
+    clearMessages();
+    commit(renamePlace(committed, place, name), 'rename');
+  }
+
   /** Commit an edit to a leg, or say under the leg why it was refused and return that. */
   function applyEdit(result: EditResult, label: UndoLabel, legId: string): string | null {
     clearMessages();
@@ -839,8 +855,12 @@ export function App() {
             anchor={anchorPlace}
             timeInput={timeInput}
             locked={!!committed}
+            anchorTime={committed?.anchor.time}
+            plannedFrom={!!committed && !startsAtAnchor(committed)}
             moving={movingAnchor}
-            onName={(name) => setAnchorPlace((p) => (p ? { ...p, name } : p))}
+            onName={(name) => setAnchorPlace((p) => (p ? withName(p, name) : p))}
+            onRename={(name) => committed && rename(committed.anchor.place, name)}
+            busy={busy}
             onTime={(value) => {
               setTimeInput(value);
               clearMessages();
@@ -868,10 +888,7 @@ export function App() {
               onMerge={(legId, nextId) =>
                 applyEdit(mergeWithNext(committed, legId, nextId), 'merge', legId)
               }
-              onRename={(place, name) => {
-                clearMessages();
-                commit(renamePlace(committed, place, name), 'rename');
-              }}
+              onRename={rename}
               onRemove={(legId) => {
                 clearMessages();
                 commit(removeFrom(committed, legId, direction), 'remove');
@@ -923,7 +940,7 @@ export function App() {
               onBackToCalls={backToList}
               pending={pending}
               onPendingName={(name) =>
-                setPending((p) => (p ? { ...p, place: { ...p.place, name } } : p))
+                setPending((p) => (p ? { ...p, place: withName(p.place, name) } : p))
               }
               onAddPending={addPending}
               onCancelPending={cancelPending}

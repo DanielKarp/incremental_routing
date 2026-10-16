@@ -12,7 +12,9 @@ import {
   setLegEnd,
   setLegPath,
   setLegStart,
+  startsAtAnchor,
   switchMoved,
+  withName,
 } from './plan';
 import type { Leg, PathInfo, Place, Plan } from './types';
 
@@ -189,6 +191,31 @@ describe('renaming places', () => {
       ['Vienna LRT', 'Milpitas Station'],
     ]);
     expect(renamePlace(screenshot, HOME, 'My place').anchor.place.name).toBe('My place');
+  });
+
+  it('marks a name you gave as yours, and an empty one as no name', () => {
+    const plan = renamePlace(screenshot, VIENNA, 'Vienna LRT');
+    expect(plan.legs[0].end.place).toEqual({ ...VIENNA, name: 'Vienna LRT', named: true });
+    const cleared = renamePlace(plan, VIENNA, '');
+    expect(cleared.legs[0].end.place).toEqual({ ...VIENNA, name: '' });
+    expect(withName(HOME, '  ')).toEqual({ ...HOME, name: '  ' });
+  });
+});
+
+describe('where the plan was started from', () => {
+  it('is the start of a plan planned forwards from it', () => {
+    expect(startsAtAnchor(screenshot)).toBe(true);
+    expect(startsAtAnchor({ anchor: walk.start, legs: [] })).toBe(true);
+  });
+
+  it('is not once legs come before it, or its first legs have gone', () => {
+    const cafe = leg('cafe', 'walk', CAFE, '08:10', HOME, '08:30', { fixed: 'end' });
+    expect(startsAtAnchor({ ...screenshot, legs: [cafe, ...screenshot.legs] })).toBe(false);
+    expect(startsAtAnchor({ ...screenshot, legs: [ride] })).toBe(false);
+  });
+
+  it('is still after the start has been renamed', () => {
+    expect(startsAtAnchor(renamePlace(screenshot, HOME, 'My place'))).toBe(true);
   });
 });
 

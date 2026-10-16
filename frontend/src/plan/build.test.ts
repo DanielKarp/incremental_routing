@@ -6,6 +6,7 @@ import {
   connectorEnds,
   estimatedRoute,
   missedTrip,
+  namedPlaceNear,
   needsConnector,
   pathInfo,
   pathLeg,
@@ -17,7 +18,7 @@ import {
   waitLeg,
 } from './build';
 import { appendLegs, prependLegs } from './plan';
-import type { Waypoint } from './types';
+import type { Leg, Place, Plan, Waypoint } from './types';
 
 function stop(seq: number, name: string, lat: number, time: string): TripStop {
   return {
@@ -369,5 +370,90 @@ describe('checking the routed walk when a trip is picked', () => {
       to: nearAlpha.place,
     });
     expect(connectorEnds(atAlpha.place, stopAt, 'forward')).toBeNull();
+  });
+});
+
+describe('naming a new end point after a place you named', () => {
+  // About 11 m per 0.0001 degree of latitude.
+  const HOME: Place = { lat: 37.44, lon: -122.16, name: 'Home', named: true };
+  const CAFE: Place = { lat: 37.45, lon: -122.16, name: 'Cafe', named: true };
+  const STOP: Place = { lat: 37.46, lon: -122.16, name: 'Palo Alto', stopId: 'ct:pa' };
+  const NEAR_STOP: Place = { lat: 37.47, lon: -122.16, name: 'Near Alma St' };
+  const PARK: Place = { lat: 37.48, lon: -122.16, name: 'Park', named: true };
+  const at = (place: Place, hhmm: string): Waypoint => ({
+    place,
+    time: `2026-10-12T${hhmm}:00.000Z`,
+  });
+  const walk = (id: string, from: Waypoint, to: Waypoint): Leg => ({
+    id,
+    mode: 'walk',
+    fixed: 'start',
+    start: from,
+    end: to,
+  });
+  // Home -> Cafe -> the stop -> near a stop -> Park, planned forwards from home.
+  const plan: Plan = appendLegs({ anchor: at(HOME, '15:00'), legs: [] }, [
+    walk('a', at(HOME, '15:00'), at(CAFE, '15:10')),
+    walk('b', at(CAFE, '15:10'), at(STOP, '15:20')),
+    walk('c', at(STOP, '15:20'), at(NEAR_STOP, '15:30')),
+    walk('d', at(NEAR_STOP, '15:30'), at(PARK, '15:40')),
+  ]);
+  const north = (place: Place, m: number) => ({ lat: place.lat + m / 111_000, lon: place.lon });
+
+  it('going back home ends exactly at home, called Home', () => {
+    expect(namedPlaceNear(plan, north(HOME, 40), 'forward')).toEqual({
+      lat: HOME.lat,
+      lon: HOME.lon,
+      name: 'Home',
+      named: true,
+    });
+  });
+
+  it('near a place in the middle of the plan, takes its name but stays where you picked', () => {
+    const point = north(CAFE, 50);
+    expect(namedPlaceNear(plan, point, 'forward')).toEqual({ ...point, name: 'Cafe', named: true });
+  });
+
+  it('not further than 75 m away', () => {
+    expect(namedPlaceNear(plan, north(CAFE, 80), 'forward')).toBeNull();
+  });
+
+  it("not from stops, or places named after a stop or by coordinates: they aren't yours", () => {
+    expect(namedPlaceNear(plan, north(STOP, 10), 'forward')).toBeNull();
+    expect(namedPlaceNear(plan, north(NEAR_STOP, 10), 'forward')).toBeNull();
+    const renamedStop = { ...STOP, name: 'My station', named: true };
+    const withStop = appendLegs({ anchor: at(renamedStop, '15:00'), legs: [] }, [
+      walk('x', at(renamedStop, '15:00'), at(PARK, '15:10')),
+    ]);
+    expect(namedPlaceNear(withStop, north(STOP, 10), 'forward')).toBeNull();
+  });
+
+  it('not from the end you are extending', () => {
+    expect(namedPlaceNear(plan, north(PARK, 20), 'forward')).toBeNull();
+  });
+
+  it('takes the nearest of two', () => {
+    const between = appendLegs({ anchor: at(HOME, '15:00'), legs: [] }, [
+      walk('a', at(HOME, '15:00'), at({ ...CAFE, lat: HOME.lat + 0.0009 }, '15:10')),
+      walk('b', at({ ...CAFE, lat: HOME.lat + 0.0009 }, '15:10'), at(PARK, '15:20')),
+    ]);
+    expect(namedPlaceNear(between, north(HOME, 60), 'forward')?.name).toBe('Cafe');
+    expect(namedPlaceNear(between, north(HOME, 30), 'forward')?.name).toBe('Home');
+  });
+
+  it('backwards: near the end of the plan, ends exactly there', () => {
+    expect(namedPlaceNear(plan, north(PARK, 20), 'backward')).toEqual({
+      lat: PARK.lat,
+      lon: PARK.lon,
+      name: 'Park',
+      named: true,
+    });
+    // Home is where it starts, which you're extending backwards.
+    expect(namedPlaceNear(plan, north(HOME, 20), 'backward')).toBeNull();
+  });
+
+  it('nothing to go by in a plan without legs', () => {
+    const noLegs = { anchor: at(HOME, '15:00'), legs: [] };
+    expect(namedPlaceNear(noLegs, north(HOME, 20), 'forward')).toBeNull();
   });
 });

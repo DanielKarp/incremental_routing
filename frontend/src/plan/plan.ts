@@ -362,8 +362,32 @@ function joinPaths(a: PathInfo, b: PathInfo): PathInfo {
   return path;
 }
 
-const samePlace = (a: Place, b: Place) =>
+export const samePlace = (a: Place, b: Place) =>
   a.lat === b.lat && a.lon === b.lon && (a.stopId ?? null) === (b.stopId ?? null);
+
+/**
+ * A place with a name you gave it. An empty name leaves it unnamed, to be shown by its
+ * coordinates (placeName).
+ */
+export function withName(place: Place, name: string): Place {
+  const renamed: Place = { ...place, name };
+  if (name.trim()) renamed.named = true;
+  else delete renamed.named;
+  return renamed;
+}
+
+/**
+ * Whether the plan begins where and when you started planning it. Not once legs have been
+ * added before that point, or the first legs after it removed or moved.
+ */
+export function startsAtAnchor(plan: Plan): boolean {
+  const start = planStart(plan);
+  return (
+    toMs(start.time) === toMs(plan.anchor.time) &&
+    start.place.lat === plan.anchor.place.lat &&
+    start.place.lon === plan.anchor.place.lon
+  );
+}
 
 /** Every distinct place in the plan, in travel order. */
 export function planPlaces(plan: Plan): Place[] {
@@ -377,10 +401,10 @@ export function planPlaces(plan: Plan): Place[] {
   return places;
 }
 
-/** Rename a place everywhere it appears in the plan. */
+/** Rename a place everywhere it appears in the plan, with a name you gave it (see withName). */
 export function renamePlace(plan: Plan, place: Place, name: string): Plan {
   const rename = (w: Waypoint): Waypoint =>
-    samePlace(w.place, place) ? { ...w, place: { ...w.place, name } } : w;
+    samePlace(w.place, place) ? { ...w, place: withName(w.place, name) } : w;
   return {
     anchor: rename(plan.anchor),
     legs: withWaits(plan.legs.map((l) => ({ ...l, start: rename(l.start), end: rename(l.end) }))),

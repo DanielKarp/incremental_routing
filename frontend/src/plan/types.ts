@@ -14,6 +14,11 @@ export interface Place {
   name?: string;
   /** Set when the place is a transit stop. */
   stopId?: string;
+  /**
+   * Set when you gave the place its name, rather than it being named after a stop nearby or by
+   * its coordinates. A new walk or bike end point near such a place takes its name.
+   */
+  named?: boolean;
 }
 
 /** A point in space-time: where the traveller is, and when. */

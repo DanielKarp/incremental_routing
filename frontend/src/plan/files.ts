@@ -121,7 +121,8 @@ export function isPlace(v: unknown): v is Place {
     isNum(v.lat) &&
     isNum(v.lon) &&
     (v.name === undefined || isStr(v.name)) &&
-    (v.stopId === undefined || isStr(v.stopId))
+    (v.stopId === undefined || isStr(v.stopId)) &&
+    (v.named === undefined || typeof v.named === 'boolean')
   );
 }
 

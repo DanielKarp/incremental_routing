@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   atLocalTime,
   formatClock,
+  formatDayAndTime,
   formatTime,
   isPlausibleInput,
   localInputToIso,
@@ -23,6 +24,14 @@ describe('Bay Area wall time', () => {
     expect(nowLocalInput(new Date('2026-10-12T14:30:00Z'))).toBe('2026-10-12T07:30');
     // Newer ICU puts a narrow no-break space before AM.
     expect(formatTime('2026-10-12T14:30:00Z')).toMatch(/^7:30\sAM$/);
+  });
+});
+
+describe('the start of a plan', () => {
+  it('reads as a short day and time', () => {
+    expect(formatDayAndTime('2026-10-20T16:00:00.000Z')).toMatch(/^Tue Oct 20, 9:00\sAM$/);
+    // Late at night in the Bay Area is the next day in UTC.
+    expect(formatDayAndTime('2026-10-21T06:30:00.000Z')).toMatch(/^Tue Oct 20, 11:30\sPM$/);
   });
 });
 

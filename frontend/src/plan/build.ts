@@ -11,8 +11,18 @@ import type {
   TripStop,
 } from '../api';
 import { formatDuration, formatTime } from '../time';
-import { SAME_PLACE_M, addSeconds, distanceM, newLegId, toMs } from './plan';
-import type { Direction, Leg, PathInfo, Place, Waypoint } from './types';
+import {
+  SAME_PLACE_M,
+  addSeconds,
+  distanceM,
+  newLegId,
+  planEnd,
+  planPlaces,
+  planStart,
+  samePlace,
+  toMs,
+} from './plan';
+import type { Direction, Leg, PathInfo, Place, Plan, Waypoint } from './types';
 
 const ACCESS_WORDS: Record<PathMode, string> = { walk: 'walk', bike: 'bike ride' };
 
@@ -35,6 +45,34 @@ export function stopPlace(stop: Stop): Place {
 export function pinName(point: { lat: number; lon: number }, nearest?: NearbyStop | null): string {
   if (nearest && nearest.distance_m <= NEAR_STOP_M) return `Near ${nearest.name}`;
   return `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+}
+
+/**
+ * A new walk or bike end point near a place you named in the plan takes its name: going back
+ * home is "Home" again. The nearest such place within SAME_PLACE_M counts, except stops, places
+ * still named after a stop or by their coordinates, and the end of the plan you're extending
+ * from. The point stays where you picked it, unless that place is the other end of the plan:
+ * then it's that place, so a round trip ends exactly where it began. Null when no place you
+ * named is that near, and the point is named after a stop as before (pinName).
+ */
+export function namedPlaceNear(
+  plan: Plan,
+  point: { lat: number; lon: number },
+  direction: Direction,
+): Place | null {
+  const forward = direction === 'forward';
+  const frontier = (forward ? planEnd(plan) : planStart(plan)).place;
+  const otherEnd = (forward ? planStart(plan) : planEnd(plan)).place;
+  let nearest: Place | null = null;
+  let nearestM = SAME_PLACE_M;
+  for (const place of planPlaces(plan)) {
+    if (!place.named || !place.name || place.stopId || samePlace(place, frontier)) continue;
+    const m = distanceM(place, point);
+    if (m <= nearestM) [nearest, nearestM] = [place, m];
+  }
+  if (!nearest?.name) return null;
+  const at = samePlace(nearest, otherEnd) ? nearest : point;
+  return { lat: at.lat, lon: at.lon, name: nearest.name, named: true };
 }
 
 /** Whether getting between a place and a stop needs a walk leg of its own. */

@@ -1,11 +1,8 @@
-import { Fragment, type KeyboardEvent, useState } from 'react';
-import { legNotes, legTitle, placeName } from '../plan/files';
+import { Fragment, type KeyboardEvent, useId, useState } from 'react';
+import { MODE_NAMES, legNotes, legTitle, placeName } from '../plan/files';
 import { hillProfile } from '../plan/hills';
 import {
-  type LegBounds,
   canMergeWithNext,
-  departureWindow,
-  durationAnchor,
   legBounds,
   legDurationS,
   maxDurationS,
@@ -15,8 +12,10 @@ import {
   removedWith,
 } from '../plan/plan';
 import type { Direction, Leg, Place, Plan, PlanIssue } from '../plan/types';
-import { atLocalTime, formatClock, formatDuration, formatTime, formatTimeOnDay } from '../time';
+import { atLocalTime, formatClock, formatDuration, formatTimeOnDay } from '../time';
+import { timesHint } from '../timesHint';
 import { HillProfile } from './HillProfile';
+import { NameInPlace } from './NameField';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
 
 /**
@@ -44,6 +43,7 @@ interface Props extends LegEdits {
   onSwitchMode: (legId: string) => void;
   /** Merge a walk, bike or wait leg with the same kind of leg right after it, `nextId`. */
   onMerge: (legId: string, nextId: string) => void;
+  /** Rename a place everywhere it appears, from its name in a leg or under Rename places. */
   onRename: (place: Place, name: string) => void;
   /** Remove a leg you chose, and the legs that go with it (see removedWith). */
   onRemove: (legId: string) => void;
@@ -82,31 +82,7 @@ export function Itinerary(props: Props) {
                 {formatTimeOnDay(leg.end.time, start.time)}
               </span>
               <div className="leg-body">
-                <LegSummary leg={leg} />
-                {editable(leg) && (
-                  <LegTimesEditor
-                    key={`${leg.id}:${leg.mode}:${leg.start.time}:${leg.end.time}`}
-                    plan={plan}
-                    leg={leg}
-                    edits={props}
-                    disabled={props.disabled}
-                  />
-                )}
-                {issues
-                  .filter((i) => i.legId === leg.id && i.kind !== 'bikes-not-allowed')
-                  .map((i) => (
-                    <p key={i.kind} className={`issue issue-${i.severity}`}>
-                      {i.message}
-                    </p>
-                  ))}
-                {props.message?.legId === leg.id && (
-                  <p
-                    className={`issue issue-${props.message.tone}`}
-                    role={props.message.tone === 'error' ? 'alert' : 'status'}
-                  >
-                    {props.message.text}
-                  </p>
-                )}
+                <LegSummary leg={leg} disabled={props.disabled} onRename={props.onRename} />
               </div>
               <div className="leg-actions">
                 {(leg.mode === 'walk' || leg.mode === 'bike') && (
@@ -121,6 +97,31 @@ export function Itinerary(props: Props) {
                 )}
                 {!leg.auto && !beyond(leg) && removeButton(leg)}
               </div>
+              {editable(leg) && (
+                <LegTimesEditor
+                  // Kept while the leg's times change, so a field keeps focus after Enter.
+                  key={leg.id}
+                  plan={plan}
+                  leg={leg}
+                  edits={props}
+                  disabled={props.disabled}
+                />
+              )}
+              {issues
+                .filter((i) => i.legId === leg.id && i.kind !== 'bikes-not-allowed')
+                .map((i) => (
+                  <p key={i.kind} className={`issue issue-${i.severity} leg-wide`}>
+                    {i.message}
+                  </p>
+                ))}
+              {props.message?.legId === leg.id && (
+                <p
+                  className={`issue issue-${props.message.tone} leg-wide`}
+                  role={props.message.tone === 'error' ? 'alert' : 'status'}
+                >
+                  {props.message.text}
+                </p>
+              )}
               {beyond(leg) > 0 && removeButton(leg)}
             </li>
             {canMergeWithNext(plan, leg.id) && (
@@ -236,7 +237,20 @@ const MERGED_NAMES: Record<Leg['mode'], string> = {
 const editable = (leg: Leg) =>
   leg.mode === 'walk' || leg.mode === 'bike' || (leg.mode === 'wait' && !leg.auto);
 
-function LegSummary({ leg }: { leg: Leg }) {
+/** A leg in a few words. Its places' names can be clicked to rename them. */
+function LegSummary(props: {
+  leg: Leg;
+  disabled?: boolean;
+  onRename: (place: Place, name: string) => void;
+}) {
+  const { leg } = props;
+  const nameOf = (place: Place) => (
+    <NameInPlace
+      place={place}
+      disabled={props.disabled}
+      onRename={(name) => props.onRename(place, name)}
+    />
+  );
   const duration = formatDuration(legDurationS(leg));
   if (leg.transit) {
     const t = leg.transit;
@@ -247,7 +261,7 @@ function LegSummary({ leg }: { leg: Leg }) {
         <br />
         <span className="muted">
           {t.agency ? `${t.agency} · ` : ''}
-          {leg.start.place.name} → {leg.end.place.name} · {legNotes(leg)[0]} · {duration}
+          {nameOf(leg.start.place)} → {nameOf(leg.end.place)} · {legNotes(leg)[0]} · {duration}
         </span>
       </p>
     );
@@ -256,7 +270,7 @@ function LegSummary({ leg }: { leg: Leg }) {
     return (
       <p>
         Wait {duration}
-        <span className="muted"> at {leg.start.place.name ?? 'start'}</span>
+        <span className="muted"> at {nameOf(leg.start.place)}</span>
       </p>
     );
   }
@@ -265,7 +279,7 @@ function LegSummary({ leg }: { leg: Leg }) {
   return (
     <>
       <p>
-        {legTitle(leg)}
+        {MODE_NAMES[leg.mode]} to {nameOf(leg.end.place)}
         <span className="muted"> · {notes.join(' · ')}</span>
       </p>
       {hills && <HillProfile profile={hills} />}
@@ -281,8 +295,9 @@ interface EditorProps {
 }
 
 /**
- * Departure, arrival and duration of a walk, bike or manual wait leg. An end that meets a ride
- * is fixed; moving a free end shifts the leg, or stretches it if the other end is fixed.
+ * Departure, arrival and duration of a walk, bike or manual wait leg, on one line. An end that
+ * meets a ride is fixed; moving a free end shifts the leg, or stretches it if the other end is
+ * fixed. What can move is said over the leg's summary while one of the fields has focus.
  */
 function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
   const bounds = legBounds(plan, leg.id);
@@ -291,6 +306,17 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
   const [start, setStart] = useState(formatClock(leg.start.time));
   const [end, setEnd] = useState(formatClock(leg.end.time));
   const [duration, setDuration] = useState(String(minutes));
+  // The fields follow the leg when its times change: after an edit here, and after Undo, a
+  // switch, a merge or anything else that moves it.
+  const times = `${leg.start.time}/${leg.end.time}`;
+  const [shown, setShown] = useState(times);
+  if (shown !== times) {
+    setShown(times);
+    setStart(formatClock(leg.start.time));
+    setEnd(formatClock(leg.end.time));
+    setDuration(String(minutes));
+  }
+  const hintId = useId();
   const isWait = leg.mode === 'wait';
 
   // A refused edit puts the times back; the itinerary says why, under the leg.
@@ -313,15 +339,20 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
   const onEnter = (save: () => unknown) => (e: KeyboardEvent) => e.key === 'Enter' && save();
 
   return (
-    <div className="times-editor">
-      <div className="row wrap align-end">
+    <div className="times-editor leg-wide">
+      <div className="times-fields">
         <label className="field">
           {isWait ? 'From' : 'Leave'}
           <input
             type="time"
             value={start}
             disabled={disabled || !bounds.startFree}
-            title={bounds.startFree ? undefined : 'Fixed: it leaves as the ride before it arrives'}
+            title={
+              bounds.startFree
+                ? undefined
+                : `Fixed: it ${isWait ? 'starts' : 'leaves'} as the ride before it arrives`
+            }
+            aria-describedby={hintId}
             onChange={(e) => setStart(e.target.value)}
             onBlur={commitStart}
             onKeyDown={onEnter(commitStart)}
@@ -333,7 +364,12 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
             type="time"
             value={end}
             disabled={disabled || !bounds.endFree}
-            title={bounds.endFree ? undefined : 'Fixed: it arrives as the ride after it leaves'}
+            title={
+              bounds.endFree
+                ? undefined
+                : `Fixed: it ${isWait ? 'ends' : 'arrives'} as the ride after it leaves`
+            }
+            aria-describedby={hintId}
             onChange={(e) => setEnd(e.target.value)}
             onBlur={commitEnd}
             onKeyDown={onEnter(commitEnd)}
@@ -351,26 +387,15 @@ function LegTimesEditor({ plan, leg, edits, disabled }: EditorProps) {
             onBlur={commitDuration}
             onKeyDown={onEnter(commitDuration)}
             aria-label="Duration in minutes"
+            aria-describedby={hintId}
           />
         </label>
       </div>
-      <p className="muted">{hint(plan, leg, bounds, maxS)}</p>
+      <p className="muted times-hint" id={hintId}>
+        {timesHint(plan, leg.id)}
+      </p>
     </div>
   );
-}
-
-/** What can move, in a few words: "can leave until 8:35 · up to 22 min, keeping departure". */
-function hint(plan: Plan, leg: Leg, bounds: LegBounds, maxS: number | null): string {
-  const parts: string[] = [];
-  const { earliest, latest } = departureWindow(plan, leg.id);
-  if (earliest && latest) parts.push(`can leave ${formatTime(earliest)}–${formatTime(latest)}`);
-  else if (latest) parts.push(`can leave until ${formatTime(latest)}`);
-  else if (earliest) parts.push(`can leave from ${formatTime(earliest)}`);
-  if (!bounds.startFree) parts.push('leaves as the ride arrives');
-  if (!bounds.endFree) parts.push('arrives as the ride leaves');
-  const keeps = durationAnchor(plan, leg.id) === 'start' ? 'departure' : 'arrival';
-  parts.push(`${maxS === null ? '' : `up to ${Math.floor(maxS / 60)} min, `}keeping ${keeps}`);
-  return parts.join(' · ');
 }
 
 /** One place's name, renamed everywhere it appears when you finish editing. */

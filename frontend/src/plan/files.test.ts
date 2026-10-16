@@ -82,6 +82,17 @@ describe('JSON plan files', () => {
       ok: false,
       reason: 'The plan is damaged: two legs share an id.',
     });
+    const named = (value: unknown) => ({ ...walk.end, place: { ...walk.end.place, named: value } });
+    expect(damage([{ ...walk, end: named('yes') }]).ok).toBe(false);
+  });
+
+  it('keeps which names are yours', () => {
+    const home = { ...walk.start.place, name: 'Home', named: true };
+    const mine = appendLegs({ anchor: { ...walk.start, place: home }, legs: [] }, [
+      { ...walk, start: { ...walk.start, place: home } },
+      train,
+    ]);
+    expect(parsePlanJson(planToJson(mine))).toEqual({ ok: true, plan: mine });
   });
 });
 

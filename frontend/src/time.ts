@@ -28,6 +28,13 @@ const dateFormat = new Intl.DateTimeFormat('en-US', {
 
 const weekdayFormat = new Intl.DateTimeFormat('en-US', { timeZone: PLAN_TZ, weekday: 'short' });
 
+const shortDateFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: PLAN_TZ,
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+});
+
 export function formatTime(iso: string): string {
   return timeFormat.format(new Date(iso));
 }
@@ -35,6 +42,13 @@ export function formatTime(iso: string): string {
 /** "Monday, October 12, 2026". */
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso));
+}
+
+/** "Tue Oct 20, 9:00 AM". */
+export function formatDayAndTime(iso: string): string {
+  const parts = shortDateFormat.formatToParts(new Date(iso));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('weekday')} ${part('month')} ${part('day')}, ${formatTime(iso)}`;
 }
 
 /** Time of day, with the weekday added when it falls on a different local day from `reference`. */
