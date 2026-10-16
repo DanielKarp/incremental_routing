@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { placeName } from '../plan/files';
+import { tidyName } from '../plan/plan';
 import type { Place } from '../plan/types';
 
 /**
@@ -23,9 +24,13 @@ export function NameField(props: {
     setShown(name);
     setDraft(name);
   }
+  // A request that starts as you type (from a click on the map just before) disables the field,
+  // which loses focus without a blur. The name goes back: renaming waits, so it can't race it.
+  if (props.disabled && draft !== name) setDraft(name);
   // Enter or Escape has dealt with the edit, so leaving the field afterwards saves nothing.
   const handled = useRef(false);
-  const save = () => draft.trim() !== name && onSave(draft.trim());
+  // Spaces you can't see, at the ends or doubled, make no new name (see tidyName).
+  const save = () => tidyName(draft) !== tidyName(name) && onSave(tidyName(draft));
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -107,10 +112,17 @@ export function NameInPlace(props: {
   }, [editing, version]);
 
   function finish(save: boolean) {
-    const typed = (text.current?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const typed = tidyName(text.current?.textContent ?? '');
     setEditing(false);
     setVersion((v) => v + 1);
-    if (save && typed !== shown && typed !== (place.name ?? '')) onRename(typed);
+    if (save && typed !== tidyName(shown) && typed !== tidyName(place.name ?? '')) onRename(typed);
+  }
+
+  // A request that starts as you type (from a click on the map just before) ends the edit, and
+  // the name goes back: renaming waits, so it can't race it.
+  if (editing && disabled) {
+    setEditing(false);
+    setVersion((v) => v + 1);
   }
 
   if (editing && !disabled) {

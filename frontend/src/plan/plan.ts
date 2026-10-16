@@ -377,6 +377,14 @@ export function withName(place: Place, name: string): Place {
 }
 
 /**
+ * A name as it's saved when you rename a place: each run of spaces or line breaks as one space,
+ * none at either end. A name that tidies to the one it had is no change.
+ */
+export function tidyName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Whether the plan begins where and when you started planning it. Not once legs have been
  * added before that point, or the first legs after it removed or moved.
  */

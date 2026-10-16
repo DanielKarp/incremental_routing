@@ -3,6 +3,7 @@
 
 import { isPlace, validatePlan } from './plan/files';
 import type { Direction, Place, Plan, Waypoint } from './plan/types';
+import { nowLocalInput } from './time';
 import { type UndoStep, isUndoLabel } from './undo';
 
 const KEY = 'incremental-routing:session:v1';
@@ -31,14 +32,16 @@ export function loadSession(): Session | null {
     const data: unknown = JSON.parse(raw);
     if (typeof data !== 'object' || data === null) return null;
     const { anchor, timeInput, plan, direction } = data as Record<string, unknown>;
-    if (typeof timeInput !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(timeInput)) {
-      return null;
-    }
     const restored = plan ? validatePlan(plan) : null;
     const legs = restored?.ok && restored.plan.legs.length ? restored.plan : null;
     return {
       anchor: isPlace(anchor) ? anchor : null,
-      timeInput,
+      // As you left it, even cleared or with a year still being typed, so the start point, the
+      // plan and its undo history come back with it. What can't be the field's starts at now.
+      timeInput:
+        typeof timeInput === 'string' && /^(\d{4,6}-\d\d-\d\dT\d\d:\d\d)?$/.test(timeInput)
+          ? timeInput
+          : nowLocalInput(),
       plan: legs,
       direction: legs && direction === 'backward' ? 'backward' : 'forward',
     };
@@ -76,11 +79,16 @@ export function loadHistory(plan: Plan | null): UndoStep[] {
     if (leadsTo !== planKey(plan) || !Array.isArray(steps)) return [];
     let restored: UndoStep[] = [];
     for (const step of steps) {
-      const { label, plan: before } = (step ?? {}) as Record<string, unknown>;
+      const { label, plan: before, direction } = (step ?? {}) as Record<string, unknown>;
       const checked = validatePlan(before);
       // Only the steps after a damaged one can still be undone in order.
       if (!isUndoLabel(label) || !checked.ok) restored = [];
-      else restored.push({ label, plan: checked.plan });
+      else {
+        const kept: UndoStep = { label, plan: checked.plan };
+        // The end of the plan that undoing it plans from again, if it says (see UndoStep).
+        if (direction === 'forward' || direction === 'backward') kept.direction = direction;
+        restored.push(kept);
+      }
     }
     return restored;
   } catch {

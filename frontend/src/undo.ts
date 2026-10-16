@@ -6,7 +6,7 @@
 // point or time of a plan without legs. The history is saved in this browser (storage.ts), which
 // keeps only the steps whose labels are listed here.
 
-import type { Plan } from './plan/types';
+import type { Direction, Plan } from './plan/types';
 
 /** What a change did, as it reads after "Undo". */
 export const UNDO_LABELS = [
@@ -28,6 +28,8 @@ export interface UndoStep {
   label: UndoLabel;
   /** The plan before the change. Without legs, it still holds the start point and time. */
   plan: Plan;
+  /** Which end of the plan you were extending, for a change that set it forwards: Clear plan. */
+  direction?: Direction;
 }
 
 export function isUndoLabel(value: unknown): value is UndoLabel {

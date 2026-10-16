@@ -37,6 +37,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('autosave', () => {
@@ -61,8 +62,24 @@ describe('autosave', () => {
     expect(loadSession()).toBeNull();
     storage.setItem('incremental-routing:session:v1', '{not json');
     expect(loadSession()).toBeNull();
+    vi.useFakeTimers({ now: new Date('2026-10-12T14:30:00Z') });
     storage.setItem('incremental-routing:session:v1', '{"timeInput": "yesterday"}');
-    expect(loadSession()).toBeNull();
+    expect(loadSession()).toEqual({
+      anchor: null,
+      timeInput: '2026-10-12T07:30', // Now, in the Bay Area.
+      plan: null,
+      direction: 'forward',
+    });
+  });
+
+  it('keeps the start point and the undo history while the time is cleared or half-typed', () => {
+    const cleared = renamePlace(plan, HOME, 'Flat');
+    saveHistory([{ label: 'clear plan', plan: cleared, direction: 'backward' }], null);
+    for (const timeInput of ['', '202609-10-12T07:30']) {
+      saveSession({ anchor: HOME, timeInput, plan: null, direction: 'forward' });
+      expect(loadSession()).toEqual({ anchor: HOME, timeInput, plan: null, direction: 'forward' });
+      expect(loadHistory(null).map((s) => s.label)).toEqual(['clear plan']);
+    }
   });
 
   it('keeps the start point but drops a damaged plan', () => {
@@ -118,9 +135,14 @@ describe('undo history', () => {
     expect(loadHistory(renamed)).toEqual(steps);
   });
 
-  it('keeps the history of a cleared plan', () => {
-    saveHistory([...steps, { label: 'clear plan', plan: renamed }], null);
-    expect(loadHistory(null).map((s) => s.label)).toEqual(['add', 'rename', 'clear plan']);
+  it('keeps the history of a cleared plan, and the end it was planned from', () => {
+    const cleared: UndoStep = { label: 'clear plan', plan: renamed, direction: 'backward' };
+    saveHistory([...steps, cleared], null);
+    expect(loadHistory(null)).toEqual([...steps, cleared]);
+    const data = JSON.parse(storage.getItem('incremental-routing:history:v1')!);
+    data.steps[2].direction = 'sideways';
+    storage.setItem('incremental-routing:history:v1', JSON.stringify(data));
+    expect(loadHistory(null)[2]).toEqual({ label: 'clear plan', plan: renamed });
   });
 
   it('keeps moves of the start before the first leg', () => {

@@ -14,6 +14,7 @@ import {
   setLegStart,
   startsAtAnchor,
   switchMoved,
+  tidyName,
   withName,
 } from './plan';
 import type { Leg, PathInfo, Place, Plan } from './types';
@@ -199,6 +200,14 @@ describe('renaming places', () => {
     const cleared = renamePlace(plan, VIENNA, '');
     expect(cleared.legs[0].end.place).toEqual({ ...VIENNA, name: '' });
     expect(withName(HOME, '  ')).toEqual({ ...HOME, name: '  ' });
+  });
+
+  it('takes spaces you cannot see as no change to a name', () => {
+    // As typed in a field, and as some stops are named in the 511 feed.
+    expect(tidyName(' Home ')).toBe('Home');
+    expect(tidyName('Market St & 5th  St')).toBe('Market St & 5th St');
+    expect(tidyName('Blue\n\u00a0Bottle')).toBe('Blue Bottle');
+    expect(tidyName('   ')).toBe('');
   });
 });
 

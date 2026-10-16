@@ -136,6 +136,9 @@ export function App() {
   const [timeInput, setTimeInput] = useState(saved?.timeInput ?? nowLocalInput());
   // Move was clicked: the next click on the map moves the start there.
   const [movingAnchor, setMovingAnchor] = useState(false);
+  // Each start point set counts up, and so does each change to the plan: once there are legs,
+  // the start's name is the plan's, so a stop's name looked up for it before then comes too late.
+  const anchorRequest = useRef(0);
   // Once legs exist the plan lives here; earlier versions are kept for undo, across reloads.
   const [committed, setCommitted] = useState<Plan | null>(saved?.plan ?? null);
   const [history, setHistory] = useState<UndoStep[]>(() => (saved ? loadHistory(saved.plan) : []));
@@ -406,6 +409,7 @@ export function App() {
   function commit(next: Plan, label: UndoLabel, { movesNothing = false } = {}) {
     if (!plan) return;
     remember(label);
+    anchorRequest.current++;
     setCommitted(next.legs.length ? next : null);
     // Renaming places renames the start point too.
     setAnchorPlace(next.anchor.place);
@@ -425,17 +429,22 @@ export function App() {
     setAdded({ id: ++addCount.current, text: addedText(legs), legIds: legs.map((l) => l.id) });
   }
 
-  function undo() {
-    const step = history[history.length - 1];
-    if (!step) return;
+  /**
+   * Undo the latest change, or from a click on Undo, `step`: the change the button named as you
+   * pressed it. A name or time saved as you left its field for the button is undone with it.
+   */
+  function undo(step = history[history.length - 1]) {
+    const at = history.lastIndexOf(step);
+    if (at < 0) return;
     const previous = step.plan;
     clearMessages();
-    setHistory((h) => h.slice(0, -1));
+    setHistory((h) => h.slice(0, at));
     setCommitted(previous.legs.length ? previous : null);
     // The start point may differ (after undoing an import, a rename or a move), so restore it
     // too. Its time as well, unless that has changed since by itself (see undoesTime).
     setAnchorPlace(previous.anchor.place);
     if (undoesTime(step.label)) setTimeInput(toLocalInput(previous.anchor.time));
+    if (step.direction) setDirection(step.direction);
     setMovingAnchor(false);
     resetBuilder();
     setAdded(null);
@@ -493,7 +502,8 @@ export function App() {
   function clear() {
     if (!plan) return;
     clearMessages();
-    remember('clear plan');
+    // Undo plans from the end you were at again.
+    setHistory((h) => [...h, { label: 'clear plan', plan, direction }]);
     setCommitted(null);
     // A plan without legs starts forwards, as after a reload.
     setDirection('forward');
@@ -543,9 +553,10 @@ export function App() {
     setMovingAnchor(false);
     resetBuilder();
     if (nudged) return;
+    const request = ++anchorRequest.current;
     const nearest = await nearestStop(point);
-    // Name it after a nearby stop, unless it has been renamed or moved meanwhile.
-    if (nearest) {
+    // Name it after a nearby stop, unless it has been renamed or moved, or legs added, meanwhile.
+    if (nearest && request === anchorRequest.current) {
       setAnchorPlace((current) =>
         current === provisional ? { ...provisional, name: pinName(point, nearest) } : current,
       );

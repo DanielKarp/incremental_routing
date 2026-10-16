@@ -10,6 +10,7 @@ import {
   planPlaces,
   planStart,
   removedWith,
+  tidyName,
 } from '../plan/plan';
 import type { Direction, Leg, Place, Plan, PlanIssue } from '../plan/types';
 import { atLocalTime, formatClock, formatDuration, formatTimeOnDay } from '../time';
@@ -408,8 +409,11 @@ function PlaceName({
   disabled?: boolean;
   onRename: (name: string) => void;
 }) {
-  const [draft, setDraft] = useState(place.name ?? '');
-  const save = () => draft.trim() !== (place.name ?? '') && onRename(draft.trim());
+  const name = place.name ?? '';
+  const [draft, setDraft] = useState(name);
+  // As in the From line (see NameField): a request that starts as you type puts the name back.
+  if (disabled && draft !== name) setDraft(name);
+  const save = () => tidyName(draft) !== tidyName(name) && onRename(tidyName(draft));
   return (
     <label className="field">
       <span className="muted">{place.stopId ? 'Stop' : 'Place'}</span>

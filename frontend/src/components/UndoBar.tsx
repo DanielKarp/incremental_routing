@@ -10,7 +10,8 @@ const BUTTON_GOES: UndoLabel[] = ['remove', 'merge', 'clear plan'];
 interface Props {
   /** The changes that can be undone, the latest last. */
   history: UndoStep[];
-  onUndo: () => void;
+  /** Undo the latest change, or back to before `step` and the changes made since. */
+  onUndo: (step?: UndoStep) => void;
   /** Whether there are legs to clear. */
   canClear: boolean;
   onClear: () => void;
@@ -25,6 +26,9 @@ export function UndoBar({ history, onUndo, canClear, onClear, disabled }: Props)
   // would undo, rather than going back to the top of the page.
   const steps = useRef(history.length);
   const last = history[history.length - 1];
+  // The change Undo named as you pressed it. Leaving a name or time you were typing, to press
+  // it, saves that first, as a change of its own; the click undoes it along with the one named.
+  const pressed = useRef<UndoStep | undefined>(undefined);
   useEffect(() => {
     const added = history.length > steps.current;
     steps.current = history.length;
@@ -45,7 +49,14 @@ export function UndoBar({ history, onUndo, canClear, onClear, disabled }: Props)
           // were holding it on has just gone and left the focus here.
           if (e.key === 'Enter' && e.repeat) e.preventDefault();
         }}
-        onClick={onUndo}
+        onPointerDown={() => {
+          pressed.current = last;
+        }}
+        onClick={(e) => {
+          // From the keyboard (detail 0), focus is on the button already: no field was left.
+          onUndo(e.detail ? pressed.current : undefined);
+          pressed.current = undefined;
+        }}
       >
         {text}
       </button>
