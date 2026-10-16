@@ -30,6 +30,7 @@ import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
 import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
+import { DoubleClicks } from './doubleClicks';
 import { isTypingIn, isUndoKey } from './keys';
 import { filterLines } from './lineFilter';
 import { type LinePreview, lineCall, linePreviews } from './linePreviews';
@@ -460,6 +461,19 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  // The second click of a double-click only goes where the first one did (see DoubleClicks), so
+  // it can't do whatever the first click put under the pointer. It's stopped before anything
+  // else sees it.
+  useEffect(() => {
+    const clicks = new DoubleClicks();
+    const onClick = (e: MouseEvent) => {
+      if (!clicks.strays(e)) return;
+      e.stopPropagation();
+      e.preventDefault();
+    };
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
   }, []);
 
   /** Remove every leg but keep the start point. Undo brings them back. */

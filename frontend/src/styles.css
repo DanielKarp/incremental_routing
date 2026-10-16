@@ -487,14 +487,15 @@ button.trip-stops-back {
 
 /* Remove for a leg in the middle, which takes the legs beyond it too. It sits at the foot of the
    row, away from Switch to walk / bike, and shows only on the row you point at or move into with
-   the keyboard, so a stray click can't take half the trip. Touch screens, which can't point,
-   always show it. */
+   the keyboard, so a stray click can't take half the trip. Wherever there's a touch screen, even
+   beside a mouse, it always shows: a tap points and clicks at once, so a hidden one could be
+   tapped without being seen. */
 .leg .remove-beyond {
   grid-column: 2 / -1;
   justify-self: end;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (not (any-pointer: coarse)) {
   .leg:not(:hover, :focus-within) .remove-beyond {
     opacity: 0;
   }
@@ -645,7 +646,8 @@ button.trip-stops-back {
 
 /* What can move, shown over the leg's summary only while one of its fields has focus. It takes
    no room, so nothing moves when it comes or goes: a click elsewhere, which takes the focus
-   away, lands where it was aimed. Clicks pass through it. */
+   away, lands where it was aimed. A click on it only takes the focus away, so it can't reach
+   Switch to walk / bike or Remove hidden under it. */
 .times-hint {
   position: absolute;
   bottom: calc(100% + 2px);
@@ -659,7 +661,6 @@ button.trip-stops-back {
   border: 1px solid var(--border);
   border-radius: 4px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
-  pointer-events: none;
 }
 
 .times-editor:not(:focus-within) .times-hint {
