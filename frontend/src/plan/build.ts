@@ -75,6 +75,16 @@ export function namedPlaceNear(
   return { lat: at.lat, lon: at.lon, name: nearest.name, named: true };
 }
 
+/**
+ * The start moved to `point`, still with a name you gave it: a nudge of its pin, say, no further
+ * than SAME_PLACE_M. Null for a longer move, or a place named after a stop or by its coordinates,
+ * which is then named again (see pinName).
+ */
+export function nudgedPlace(from: Place | null, point: { lat: number; lon: number }): Place | null {
+  if (!from?.named || !from.name || distanceM(from, point) > SAME_PLACE_M) return null;
+  return { lat: point.lat, lon: point.lon, name: from.name, named: true };
+}
+
 /** Whether getting between a place and a stop needs a walk leg of its own. */
 export function needsConnector(from: Place, stop: Place): boolean {
   return distanceM(from, stop) > SAME_PLACE_M;

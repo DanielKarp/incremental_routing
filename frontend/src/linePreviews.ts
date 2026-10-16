@@ -73,3 +73,12 @@ export function inListOrder(keys: string[], previews: LinePreview[]): LinePrevie
   const wanted = new Set(keys);
   return previews.filter((p) => wanted.has(p.key));
 }
+
+/**
+ * What a menu of some of the lines says, to tell when it's out of date: it changes when the
+ * lines are found again, or some are filtered out, but not when their paths arrive.
+ */
+export function choicesText(keys: string[], previews: LinePreview[]): string {
+  const choices = inListOrder(keys, previews);
+  return JSON.stringify(choices.map((p) => [p.key, p.color, previewText(p), p.note]));
+}

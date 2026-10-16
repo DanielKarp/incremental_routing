@@ -43,6 +43,7 @@ import {
   estimatedRoute,
   missedTrip,
   namedPlaceNear,
+  nudgedPlace,
   pathInfo,
   pathLeg,
   pathLegArriving,
@@ -378,7 +379,14 @@ export function App() {
    * before changing the start of a plan without legs; changes to legs go through commit.
    */
   function remember(label: UndoLabel) {
-    if (plan) setHistory((h) => [...h, { label, plan }]);
+    // While the time can't be read there's no plan, but a move of the start is kept all the
+    // same: undoing it doesn't set the time back (see undoesTime), so any time will do.
+    const before: Plan | null =
+      plan ??
+      (anchorPlace && !undoesTime(label)
+        ? { anchor: { place: anchorPlace, time: new Date().toISOString() }, legs: [] }
+        : null);
+    if (before) setHistory((h) => [...h, { label, plan: before }]);
   }
 
   /** Make `next` the plan, after a change named `label`. Undo goes back to the plan before. */
@@ -508,10 +516,13 @@ export function App() {
   }
 
   async function chooseAnchor(point: LatLon) {
-    const provisional: Place = { ...point, name: pinName(point) };
+    // Nudged, it keeps a name you gave it; otherwise it's named after a stop nearby.
+    const nudged = nudgedPlace(anchorPlace, point);
+    const provisional: Place = nudged ?? { ...point, name: pinName(point) };
     setAnchorPlace(provisional);
     setMovingAnchor(false);
     resetBuilder();
+    if (nudged) return;
     const nearest = await nearestStop(point);
     // Name it after a nearby stop, unless it has been renamed or moved meanwhile.
     if (nearest) {
@@ -589,12 +600,15 @@ export function App() {
     });
 
   // What the map's menu offers (on a right-click, or a click that picks nothing): moving the
-  // start before the first leg, and walking or biking there, following the direction.
-  const mapMenu = mapMenuItems({
-    startMovable: !!anchorPlace && !committed,
-    canAddLegs: !!plan,
-    direction,
-  });
+  // start before the first leg, and walking or biking there, following the direction. Nothing
+  // while the summary covers the map, so a menu left open there closes (see MapView).
+  const mapMenu = showSummary
+    ? []
+    : mapMenuItems({
+        startMovable: !!anchorPlace && !committed,
+        canAddLegs: !!plan,
+        direction,
+      });
 
   /**
    * Choose the mode under Next leg. With a point picked for a walk or bike leg, switching
@@ -693,9 +707,12 @@ export function App() {
     setReturning(null);
   }, [returning, selection, calls]);
 
-  /** A line picked by name, in the list or on the map: its next trip (or last arrival). */
+  /**
+   * A line picked by name, in the list or on the map: its next trip (or last arrival). Only one
+   * that Filter lines lets through.
+   */
   function chooseLine(key: string) {
-    const group = lines.find((l) => l.key === key);
+    const group = shownLines.find((l) => l.key === key);
     if (group && !busy) void chooseCall(lineCall(group, listing));
   }
 

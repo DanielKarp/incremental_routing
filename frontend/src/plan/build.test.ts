@@ -8,6 +8,7 @@ import {
   missedTrip,
   namedPlaceNear,
   needsConnector,
+  nudgedPlace,
   pathInfo,
   pathLeg,
   pathLegArriving,
@@ -455,5 +456,31 @@ describe('naming a new end point after a place you named', () => {
   it('nothing to go by in a plan without legs', () => {
     const noLegs = { anchor: at(HOME, '15:00'), legs: [] };
     expect(namedPlaceNear(noLegs, north(HOME, 20), 'forward')).toBeNull();
+  });
+});
+
+describe('moving the start a little', () => {
+  const HOME: Place = { lat: 37.44, lon: -122.16, name: 'Home', named: true };
+  const north = (m: number) => ({ lat: HOME.lat + m / 111_000, lon: HOME.lon });
+
+  it('keeps a name you gave it, within 75 m', () => {
+    expect(nudgedPlace(HOME, north(20))).toEqual({ ...north(20), name: 'Home', named: true });
+    expect(nudgedPlace(HOME, north(80))).toBeNull();
+  });
+
+  it("names it again when the name isn't yours, or there was no start", () => {
+    const byCoordinates = { lat: HOME.lat, lon: HOME.lon, name: '37.44000, -122.16000' };
+    expect(nudgedPlace(byCoordinates, north(5))).toBeNull();
+    expect(nudgedPlace({ ...HOME, name: 'Near Alma St', named: undefined }, north(5))).toBeNull();
+    expect(nudgedPlace(null, north(5))).toBeNull();
+  });
+
+  it('is no longer at a stop it was at', () => {
+    const station = { ...HOME, name: 'My station', stopId: 'ct:pa' };
+    expect(nudgedPlace(station, north(10))).toEqual({
+      ...north(10),
+      name: 'My station',
+      named: true,
+    });
   });
 });

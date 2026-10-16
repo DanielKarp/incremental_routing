@@ -868,11 +868,11 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
 }
 
 /* Map labels and menus (which line; the right-click menu). MapLibre's popups are always
-   white, so their text is set dark even in dark mode. */
+   white, so their text is set dark even in dark mode. Their width is set to fit the map (see
+   keepInMap in MapView). */
 .map-tip .maplibregl-popup-content {
   padding: 4px 8px;
   font-size: 0.8rem;
-  max-width: min(360px, 80vw);
   color: #1d2330;
 }
 
@@ -883,7 +883,6 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
 
 .map-menu .maplibregl-popup-content {
   padding: 8px;
-  max-width: min(360px, 85vw);
   color: #1d2330;
 }
 

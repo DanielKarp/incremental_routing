@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TransitCall } from './api';
 import { groupCalls } from './callGroups';
-import { inListOrder, lineCall, linePreviews, previewText } from './linePreviews';
+import { choicesText, inListOrder, lineCall, linePreviews, previewText } from './linePreviews';
 
 function call(trip: string, time: string): TransitCall {
   const iso = `2026-10-12T${time}:00-07:00`;
@@ -76,5 +76,23 @@ describe('line previews', () => {
     const [a, b, c] = previews.map((p) => p.key);
     expect(inListOrder([c, 'gone', a], previews).map((p) => p.key)).toEqual([a, c]);
     expect(inListOrder([b], previews).map((p) => p.key)).toEqual([b]);
+  });
+
+  it('tell when a menu of some of them is out of date, but not when their paths arrive', () => {
+    const at = (route: string, time: string) => ({
+      ...call(route, time),
+      route: { ...call(route, time).route, route_id: route },
+    });
+    const groups = groupCalls([at('a', '08:01'), at('b', '08:03')], 'departures');
+    const previews = linePreviews(groups, 'departures', [], 'walk');
+    const keys = previews.map((p) => p.key);
+    const shown = choicesText(keys, previews);
+    const path = { trip_id: 'a', stop_sequence: 4, geometry: [[0, 0]] as [number, number][] };
+    expect(choicesText(keys, linePreviews(groups, 'departures', [path], 'walk'))).toBe(shown);
+    // Filtered out, found again for a later time, or reached by bike.
+    expect(choicesText(keys, previews.slice(1))).not.toBe(shown);
+    const later = groupCalls([at('a', '08:11'), at('b', '08:03')], 'departures');
+    expect(choicesText(keys, linePreviews(later, 'departures', [], 'walk'))).not.toBe(shown);
+    expect(choicesText(keys, linePreviews(groups, 'departures', [], 'bike'))).not.toBe(shown);
   });
 });
