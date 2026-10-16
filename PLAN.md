@@ -55,46 +55,52 @@ built from either end.
 
 ### Forward (the main flow)
 
-1. Click the map and set a time. That's the anchor, and it becomes the frontier.
+1. Click the map and set a time. That's the anchor, and it becomes the frontier. Until the
+   first leg, its pin can be dragged or moved from the map's menu, and *Undo* moves it back
+   (decision 18).
 2. Choose a mode for the next leg:
-   - **Transit**: see departures from stops near the frontier after its time, grouped by line
-     (decision 8). They're listed as soon as Transit is chosen, and again whenever anything
-     they depend on changes (decision 15). Only trips you can still reach on foot or by bike
-     are shown. The map draws each of those lines from its stop onwards (decision 14). Pick a
-     trip, in the list or by clicking its line on the map. Then pick the stop to get off at from that trip's remaining
-     stops, in the list or on the map.
+   - **Transit**: see departures from stops near the frontier in the hour after its time (or
+     3 hours, on request), grouped by line (decision 8). They're listed as soon as Transit is
+     chosen, and again whenever anything they depend on changes (decision 15). Only trips you
+     can still reach on foot or by bike are shown. The map draws each of those lines from its
+     stop onwards (decision 14). Pick a trip, in the list or by clicking its line on the map.
+     Then pick the stop to get off at from that trip's remaining stops, in the list or on the
+     map, or go back to the lines (*← Lines* or Escape), which come back as you left them.
      - If the boarding stop isn't at the frontier, the app inserts a walk or bike ride to the
        stop. It starts right away, and a wait fills any time left before the departure.
-   - **Walk / Bike**: click the destination. The router returns a path and duration. You can
-     edit when the leg leaves or arrives, or how long it takes, and a hilly bike ride shows a
-     height profile. From any mode, a right-click on the map adds a walk or bike leg there
-     at once (decision 16).
-   - **Wait**: stay put for N minutes, e.g. a coffee stop.
+     - That ride is routed as soon as the trip is picked. If it misses the trip, the stop
+       list says so and offers the same line's next listed trip that it makes.
+   - **Walk / Bike**: click the destination. The router returns a path and duration, and
+     switching between Walk and Bike routes the same point the other way. You can edit when
+     the leg leaves or arrives, or how long it takes, and a hilly bike ride shows a height
+     profile. In Transit or Wait mode a click on the map, or a right-click in any mode, opens
+     a menu that adds a walk or bike leg there at once (decision 16).
+   - **Wait**: stay put for N minutes, e.g. a coffee stop: one click for 5, 10, 15 or 30.
 3. The new leg's end becomes the frontier, and step 2 repeats.
 4. Any time gap between two legs is filled with an automatic **wait** leg. For example, a bike
    leg reaches the station at 7:50 and the train leaves at 8:00.
 
 ### Backward
 
-This is the same flow mirrored. You see **arrivals** at stops near the frontier before its time,
-with each line drawn up to its stop, pick a trip, then pick where you got on from its earlier
-stops. The walk or bike ride from the
-stop to the frontier leaves as soon as you get off, and any spare time becomes a wait at the frontier
-(decision 1, mirrored). Walk, bike and wait legs you add keep their **end** time fixed and
-compute the start time.
+This is the same flow mirrored. You see **arrivals** at stops near the frontier in the hour
+before its time, with each line drawn up to its stop, pick a trip, then pick where you got on
+from its earlier stops. The walk or bike ride from the stop to the frontier leaves as soon as
+you get off, and any spare time becomes a wait at the frontier (decision 1, mirrored). Walk,
+bike and wait legs you add keep their **end** time fixed and compute the start time.
 
 ### Leg types
 
 | Mode | Start / end chosen by | Times come from | Editable |
 | --- | --- | --- | --- |
 | Transit | Departure (or arrival) list or a line on the map, then a stop on that trip | Timetable | No: fixed by the schedule |
-| Walk, Bike | Frontier, then a map click (or a right-click, from any mode) | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2). Two in a row of the same mode can merge (decision 17) |
+| Walk, Bike | Frontier, then a map click (or the map's menu) | Routing API (Valhalla) | Departure, arrival or duration, within its neighbours (decision 2). Two in a row of the same mode can merge (decision 17) |
 | Wait | Same place at both ends | Gap between legs, or manual | Manual waits only. Any two waits in a row can merge |
 
 ## 4. Data model
 
 ```ts
-interface Waypoint { place: { lat; lon; name?; stopId? }; time: string /* ISO, with offset */ }
+interface Place { lat; lon; name?; named? /* you typed the name */; stopId? }
+interface Waypoint { place: Place; time: string /* ISO, with offset */ }
 interface Leg {
   id: string;
   mode: 'transit' | 'walk' | 'bike' | 'wait';
@@ -125,10 +131,11 @@ The real definitions are in `frontend/src/plan/types.ts`.
 4. Automatic legs are derived data. They are deleted and rebuilt on every edit, so they can
    never go stale.
 
-**Where state lives.** The plan lives in the browser: React state, autosaved to localStorage,
-and exportable as JSON. The backend is a stateless facts service ("what departs from here?",
-"how long is this ride?"). For a single-user local app this keeps the backend trivial and makes
-the plan rules pure functions that are easy to test.
+**Where state lives.** The plan lives in the browser: React state, autosaved to localStorage
+with the direction and the undo history (decision 19), and exportable as JSON. The backend is a
+stateless facts service ("what departs from here?", "how long is this ride?"). For a
+single-user local app this keeps the backend trivial and makes the plan rules pure functions
+that are easy to test.
 
 ## 5. Data sources
 
@@ -197,7 +204,9 @@ All providers sit behind one `RoutingProvider` interface
 - `straight-line`: an estimate for offline development and tests. It is also the fallback when
   the router fails, labelled "(estimated)".
 
-One user making one request per walk or bike leg is well within fair use. Quotas are fine for
+One user making a request or two per leg is well within fair use: one per walk or bike leg
+(another if you switch it between Walk and Bike before adding it), and one per trip picked
+whose stop needs a walk or ride, reused when you choose where to get off. Quotas are fine for
 now, and self-hosted routing is on hold (§10).
 
 Router speeds are generic. Typical defaults are about 5 km/h walking and roughly 15–20 km/h cycling.
@@ -280,8 +289,10 @@ first stop to the stop (backward). It matches stops to the shape as `/api/trip` 
 stop to stop when the shape can't be used. Each path is then simplified to within 10 m
 (Douglas–Peucker), which keeps 60 lines to about 40 KB.
 
-**Connector walks:** when the chosen stop isn't at the frontier, the UI requests a walk or bike
-route from the frontier to the stop and adds it as a leg. `withWaits` then fills the remaining time.
+**Connector walks:** when a picked trip's stop isn't at the frontier, the UI requests a walk or
+bike route from the frontier to the stop straight away, and `missedTrip` checks that it makes
+the trip. The route is added as a leg when you choose where to get off, and `withWaits` then
+fills the remaining time.
 
 **Hill profiles** (`frontend/src/plan/hills.ts`): a bike ride gets a profile when it climbs or
 descends at least 20 m between any two of its points, in riding order. Gentle rises don't count:
@@ -308,6 +319,183 @@ fix them automatically.
 | M9 ✅ | Line previews | While you choose a ride, the map shows every line in the list, faded in its own colour, with the stop to catch it. Pointing at a row highlights and frames its line, and pointing at a line marks its row. Lines, and the stop to get off at (or on), can be picked on the map. |
 | M10 ✅ | Fewer clicks | The departure (or arrival) list loads by itself. A right-click on the map adds a walk or bike leg there straight away. |
 | M11 ✅ | Merge legs | Where two walks, two bike rides or two waits meet, a button between them joins them into one leg. |
+| M12 ✅ | Smoother flow | A click on the map opens the walk and bike menu, and the start pin can be dragged. Undo stays in reach, names its step and survives a reload. Legs can be removed mid-trip, and places renamed where they're shown. The list can be filtered and says what it searched, a picked trip is checked against the walk to its stop, and on phones the map stays in view. |
+
+### M12 notes
+
+- **Map clicks** (decisions 16 and 18).
+  - A double-click (or double tap) on the map only zooms. A click on empty map waits 0.3 s
+    (a tap 0.5 s, as long as the map waits for a second tap) to see whether another follows,
+    and the second click of a slow double-click is dropped. Clicks on a line, or on a stop of
+    the trip being chosen, act at once.
+  - Once there's a start, a click or tap on empty map in Transit or Wait mode opens the same
+    menu as a right-click: *Walk here* and *Bike here* (*Walk from here* and *Bike from here*
+    backwards), with *Move the start here* first while there are no legs. A long press on a
+    touch screen opens it too, and it stays open when you lift the finger. The first click
+    with no start still sets one, and Walk and Bike mode still preview the point clicked.
+  - A menu closes once it no longer offers what it says: the map's menu when you change
+    direction, add a leg or open the summary, and *Which line?* when the list is found again
+    or the filter hides its lines. Menus and line labels stay inside the map and are never
+    wider than it; one that doesn't fit beside its point goes above or below it, slid along.
+- **The start pin.**
+  - Before the first leg the pin can be dragged, or moved with the arrow keys once it has
+    focus (one move when you pause). Every move, by dragging, from the menu or with *Move*, is
+    a step that *Undo* takes back ("Undo move start"). It restores the place and its name, and
+    keeps any time you've set since.
+  - A start you named keeps its name when it moves no more than 75 m, so a nudged Home is still
+    Home (decision 20).
+  - While moving, *Move* reads *Cancel*. Escape steps back one thing at a time, and is left to
+    a field that has focus: an open map menu, then the summary, then moving the start, then a
+    walk or bike leg waiting to be added, then the stop chooser.
+- **The phone layout.**
+  - Below 700 px wide the map stays at the top of the screen (38% of its height, at least
+    160 px) and only the panel scrolls, so a line or stop chosen in the list shows on the map.
+    A phone on its side (under 500 px tall) has the panel beside the map.
+  - Map menus list at most 30% of the screen's height there, less on a short map, and scroll.
+    They sit over the map's attribution.
+  - On a screen 500 px tall or less, the missed-trip warning sits under the stop chooser's
+    header rather than in it. On a 667x375 phone the stuck header went from 221 to 95 px,
+    leaving 225 px for stops instead of 99.
+  - Any device with a touch screen, touch laptops included, always shows *Remove this and the
+    N after*, since a tap points and clicks at once.
+- **Next leg and messages.**
+  - After a leg is added from *Next leg* (or with *Walk here* on the map), the panel scrolls
+    only as far as it takes to show the *Next leg* heading and buttons, smoothly unless the
+    system asks for less motion. A line under the heading says what was added ("Added:
+    Limited, Palo Alto Caltrain Station Northbound 9:10 AM → Millbrae …") until the plan next
+    changes. Edits in the itinerary, *Undo* and *Clear plan* never scroll.
+  - What the panel brings into view, and a control you Tab to, keep clear of the Undo bar and
+    the stop chooser's header. Something taller than the room comes in from its top, and
+    nothing scrolls for what's already in view. When the button you used goes away, keyboard
+    focus moves to the *Next leg* or stop chooser heading, or to *Undo* after a removal, a
+    merge or *Clear plan*.
+  - Messages show where you're looking. A refusal or a "Routing unavailable…" notice about
+    *Next leg* shows under its mode buttons. Refused switches, merges and time edits show
+    under their leg, and a switch that had to move the end the leg keeps says so ("Walking
+    takes 15 min, so it now leaves at 8:48 AM"). They go when you next do something. Errors
+    about the app or an opened file show at the top of the panel.
+  - The Walk and Bike card and the Wait panel are forms, so Enter adds the leg, and Escape
+    cancels a walk or bike leg waiting to be added. Switching between Walk and Bike (or *Bike
+    instead* / *Walk instead* on the card) routes the same point the other way and keeps its
+    name; only the latest answer counts. Clicking the mode or the end already chosen changes
+    nothing.
+  - The Wait panel has 5, 10, 15 and 30 min buttons that add the wait at once. After a wait
+    added there, *Next leg* goes back to the mode you had before Wait; the map's menu still
+    leaves the mode alone.
+  - Renaming a place keeps what you're building: a walk or bike leg waiting to be added (which
+    takes the new name if it goes there), the stop chooser and the "Added:" line.
+- **The stop chooser.**
+  - Its header stays at the top of the panel while you scroll the stops: *← Lines*, the route
+    and headsign, and where you board ("Boards at Sacramento St & Davis St, 9:09 AM"; "Gets
+    off at …" backwards). The "Back to the list" button under the stops is gone. After a pick
+    far down the list, the panel scrolls up to the chooser's heading.
+  - The walk or bike ride to the trip's stop (from it, backwards) is routed as soon as the
+    trip is picked, without holding up the stops. If it misses the trip, the header says so
+    ("The walk to Palo Alto Caltrain Station Northbound takes 30 min, so you'd miss the
+    9:25 AM.") and offers the line's next listed trip from that stop that the route makes
+    ("Take the 9:55 AM instead", with its transfer note), or says that none can be made.
+    Choosing a stop uses that route, as does the next pick at the same stop. The button only
+    offers the same line from the same stop, so it isn't a suggested next leg (§2).
+  - Back (*← Lines*, or Escape) puts the list back as you left it: the same scroll, the line's
+    row where it was on screen even if something above the list came or went, and the focus
+    on its line. The map eases back to where it was before you picked the trip, unless you've
+    moved it yourself since (decision 15). Before, the row was usually off screen.
+  - Stop times no longer wrap, and a stop with a one-line name takes 36 px instead of 56.
+- **The transit list.**
+  - It says what it searched: "Departures in the next hour within 500 m, up to 3 per line"
+    (backwards, "Arrivals in the hour before 9:30 AM …"). A list that finds nothing says so,
+    with *Search within 1 km* (twice the radius, up to 3 km; the field follows) and *Look 3
+    hours ahead* (*back*), and suggests clicking the map to walk or bike towards a stop. Under
+    a list, *Look 3 hours ahead* is offered up to 1.5 km, and *Just the next hour* undoes it.
+    A search that stops at its 500-trip limit says that later lines may be missing.
+  - *Filter lines* narrows the list as you type, by route name, headsign, stop or operator,
+    ignoring case and accents. Words match from their start and numbers whole ("1" finds the 1
+    and 1X but not the 10). Operators go by name, initials (BART, SFMTA) or a word people use
+    (muni, ac, gg, caltrain, vta, samtrans, amtrak …), and vehicles by kind (bus, train, light
+    rail, tram, ferry, cable car). Spaces mean every word must match; commas give alternatives
+    ("bart, caltrain"). The map, its labels and *Which line?* show only the lines that match,
+    and "9 of 73 lines · Clear" says how many are left. Escape in the field clears it. The
+    filter never searches again.
+  - The filter and the 3-hour window stay through the stop chooser and back, a new radius,
+    and a wait or time edit at the same place. They go when the plan's end (its start,
+    backwards) moves to another place, when the direction changes, and on *Clear plan* and
+    *Open plan*. Neither is saved.
+  - A line's label on the map, and each entry in *Which line?*, reads "9:03 AM · 38R 48th
+    Avenue · Fremont St & Market St, 3 min walk": the trip a click takes, the stop and the
+    walk or bike ride there, with any transfer note under it in its colour (decision 6).
+    *Which line?* lists the lines in the list's order, and a single line's label ends "Click
+    to take the 9:03 AM".
+  - A list that loads, or comes back, under a resting pointer frames no line until the pointer
+    moves and rests on a row (decision 15).
+- **Editing and Undo** (decision 19).
+  - *Undo* and *Clear plan* sit in a bar pinned to the bottom of the panel, so they stay on
+    screen however long the itinerary gets. *Undo* names the step it undoes: "Undo add",
+    "Undo remove", "Undo rename", "Undo merge", "Undo time change", "Undo switch to bike" (or
+    walk), "Undo move start", "Undo clear plan" or "Undo open plan".
+  - Ctrl+Z (Cmd+Z on a Mac) undoes too, except in a field, which keeps its own undo, while the
+    summary is open, or while a request is under way. Holding the keys, or Enter on the
+    button, undoes one step. Clicking *Undo* while typing a name or time saves what you typed,
+    then undoes it along with the step the button named.
+  - The history is saved under its own key a second after it last changed (or as the page is
+    hidden), keeping the newest steps that fit in about a million characters. On load, a
+    history saved with a different plan, or a damaged step and everything before it, is
+    dropped; when storage is full, the plan wins. Opening a plan file keeps one step, back to
+    the plan you had. Undoing *Clear plan* plans from the end you were at again.
+  - Every wait you added can be removed wherever it is; an automatic wait fills its time. Any
+    other leg in the middle goes with the legs beyond it, as one step: "Remove this and the 3
+    after" ("… before" backwards), at the foot of its row, away from *Switch to walk / bike*
+    (decision 21). With a mouse it shows only on the row you point at or tab into.
+- **Names and leg rows.**
+  - Once there are legs, Plan from is one line, "From [Home] · Tue Oct 20, 9:00 AM", or
+    "Planned from" when the trip no longer begins there and then: legs added before the
+    start, or the first legs removed or moved. A plan whose first ride leaves from a stop
+    within 75 m still reads "From". The name is a field: Enter or leaving it renames the
+    start, as one step, and Escape puts it back.
+  - Place names in a leg (where a walk or bike ride goes, where a wait is, both stops of a
+    ride) have a dotted underline. Click one, or Tab to it and press Enter, and type over it:
+    Enter or clicking away renames the place everywhere, one step each, and Escape puts it
+    back. The text is edited where it stands, so nothing moves and a click elsewhere lands
+    where it was aimed. When the plan no longer begins at its start point, its first walk or
+    bike row says where it leaves from ("Walk from [place] to Home"). *Rename places* stays,
+    listing every place.
+  - A walk or bike end picked on the map within 75 m of a place whose name you typed takes
+    that name (decision 20). Near the other end of the plan (its start forwards, its end
+    backwards) the point moves onto that place, so a round trip ends exactly where it began,
+    unless you give it a name of its own in the card. Places remember whether you named them
+    (`named`, in autosave and plan files); older files still open.
+  - Walk, bike and wait legs show *Leave*, *Arrive* and *Minutes* (*From*, *Until* and
+    *Minutes* for waits) side by side on one line. What can move shows only while one of the
+    leg's fields has focus, in a small box over the leg's summary that takes no room: "Leave
+    by 9:00 AM", "Can leave 8:25 AM–8:40 AM" or "Can't move without changing its length",
+    then "up to 20 min, keeping the departure". A click on the box only ends the editing. At
+    1280x1000 a walk row went from 248 to 103 px, a wait from 178 to 95 and the *Plan from*
+    section from 201 to 25; with four legs, *Next leg* starts at 701 px instead of 1358.
+- **Bug fixes.**
+  - Renaming the start under *Rename places* now renames it in Plan from too, so autosave and
+    *Clear plan* keep the new name.
+  - While you type a year into the Time field (0002, 0020, 0202 …), nothing is searched and no
+    coverage warning shows: a date more than 5 years from today counts as not typed yet, and a
+    hint says so once you leave the field. A reload while the field is empty or half-typed
+    keeps the start, the plan and the undo history.
+  - Requests the backend refuses as invalid explain why in a sentence, not raw JSON.
+  - *Before the start* survives a reload along with a plan that has legs.
+  - The second click of a double-click only goes where the first one did. A double-click on
+    *Remove* used to remove the leg, then click whatever moved under the pointer, and a
+    double-clicked *Summary & export* closed the summary it had just opened.
+  - A trip that loads after you've switched to another mode or end of the plan is no longer
+    drawn on the map with its stops still clickable.
+  - Clicking into a name and leaving it as it was no longer adds a step when the name has a
+    space at the end, or two in a row, as some 511 stop names do. A stop name for the start
+    that arrives after the first leg is added is no longer used.
+- **Checked in a browser** on the 511 data, at 1280x1000 and on phone sizes:
+  - each of the six stages had its own checks, and a review of them found problems in six
+    areas (focus and scrolling, map menus and the pin, double-clicks, what *Next leg* keeps,
+    Undo, names), all fixed and checked again;
+  - the base journey (Palo Alto → Caltrain to Millbrae → bike to San Bruno → bus to Hillsdale
+    → Caltrain to Palo Alto → walk home) took 17 clicks, 29 keystrokes, 4 panel scrolls and 9
+    map gestures, against 20 / 41 / 10 / 9 before this work, and the walk home was called
+    Home and ended exactly where the plan began;
+  - 228 frontend and 85 backend tests pass, with no page errors.
 
 ### M11 notes
 
@@ -350,10 +538,11 @@ fix them automatically.
     pointer leaves the list.
 - **Right-click to walk or bike** (decision 16).
   - The menu follows *After the end* / *Before the start*: *Walk here* and *Bike here*, or
-    *Walk from here* and *Bike from here*. It appears once there's a start point.
-  - The leg is routed and added at once, named after the nearest stop (or by coordinates),
-    and *Next leg* keeps its mode: after *Walk here* from the Transit panel, the departures
-    from the new end are listed.
+    *Walk from here* and *Bike from here*. It appears once there's a start point. Since M12
+    a click on empty map in Transit or Wait mode opens it too.
+  - The leg is routed and added at once, named after the nearest stop (or by coordinates;
+    since M12 a place you named nearby comes first), and *Next leg* keeps its mode: after
+    *Walk here* from the Transit panel, the departures from the new end are listed.
   - Escape, or a click elsewhere, closes the menu without doing anything else. Dragging
     with the right button still rotates the map.
 - **Checked in a browser** on the 511 data, from Powell Street:
@@ -384,7 +573,8 @@ fix them automatically.
     across the list or scrolling it never moves the map: rows that scroll under a still
     pointer don't count. Leaving the list goes back to the earlier view after 0.3 s (M10).
   - Pointing at a line on the map names it and marks its row without moving the map. Where
-    lines overlap, all of them are highlighted and named.
+    lines overlap, all of them are highlighted and named. Since M12 each name comes with the
+    time a click takes, the stop and the walk there.
   - Clicking a line picks its next trip (or last arrival). Where lines overlap, a small menu
     asks which; pointing at a choice highlights that line.
   - Once a trip is picked, its stops on the map can be clicked to get off (or on). Each names
@@ -464,9 +654,11 @@ fix them automatically.
   - Reachability estimates and legs both round up to whole minutes, so the list and the leg
     agree when the route matches the estimate.
   - If the real route is slower and misses the trip, adding the trip is refused, and the
-    message gives the routed time.
+    message gives the routed time. Since M12 the stop list says so as soon as the trip is
+    picked, and offers the line's next trip that the route makes.
 - **Editing times.** Walk and bike legs have *Leave*, *Arrive* and *Minutes* fields. Manual
-  waits have *From*, *Until* and *Minutes*. See decision 2 for what can move.
+  waits have *From*, *Until* and *Minutes*. See decision 2 for what can move. Since M12 the
+  fields sit on one line, and what can move shows while one of them has focus.
 - **511 regional feed.** Added alongside the agencies' own feeds; in M7 it became the only
   source.
   - The key is sent as a request parameter and never printed, including in error messages.
@@ -496,7 +688,8 @@ fix them automatically.
   - Transit legs store the ridden part of the shape. The map, the trip preview and the
     printed map follow the track.
 - **Renaming places.** *Rename places* under the itinerary lists every place in the plan,
-  stops included. A new name applies everywhere the place appears, and can be undone.
+  stops included. A new name applies everywhere the place appears, and can be undone. Since
+  M12 a name can also be changed where a leg shows it.
 - **Map picture.** Opening *Summary & export* fits the map to the plan and captures it as an
   image. The image appears in the summary and on the printed page. The plan's start and end
   are drawn into the map itself so they show in the picture.
@@ -534,17 +727,20 @@ fix them automatically.
 
 - **Picking points.** For walk and bike legs you click the map, and the route is previewed (a
   dashed purple line) before you add it. A picked point is named after a stop within 150 m
-  ("Near Hamilton & High"), or otherwise by its coordinates. You can edit the name before
-  adding the leg. The start point's name can be edited until the first leg is added.
+  ("Near Hamilton & High"), or otherwise by its coordinates; since M12 a place you named
+  within 75 m comes first (decision 20). You can edit the name before adding the leg. The
+  start point's name could be edited only until the first leg was added; since M12 any name
+  can be changed where it's shown.
 - **Durations** from the router are rounded up to whole minutes. That matches timetables and
   keeps connections on the safe side.
 - **Which end stays fixed** is stored on each leg:
   - Legs planned forwards keep their departure.
   - Legs planned backwards keep their arrival.
   - Walks to or from a stop always leave immediately (decision 1).
-- **Removing.** Only the first and last legs you chose can be removed, because removing one
-  in the middle would leave a gap. Undo steps back through every change, including Clear plan
-  and Open plan.
+- **Removing.** At first only the first and last legs you chose could be removed, because
+  removing one in the middle would leave a gap. Since M12 a leg in the middle goes with the
+  legs beyond it, and a wait you added can be removed anywhere (decision 21). Undo steps back
+  through every change, including Clear plan and Open plan (decision 19).
 - **Summary & export.**
   - The summary table lists every leg, including waits. Printing shows only the table.
   - CSV has one row per leg, in Bay Area local time. It starts with a byte-order mark so
@@ -555,8 +751,8 @@ fix them automatically.
   - JSON files are versioned (`incremental-routing-plan`, version 1). Opening one validates it
     and rebuilds the waits.
 - **Autosave.** The current plan and start point are kept in this browser (localStorage) and
-  restored on reload. This is per browser and best effort, so use Save plan (.json) to keep or
-  move a plan.
+  restored on reload, and since M12 so are the direction and the undo history. This is per
+  browser and best effort, so use Save plan (.json) to keep or move a plan.
 - **Browser test on real data** (Monday 2026-10-12):
   - Backwards from Home at 7:30: Rapid 522, a walk to a coffee shop, then a walk home.
   - Forwards from Home: a walk, Caltrain Express to Millbrae, a bike to an office, and a
@@ -633,13 +829,14 @@ fix them automatically.
 5. **Connections to stops can be by bike** (added after testing). This is chosen while
    planning a transit leg, and any walk or bike leg can be switched later.
 6. **Transfer rules are advice.** `transfers.txt` minimums show as warnings in the departure
-   and arrival lists only. Choosing a warned connection is allowed.
+   and arrival lists, and on the map's labels and *Which line?* menu for those lines. Choosing
+   a warned connection is allowed.
 7. **Schedules only.** The tool plans future trips, so live data would add complexity
    without helping. Only static GTFS schedules are used.
 8. **Departures by line.** The departure and arrival lists show each line nearby (a route,
-   headsign and stop) once, with its next three trips, or its last three arrivals when
-   planning backwards. Busy lines can't crowd out the rest; a line's later trips are left
-   out.
+   headsign and stop) once, with its next three trips in the hour searched, or its last three
+   arrivals when planning backwards. The hour can become three on request. Busy lines can't
+   crowd out the rest; a line's later trips are left out.
 9. **511 is the source of truth.** The regional feed is the only transit data, and the
    agencies' own feeds are retired. Departures aren't checked by hand against printed
    timetables.
@@ -662,14 +859,39 @@ fix them automatically.
     onward route. Previews are thin and see-through in the line's colour, so they can't be
     mistaken for planned rides.
 15. **Lists follow the plan.** There's no search button. The departure or arrival list is
-    found again whenever the plan or the search settings change. The map stays where you put
-    it when a list loads; only resting the pointer on a row frames a line.
-16. **Right-click adds walk and bike legs at once.** The menu follows the direction toggle.
-    Its leg skips the preview and is named after a stop nearby (or by coordinates), and the
-    *Next leg* panel keeps its mode. *Undo* and *Rename places* fix a wrong click or name.
+    found again whenever the plan or the search settings change. *Search within 1 km* and
+    *Look 3 hours ahead* only change the settings, and *Filter lines* only narrows what was
+    found. The map stays where you put it when a list loads; only resting the pointer on a
+    row frames a line, once the pointer has moved, and going back from the stop chooser
+    returns the map to where you had it.
+16. **A click on the map adds walk and bike legs at once.** Once there's a start, a click on
+    empty map in Transit or Wait mode, or a right-click (or long press) in any mode, opens a
+    menu that follows the direction toggle; before the first leg it offers *Move the start
+    here* first. Its leg skips the preview and is named after a place you named nearby
+    (decision 20), a stop nearby or its coordinates, and the *Next leg* panel keeps its mode.
+    *Undo* and renaming the place where it's shown fix a wrong click or name.
 17. **Merging joins legs as they are.** Two walks, bike rides or waits in a row become one leg
     that follows both routes, so no times change and nothing else in the plan moves. It isn't
     re-routed; a direct route would be a new leg. Automatic waits merge too.
+18. **A click on empty map asks rather than acts.** Once there's a start, a single click that
+    hits no line or stop never moves the start or adds a leg by itself: in Transit or Wait
+    mode it opens the map's menu, and in Walk or Bike mode it previews a route there. A
+    double-click only zooms. The start moves only when you drag its pin, choose *Move the
+    start here* or use *Move*, and each move is a step *Undo* takes back.
+19. **Undo names its step and survives reloads.** Every change is one step, named on the
+    button ("Undo rename"), and Ctrl/Cmd+Z undoes too outside a field. The history is saved in
+    the browser beside the plan, and dropped if it doesn't lead to the plan restored. Opening
+    a plan file keeps only the step back to the plan you had. Undoing a move of the start
+    keeps the time, since changing the time isn't a step of its own.
+20. **Names you typed are reused for points within 75 m.** A new walk or bike end within 75 m
+    of a place whose name you typed takes that name, and near the plan's other end it moves
+    onto that place, so a round trip closes; a name of its own, typed in the card, keeps it
+    where you clicked. Stops, even renamed ones, and names made from a stop or coordinates
+    never lend theirs. A start you named keeps its name through moves of up to 75 m.
+21. **Removing never leaves a gap.** A wait you added can be removed on its own anywhere, and
+    an automatic wait fills its time. Any other leg in the middle goes with every leg beyond
+    it in the planning direction, as one step. The legs that stay keep their times
+    (decision 2).
 
 **Risks:**
 
@@ -697,3 +919,7 @@ fix them automatically.
 - A "Suggest" button that asks a journey planner for the next leg or two (§2).
 - Bike share, saved-plan lists and shareable links (decision 12).
 - Live data (decision 7).
+- The map following the plan's end: framing the open end after each change instead of the
+  whole plan (proposed in the review before M12).
+- Arrivals saying where trips come from: rows in the arrivals list such as "Red-S Millbrae ·
+  from Richmond" (proposed in the review before M12).
