@@ -57,6 +57,12 @@ interface Props {
   /** About what you're doing here: why it was refused, or that a route is only estimated. */
   error: string | null;
   notice: string | null;
+  /**
+   * A notice that comes by itself a while after you picked a trip (the route to its stop is only
+   * estimated). It shows as the others do, but nothing scrolls to it: you may be reading the
+   * stops by then.
+   */
+  laterNotice: string | null;
 
   radiusM: number;
   onRadius: (metres: number) => void;
@@ -116,6 +122,7 @@ const MODES: { mode: LegMode; label: string }[] = [
 /** Builds the next leg at either end of the plan. */
 export function NextLeg(props: Props) {
   const { direction, mode, frontier, added, error, notice } = props;
+  const said = notice ?? props.laterNotice;
   const forward = direction === 'forward';
   const where = frontier.place.name || 'the start point';
   // In Walk and Bike mode a click on the map picks where to go instead (see PathPanel).
@@ -174,11 +181,11 @@ export function NextLeg(props: Props) {
             </button>
           ))}
         </div>
-        {(error || notice) && (
+        {(error || said) && (
           <div className="builder-messages" ref={messages}>
-            {notice && (
+            {said && (
               <p className="warning" role="status">
-                {notice}
+                {said}
               </p>
             )}
             {error && (

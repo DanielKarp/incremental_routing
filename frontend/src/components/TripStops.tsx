@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { TransitCall, TripDetail } from '../api';
 import { type MissedTrip, routeLabel, stopChoices } from '../plan/build';
 import type { TransferNote } from '../plan/transfers';
@@ -23,6 +23,18 @@ interface Props {
   disabled?: boolean;
 }
 
+// A screen this short, such as a phone on its side, has room under the whole header for only a
+// couple of stops.
+const SHORT = '(max-height: 500px)';
+
+function onScreenChange(onChange: () => void) {
+  const query = window.matchMedia(SHORT);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+const isShort = () => window.matchMedia(SHORT).matches;
+
 /**
  * After picking a trip: choose where to get off among its later stops (forwards), or where
  * to get on among its earlier stops (backwards). Its header, with the way back to the list,
@@ -32,22 +44,49 @@ export function TripStops(props: Props) {
   const { trip, call, direction, onChoose, onBack, missed, disabled } = props;
   const forward = direction === 'forward';
   const choices = stopChoices(trip, call.stop_sequence, direction);
+  const short = useSyncExternalStore(onScreenChange, isShort);
   const chooser = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const warning = useRef<HTMLDivElement>(null);
   // A trip just picked starts at its header, however far down the list you picked it from. The
   // button you used has gone, so keyboard focus comes here rather than to the top of the page.
-  useEffect(() => {
-    bringTopIntoView(chooser.current);
-    if (document.activeElement === document.body) heading.current?.focus({ preventScroll: true });
-  }, [trip]);
-  // The route arrives after the stops are listed; if it misses the trip, that comes into view.
+  // The route to the stop may arrive later; if it misses the trip, the warning comes into view.
+  // Only one of them scrolls, as a second scroll would stop the first on its way: a warning
+  // known at once is near the chooser's top, so it comes into view with it.
   const reason = missed?.reason;
+  const shown = useRef<{ trip: TripDetail; reason?: string } | null>(null);
   useEffect(() => {
-    if (reason) bringIntoView(warning.current);
-  }, [reason]);
+    const before = shown.current;
+    shown.current = { trip, reason };
+    if (before?.trip !== trip) {
+      bringTopIntoView(chooser.current);
+      if (document.activeElement === document.body) heading.current?.focus({ preventScroll: true });
+    } else if (reason && reason !== before.reason) bringIntoView(warning.current);
+  }, [trip, reason]);
   const instead = missed?.instead;
   const note = instead && props.noteFor?.(instead);
+  // In the header, so the stops scrolling under it can't hide it; on a short screen, under the
+  // header, so the stops have room.
+  const warningBox = missed && (
+    <div className="missed" ref={warning}>
+      <p className="warning" role="alert">
+        {missed.reason}
+      </p>
+      {instead && (
+        <div className="row wrap align-center">
+          <button
+            type="button"
+            className="secondary"
+            disabled={disabled}
+            onClick={() => props.onTakeInstead?.(instead)}
+          >
+            Take the {formatTime(forward ? instead.departure : instead.arrival)} instead
+          </button>
+          {note && <span className={`call-note issue-${note.level}`}>{note.text}</span>}
+        </div>
+      )}
+    </div>
+  );
   return (
     <div className="trip-stops" ref={chooser}>
       <h3 ref={heading} tabIndex={-1}>
@@ -80,28 +119,9 @@ export function TripStops(props: Props) {
             ? `Boards at ${call.stop.name}, ${formatTime(call.departure)}`
             : `Gets off at ${call.stop.name}, ${formatTime(call.arrival)}`}
         </p>
-        {/* In the header, so the stops scrolling under it can't hide it. */}
-        {missed && (
-          <div className="missed" ref={warning}>
-            <p className="warning" role="alert">
-              {missed.reason}
-            </p>
-            {instead && (
-              <div className="row wrap align-center">
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={disabled}
-                  onClick={() => props.onTakeInstead?.(instead)}
-                >
-                  Take the {formatTime(forward ? instead.departure : instead.arrival)} instead
-                </button>
-                {note && <span className={`call-note issue-${note.level}`}>{note.text}</span>}
-              </div>
-            )}
-          </div>
-        )}
+        {!short && warningBox}
       </div>
+      {short && warningBox}
       <ul className="calls">
         {choices.map((s) => (
           <li key={s.stop_sequence}>

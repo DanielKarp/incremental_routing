@@ -80,6 +80,7 @@ import {
   WINDOW_MIN,
   searchRadius,
 } from './searchScope';
+import { keepFocusInView } from './scroll';
 import { loadHistory, loadSession, saveHistory, saveSession } from './storage';
 import { isPlausibleInput, localInputToIso, nowLocalInput, toLocalInput } from './time';
 import { type TransitSearch, useTransitList } from './transitList';
@@ -108,8 +109,6 @@ interface Routed {
 /** The list of lines as you left it for the stop chooser, and the map then (see backToList). */
 interface ListLeft {
   spot: ListSpot;
-  /** The list then, to tell whether it has been found again since. */
-  calls: TransitCall[] | null;
   view: SavedView | null;
 }
 
@@ -657,7 +656,6 @@ export function App() {
     if (!selection && panel.current) {
       listLeft.current = {
         spot: listSpot(panel.current, lineKey(call)),
-        calls,
         view: mapRef.current?.saveView() ?? null,
       };
     }
@@ -691,7 +689,7 @@ export function App() {
   // found again. Restoring its scroll doesn't frame a line on the map (see hoverIntent).
   useLayoutEffect(() => {
     if (!returning || selection || !calls || !panel.current) return;
-    putListBack(panel.current, returning.spot, calls !== returning.calls);
+    putListBack(panel.current, returning.spot);
     setReturning(null);
   }, [returning, selection, calls]);
 
@@ -816,7 +814,11 @@ export function App() {
   return (
     <>
       <div className="app">
-        <aside className="panel" ref={panel}>
+        <aside
+          className="panel"
+          ref={panel}
+          onKeyDown={(e) => e.key === 'Tab' && keepFocusInView(e.currentTarget)}
+        >
           <header className="panel-header">
             <h1>Incremental Routing</h1>
             <button type="button" className="link" onClick={() => fileInput.current?.click()}>
@@ -913,7 +915,8 @@ export function App() {
               onMode={chooseMode}
               added={added}
               error={error}
-              notice={notice ?? pickedRoute?.fallback ?? null}
+              notice={notice}
+              laterNotice={pickedRoute?.fallback ?? null}
               radiusM={radiusM}
               onRadius={setRadiusM}
               access={access}

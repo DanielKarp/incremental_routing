@@ -401,16 +401,6 @@ button.link {
   gap: 8px;
 }
 
-/* What the panel scrolls into view keeps clear of the bar with Undo at its foot. */
-.next-leg-controls,
-.builder-messages,
-.pending,
-.missed,
-.trip-stops,
-.call-group {
-  scroll-margin: 12px 0 72px;
-}
-
 /* "Added: …", under the heading after a leg is added. */
 .added {
   font-size: 0.85rem;
@@ -458,7 +448,8 @@ button.chip {
 }
 
 /* The stop chooser's header: the way back to the list, the trip, and where you board it (or get
-   off it). It stays at the top of the panel while you scroll the stops, on a phone too. */
+   off it). It stays at the top of the panel while you scroll the stops, on a phone too. What
+   comes into view, or gets keyboard focus, keeps clear of it (scroll.ts). */
 .trip-stops-header {
   position: sticky;
   /* Over the panel's padding, which would otherwise show what scrolls under it. */
@@ -509,7 +500,8 @@ button.trip-stops-back {
   }
 }
 
-/* Undo and Clear plan, pinned to the bottom of the panel while there's more of it below. */
+/* Undo and Clear plan, pinned to the bottom of the panel while there's more of it below. What
+   comes into view, or gets keyboard focus, keeps clear of it (scroll.ts). */
 .undo-bar {
   position: sticky;
   /* Over the panel's padding, which would otherwise show what scrolls under it. */

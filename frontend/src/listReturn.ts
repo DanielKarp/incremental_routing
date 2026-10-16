@@ -2,6 +2,7 @@
 // at the line you picked.
 
 import { focusQuietly } from './hoverIntent';
+import { bringIntoView } from './scroll';
 
 /** Where the list was when a line's trip was picked: the panel's scroll, and the line's row. */
 export interface ListSpot {
@@ -47,14 +48,14 @@ export function listSpot(panel: HTMLElement, key: string): ListSpot {
 
 /**
  * Puts the list back as it was (see returnScrollTop) and focuses the line's row, without the
- * line being framed on the map. If the list has changed meanwhile, the row also comes into
- * view.
+ * line being framed on the map. If the row isn't in view even so, it comes into view: the list
+ * has been found again meanwhile, or the line was picked on the map.
  */
-export function putListBack(panel: HTMLElement, spot: ListSpot, changed: boolean) {
+export function putListBack(panel: HTMLElement, spot: ListSpot) {
   const row = rowOf(panel, spot.key);
   panel.scrollTop = returnScrollTop(spot, row && contentTop(panel, row));
   if (!row) return;
-  if (changed) row.scrollIntoView({ block: 'nearest' });
+  bringIntoView(row, 'auto');
   const button = row.querySelector('button');
   if (button) focusQuietly(button);
 }
