@@ -16,8 +16,16 @@ interface Props {
 export function PlanSummary({ plan, issues, mapImage, onClose }: Props) {
   const closeButton = useRef<HTMLButtonElement>(null);
 
+  // Focus Close while the summary is open, and give focus back to whatever opened it after.
   useEffect(() => {
+    const opener = document.activeElement;
     closeButton.current?.focus();
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     // Not when Escape has just closed a menu on the map (see MapView): one key, one thing.
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && onClose();
     window.addEventListener('keydown', onKey);
