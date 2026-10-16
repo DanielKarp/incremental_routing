@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TransitCall } from './api';
 import { groupCalls } from './callGroups';
-import { lineCall, linePreviews } from './linePreviews';
+import { inListOrder, lineCall, linePreviews, previewText } from './linePreviews';
 
 function call(trip: string, time: string): TransitCall {
   const iso = `2026-10-12T${time}:00-07:00`;
@@ -9,7 +9,7 @@ function call(trip: string, time: string): TransitCall {
     trip_id: trip,
     route: { route_id: 'muni:N', short_name: 'N', long_name: null, color: '005B95' },
     headsign: 'Ocean Beach',
-    stop: { stop_id: 'muni:powell', name: 'Powell', lat: 37.78, lon: -122.41 },
+    stop: { stop_id: 'muni:powell', name: 'Powell', lat: 37.78, lon: -122.41, access_s: 120 },
     stop_sequence: 4,
     departure: iso,
     arrival: iso,
@@ -26,23 +26,55 @@ describe('line previews', () => {
 
   it('show each line at its stop at once, and its path once it arrives', () => {
     const groups = groupCalls(calls, 'departures');
-    expect(linePreviews(groups, 'departures', [])).toEqual([
+    expect(linePreviews(groups, 'departures', [], 'walk')).toEqual([
       {
         key: groups[0].key,
         color: '005B95',
         label: 'N Ocean Beach',
         line: null,
         stop: { lat: 37.78, lon: -122.41, name: 'Powell' },
+        time: '2026-10-12T08:02:00-07:00',
+        accessS: 120,
+        access: 'walk',
+        note: null,
       },
     ]);
     const path: [number, number][] = [
       [-122.41, 37.78],
       [-122.5, 37.76],
     ];
-    const [drawn] = linePreviews(groups, 'departures', [
-      { trip_id: 'n2', stop_sequence: 4, geometry: [[0, 0]] }, // another trip of the line
-      { trip_id: 'n1', stop_sequence: 4, geometry: path },
-    ]);
+    const [drawn] = linePreviews(
+      groups,
+      'departures',
+      [
+        { trip_id: 'n2', stop_sequence: 4, geometry: [[0, 0]] }, // another trip of the line
+        { trip_id: 'n1', stop_sequence: 4, geometry: path },
+      ],
+      'walk',
+    );
     expect(drawn.line).toEqual(path);
+  });
+
+  it('are named with the time a click takes, the stop and the way there', () => {
+    const groups = groupCalls(calls, 'arrivals');
+    const warning = { level: 'warning' as const, text: '2 min to change' };
+    const [back] = linePreviews(groups, 'arrivals', [], 'bike', (c) =>
+      c.trip_id === 'n3' ? warning : null,
+    );
+    // Planning backwards, the last arrival, and the note about changing to or from it.
+    expect(previewText(back)).toBe('8:24 AM · N Ocean Beach · Powell, 2 min by bike');
+    expect(back.note).toBe(warning);
+  });
+
+  it('are offered in the order of the list', () => {
+    const at = (route: string, time: string) => ({
+      ...call(route, time),
+      route: { ...call(route, time).route, route_id: route },
+    });
+    const groups = groupCalls([at('a', '08:01'), at('b', '08:03'), at('c', '08:07')], 'departures');
+    const previews = linePreviews(groups, 'departures', [], 'walk');
+    const [a, b, c] = previews.map((p) => p.key);
+    expect(inListOrder([c, 'gone', a], previews).map((p) => p.key)).toEqual([a, c]);
+    expect(inListOrder([b], previews).map((p) => p.key)).toEqual([b]);
   });
 });

@@ -4,7 +4,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { type Ref, type RefObject, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { LatLon } from '../api';
 import { isPale } from '../color';
-import type { LinePreview } from '../linePreviews';
+import { type LinePreview, accessText, inListOrder, previewText } from '../linePreviews';
 import { type MapMenuItem, SingleClick, isRepeatClick } from '../mapClicks';
 import type { Leg, Place } from '../plan/types';
 import { formatTime } from '../time';
@@ -151,6 +151,7 @@ export function MapView(props: Props) {
       closeOnClick: false,
       className: 'map-tip',
       offset: 10,
+      maxWidth: 'none', // Set in styles.css, where a phone's screen can narrow it.
     });
     let hovered: string[] = [];
     const hover = (keys: string[]) => {
@@ -166,13 +167,14 @@ export function MapView(props: Props) {
       latest.current.onChooseLine(key);
     };
     // Escape closes an open menu and does nothing else: the key is marked as used, so the
-    // summary and the panel leave it alone (see App).
+    // summary and the panel leave it alone (see App). It's heard first, before the page's own
+    // fields, so it doesn't clear Filter lines as well when that has focus (see NextLeg).
     const closeOnEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || !menu?.isOpen()) return;
       menu.remove();
       e.preventDefault();
     };
-    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('keydown', closeOnEscape, true);
     /** Opens the map's menu at a point, if it offers anything. */
     const openMenu = (at: maplibregl.LngLat): boolean => {
       const items = latest.current.menu;
@@ -184,7 +186,6 @@ export function MapView(props: Props) {
       menu = showMenu(
         m,
         at,
-        null,
         items.map((item) => ({
           content: [item.label],
           onChoose: () => latest.current.onMenu(item.id, point),
@@ -203,7 +204,7 @@ export function MapView(props: Props) {
         hover([]);
         return;
       }
-      tip.setLngLat(e.lngLat).setText(hitLabel(hit, latest.current.lines)).addTo(m);
+      tip.setLngLat(e.lngLat).setDOMContent(hitLabel(hit, latest.current.lines)).addTo(m);
       hover(hit.kind === 'lines' ? hit.keys : []);
     });
     m.on('mouseout', () => {
@@ -261,7 +262,7 @@ export function MapView(props: Props) {
     // Lets browser tests (and the console) reach the map in development builds.
     if (import.meta.env.DEV) Object.assign(window, { __map: m });
     return () => {
-      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('keydown', closeOnEscape, true);
       singleClick.cancel();
       m.remove();
       map.current = null;
@@ -375,8 +376,10 @@ export function MapView(props: Props) {
     }
   }, [frameLine, framable]);
 
-  // As a string, so the effect runs only when the lines change.
-  const highlight = JSON.stringify(mapHover.length ? mapHover : focusLine ? [focusLine] : []);
+  // As a string, so the effect runs only when the lines change. Lines pointed at on the map
+  // may have been filtered out of the list since.
+  const pointed = mapHover.filter((key) => lines.some((l) => l.key === key));
+  const highlight = JSON.stringify(pointed.length ? pointed : focusLine ? [focusLine] : []);
   useEffect(() => {
     if (styleReady && map.current) highlightLines(map.current, JSON.parse(highlight));
   }, [styleReady, highlight]);
@@ -630,51 +633,103 @@ function hitAt(m: maplibregl.Map, point: maplibregl.Point): Hit | null {
   return keys.length ? { kind: 'lines', keys } : null;
 }
 
-function hitLabel(hit: Hit, lines: LinePreview[]): string {
+/** What the label on the map says about what's under the pointer. */
+function hitLabel(hit: Hit, lines: LinePreview[]): Node {
   if (hit.kind === 'stop') {
     const { name, time, choosable } = hit.stop.properties;
     const when = time ? ` · ${formatTime(String(time))}` : '';
-    return `${name}${when}${choosable ? '' : ' (not a choice)'}`;
+    return document.createTextNode(`${name}${when}${choosable ? '' : ' (not a choice)'}`);
   }
-  const labels = hit.keys.map((k) => lines.find((l) => l.key === k)?.label ?? k);
-  const more = labels.length > MAX_LABELS ? `\n+${labels.length - MAX_LABELS} more` : '';
-  return labels.slice(0, MAX_LABELS).join('\n') + more;
+  // In the list's order, each with its time, stop and the way there.
+  const found = inListOrder(hit.keys, lines);
+  const label = document.createDocumentFragment();
+  for (const line of found.slice(0, MAX_LABELS)) {
+    label.append(element('div', 'map-tip-line', lineSummary(line), ...noteOf(line)));
+  }
+  if (found.length > MAX_LABELS) {
+    label.append(element('div', 'map-tip-more', `+${found.length - MAX_LABELS} more`));
+  }
+  if (found.length === 1) {
+    const time = formatTime(found[0].time);
+    label.append(element('div', 'map-tip-action', `Click to take the ${time}`));
+  }
+  return label;
+}
+
+function element(tag: string, className: string, ...content: (string | Node)[]): HTMLElement {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.append(...content);
+  return el;
+}
+
+/**
+ * A line on one line: "9:02 AM · 38R 48th Avenue · Beale St & Mission St, 2 min walk". Too
+ * long for the space, the route and the stop are cut short, the stop first.
+ */
+function lineSummary(line: LinePreview): HTMLElement {
+  return element(
+    'span',
+    'line-summary',
+    element('strong', 'line-summary-time', formatTime(line.time)),
+    '·',
+    element('span', 'line-summary-name', line.label),
+    '·',
+    element('span', 'line-summary-stop', `${line.stop.name},`),
+    element('span', 'line-summary-access', accessText(line)),
+  );
+}
+
+/** A line's transfer note, if it has one, in the colour of its level. */
+function noteOf(line: LinePreview): HTMLElement[] {
+  return line.note ? [element('span', `line-note issue-${line.note.level}`, line.note.text)] : [];
 }
 
 interface MenuEntry {
   content: (string | Node)[];
+  /** Shown when the pointer rests on the entry: all of it, if it's cut short. */
+  title?: string;
   onChoose: () => void;
   /** The pointer moved onto the entry (true) or off it. */
   onPoint?: (pointing: boolean) => void;
+}
+
+interface MenuOptions {
+  heading?: string;
+  /** Added to the menu's class, for its own styles. */
+  className?: string;
+  onClose?: () => void;
 }
 
 /** A small menu at a point on the map. Choosing an entry closes it. */
 function showMenu(
   m: maplibregl.Map,
   at: maplibregl.LngLat,
-  heading: string | null,
   entries: MenuEntry[],
-  onClose?: () => void,
+  { heading, className, onClose }: MenuOptions = {},
 ): maplibregl.Popup {
   const popup = new maplibregl.Popup({
-    className: 'map-menu',
+    className: className ? `map-menu ${className}` : 'map-menu',
     offset: MENU_OFFSET_PX,
     closeButton: false,
     closeOnClick: false, // The map's click handler closes it.
+    maxWidth: 'none', // Set in styles.css, where a phone's screen can narrow it.
   });
+  const content = document.createElement('div');
   const list = document.createElement('div');
   list.className = 'map-menu-list';
   list.setAttribute('role', 'menu');
+  // The heading stays put while a long list scrolls.
   if (heading) {
-    const title = document.createElement('strong');
-    title.textContent = heading;
-    list.append(title);
+    content.append(element('strong', 'map-menu-heading', heading));
+    list.setAttribute('aria-label', heading);
   }
   for (const entry of entries) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'secondary';
     button.setAttribute('role', 'menuitem');
+    if (entry.title) button.title = entry.title;
     button.append(...entry.content);
     if (entry.onPoint) {
       button.addEventListener('mouseenter', () => entry.onPoint?.(true));
@@ -686,8 +741,9 @@ function showMenu(
     });
     list.append(button);
   }
+  content.append(list);
   if (onClose) popup.on('close', onClose);
-  popup.setLngLat(at).setDOMContent(list).addTo(m);
+  popup.setLngLat(at).setDOMContent(content).addTo(m);
   // The menu goes above or below the point, wherever it fits. On a short map (a phone's) it
   // might fit neither way, so then its list is shortened to fit the larger side (but not to
   // less than two entries or so), and scrolls.
@@ -701,7 +757,11 @@ function showMenu(
   return popup;
 }
 
-/** Where lines overlap, a click asks which one. Pointing at a choice highlights its line. */
+/**
+ * Where lines overlap, a click asks which one, in the list's order: by time. Each choice says
+ * which trip it takes, from which stop, and any transfer note. Pointing at a choice highlights
+ * its line.
+ */
 function showLineChooser(
   m: maplibregl.Map,
   at: maplibregl.LngLat,
@@ -709,21 +769,22 @@ function showLineChooser(
   lines: LinePreview[],
   on: { choose: (key: string) => void; hover: (keys: string[]) => void },
 ): maplibregl.Popup {
-  const entries = keys.flatMap((key): MenuEntry[] => {
-    const line = lines.find((l) => l.key === key);
-    if (!line) return [];
+  const entries = inListOrder(keys, lines).map((line): MenuEntry => {
     const swatch = document.createElement('span');
     swatch.className = isPale(line.color) ? 'swatch pale' : 'swatch';
     swatch.style.background = line.color ? `#${line.color}` : ACCENT;
-    return [
-      {
-        content: [swatch, line.label],
-        onChoose: () => on.choose(key),
-        onPoint: (pointing) => on.hover(pointing ? [key] : []),
-      },
-    ];
+    return {
+      content: [swatch, element('span', 'line-choice', lineSummary(line), ...noteOf(line))],
+      title: [previewText(line), line.note?.text].filter(Boolean).join('\n'),
+      onChoose: () => on.choose(line.key),
+      onPoint: (pointing) => on.hover(pointing ? [line.key] : []),
+    };
   });
-  return showMenu(m, at, 'Which line?', entries, () => on.hover([]));
+  return showMenu(m, at, entries, {
+    heading: 'Which line?',
+    className: 'line-chooser',
+    onClose: () => on.hover([]),
+  });
 }
 
 /** A transit leg follows its shape when the feed has one, else runs stop to stop. */

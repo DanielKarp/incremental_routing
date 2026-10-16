@@ -1,11 +1,25 @@
-import { useEffect, useRef } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 import type { PathMode, RouteResult, TransitCall, TripDetail } from '../api';
+import type { CallGroup } from '../callGroups';
+import { isFiltering } from '../lineFilter';
 import { type MissedTrip, pathDurationS, pathInfo } from '../plan/build';
 import { hillNotes, hillProfile } from '../plan/hills';
 import { addSeconds } from '../plan/plan';
 import type { TransferNote } from '../plan/transfers';
 import type { Direction, LegMode, Place, Waypoint } from '../plan/types';
 import { bringIntoView } from '../scroll';
+import {
+  CALL_LIMIT,
+  LONG_WINDOW_MIN,
+  type SearchScope,
+  WINDOW_MIN,
+  cutText,
+  formatDistance,
+  nothingText,
+  offersLongWindow,
+  scopeText,
+  widerRadius,
+} from '../searchScope';
 import { formatDuration, formatTime } from '../time';
 import { CallList } from './CallList';
 import { HillProfile } from './HillProfile';
@@ -49,8 +63,18 @@ interface Props {
   /** How you get between the frontier and the stop: walking or cycling. */
   access: PathMode;
   onAccess: (access: PathMode) => void;
-  /** The departures (or arrivals) near the frontier: null until found. */
-  calls: TransitCall[] | null;
+  /** The lines near the frontier (see groupCalls): null until found. */
+  lines: CallGroup[] | null;
+  /** Those of them that the line filter lets through. */
+  shownLines: CallGroup[];
+  /** What the list searched for, or is searching for. */
+  scope: SearchScope;
+  /** Whether the search stopped at CALL_LIMIT trips, so some lines may be missing. */
+  cut: boolean;
+  lineFilter: string;
+  onLineFilter: (text: string) => void;
+  /** Look further ahead (or back) than the hour, or no longer. */
+  onLongWindow: (long: boolean) => void;
   searching: boolean;
   searchError: string | null;
   onRetrySearch: () => void;
@@ -174,6 +198,7 @@ export function NextLeg(props: Props) {
 
 function TransitPanel(p: Props) {
   const forward = p.direction === 'forward';
+  const listHeading = useRef<HTMLHeadingElement>(null);
   if (p.selection) {
     return (
       <TripStops
@@ -220,22 +245,40 @@ function TransitPanel(p: Props) {
           />
         </label>
       </div>
-      {(p.calls || p.searching || p.searchError) && (
-        <h3>{forward ? 'Departures you can reach' : 'Arrivals that get you there'}</h3>
+      {(p.lines || p.searching || p.searchError) && (
+        <h3 ref={listHeading} tabIndex={-1}>
+          {forward ? 'Departures you can reach' : 'Arrivals that get you there'}
+        </h3>
       )}
-      {p.calls ? (
-        <CallList
-          calls={p.calls}
-          direction={what}
-          access={p.access}
-          noteFor={p.noteFor}
-          onSelect={p.onChooseCall}
-          onChooseLine={p.onChooseLine}
-          onHoverLine={p.onHoverLine}
-          onDwellLine={p.onDwellLine}
-          highlight={p.highlightLines}
-          disabled={p.busy}
-        />
+      {(p.searching || !!p.lines?.length) && (
+        <>
+          <p className="muted">
+            {scopeText(p.scope)}
+            {p.lines && <WindowLink {...p} heading={listHeading} />}
+          </p>
+          {p.lines && p.cut && <p className="warning">{cutText(p.scope, CALL_LIMIT)}</p>}
+          <LineFilter {...p} />
+        </>
+      )}
+      {p.lines ? (
+        p.lines.length === 0 ? (
+          <NothingFound {...p} heading={listHeading} />
+        ) : p.shownLines.length === 0 ? (
+          <p className="muted">No lines here match “{p.lineFilter.trim()}”.</p>
+        ) : (
+          <CallList
+            lines={p.shownLines}
+            direction={what}
+            access={p.access}
+            noteFor={p.noteFor}
+            onSelect={p.onChooseCall}
+            onChooseLine={p.onChooseLine}
+            onHoverLine={p.onHoverLine}
+            onDwellLine={p.onDwellLine}
+            highlight={p.highlightLines}
+            disabled={p.busy}
+          />
+        )
       ) : p.searchError ? (
         <div className="row align-end">
           <p className="error grow" role="alert">
@@ -253,6 +296,116 @@ function TransitPanel(p: Props) {
         )
       )}
     </>
+  );
+}
+
+/**
+ * "Filter lines" narrows the list, and the lines on the map, to those matching what you type
+ * (see filterLines). While it's on, the count of lines it lets through says so.
+ */
+function LineFilter(p: Props) {
+  const input = useRef<HTMLInputElement>(null);
+  const filtering = isFiltering(p.lineFilter);
+  return (
+    <div className="row wrap align-center line-filter">
+      <input
+        ref={input}
+        type="search"
+        aria-label="Filter lines"
+        placeholder="Filter lines (e.g. BART, Caltrain, 22)"
+        value={p.lineFilter}
+        onChange={(e) => p.onLineFilter(e.target.value)}
+        onKeyDown={(e) => {
+          // Escape clears the filter, unless it has just closed a menu on the map (see MapView).
+          if (e.key === 'Escape' && !e.defaultPrevented && p.lineFilter) {
+            e.preventDefault();
+            p.onLineFilter('');
+          }
+        }}
+      />
+      {filtering && (
+        <span className="muted">
+          {p.lines && (
+            <span role="status">
+              {p.shownLines.length} of {p.lines.length} lines
+            </span>
+          )}
+          {p.lines && ' · '}
+          <button
+            type="button"
+            className="link"
+            onClick={() => {
+              p.onLineFilter('');
+              input.current?.focus(); // The button is gone.
+            }}
+          >
+            Clear
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface Widen {
+  /** The list's heading, which keeps keyboard focus when the button you used goes. */
+  heading: RefObject<HTMLHeadingElement | null>;
+}
+
+/** Under a list: Look 3 hours ahead (or back), or, once it does, just the hour. */
+function WindowLink(p: Props & Widen) {
+  const forward = p.direction === 'forward';
+  const long = p.scope.windowMin > WINDOW_MIN;
+  if (!long && !offersLongWindow(p.scope, true)) return null;
+  return (
+    <>
+      {' '}
+      <button
+        type="button"
+        className="link"
+        onClick={() => {
+          p.onLongWindow(!long);
+          p.heading.current?.focus({ preventScroll: true });
+        }}
+      >
+        {long
+          ? `Just the ${forward ? 'next hour' : 'hour before'}`
+          : `Look ${LONG_WINDOW_MIN / 60} hours ${forward ? 'ahead' : 'back'}`}
+      </button>
+    </>
+  );
+}
+
+/** An empty list says what it searched, and offers to search wider, longer or by map. */
+function NothingFound(p: Props & Widen) {
+  const forward = p.direction === 'forward';
+  const wider = widerRadius(p.scope.radiusM);
+  const longer = offersLongWindow(p.scope, false);
+  const widen = (change: () => void) => () => {
+    change();
+    p.heading.current?.focus({ preventScroll: true }); // The button is gone while it searches.
+  };
+  return (
+    <div className="nothing-found">
+      <p role="status">{nothingText(p.scope)}</p>
+      {(wider || longer) && (
+        <div className="row wrap">
+          {wider && (
+            <button type="button" className="secondary" onClick={widen(() => p.onRadius(wider))}>
+              Search within {formatDistance(wider)}
+            </button>
+          )}
+          {longer && (
+            <button type="button" className="secondary" onClick={widen(() => p.onLongWindow(true))}>
+              Look {LONG_WINDOW_MIN / 60} hours {forward ? 'ahead' : 'back'}
+            </button>
+          )}
+        </div>
+      )}
+      <p className="hint">
+        Or click the map to walk or bike {forward ? 'towards a stop' : 'from a stop'}.
+      </p>
+    </div>
   );
 }
 

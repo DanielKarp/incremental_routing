@@ -35,16 +35,24 @@ describe('finding the transit list', () => {
 
     const skip = { tripId: 'on', serviceDate: '2026-10-12' };
     const found = await findCalls({ direction: 'forward', query, skip });
-    expect(found.map((c) => `${c.trip_id} ${c.service_date}`)).toEqual([
+    expect(found.calls.map((c) => `${c.trip_id} ${c.service_date}`)).toEqual([
       'n1 2026-10-12',
       'on 2026-10-13', // The same trip on another day is a different ride.
     ]);
     expect(departures).toHaveBeenCalledWith(query);
 
-    expect((await findCalls({ direction: 'backward', query })).map((c) => c.trip_id)).toEqual([
-      'n0',
-    ]);
+    const back = await findCalls({ direction: 'backward', query });
+    expect(back.calls.map((c) => c.trip_id)).toEqual(['n0']);
     expect(arrivals).toHaveBeenCalledOnce();
+  });
+
+  it('says when the search stopped at its limit, counting the trip you are on', async () => {
+    vi.spyOn(api, 'departures').mockResolvedValue([call('on', '08:02'), call('n1', '08:05')]);
+    const skip = { tripId: 'on', serviceDate: '2026-10-12' };
+    const full = await findCalls({ direction: 'forward', query: { ...query, limit: 2 }, skip });
+    expect(full).toMatchObject({ cut: true, calls: [{ trip_id: 'n1' }] });
+    const roomy = await findCalls({ direction: 'forward', query: { ...query, limit: 3 }, skip });
+    expect(roomy.cut).toBe(false);
   });
 
   it('asks where each line goes from the trip it stands for, and not for no lines', async () => {

@@ -1,5 +1,5 @@
 import type { PathMode, TransitCall } from '../api';
-import { TRIPS_PER_LINE, groupCalls } from '../callGroups';
+import type { CallGroup } from '../callGroups';
 import { useHoverIntent } from '../hoverIntent';
 import { lineCall } from '../linePreviews';
 import { routeLabel } from '../plan/build';
@@ -8,7 +8,8 @@ import { formatDuration, formatTime } from '../time';
 import { NoBikesBadge, RouteBadge } from './RouteBadge';
 
 interface Props {
-  calls: TransitCall[];
+  /** The lines to list (see groupCalls), in order. */
+  lines: CallGroup[];
   direction: 'departures' | 'arrivals';
   /** How you'd get between the stop and your point. */
   access: PathMode;
@@ -35,18 +36,16 @@ interface Props {
  * route, headsign and stop, with a time for each of its next (or last) few trips.
  */
 export function CallList(props: Props) {
-  const { calls, direction, access, noteFor, onSelect, onChooseLine, onHoverLine, highlight } =
+  const { lines, direction, access, noteFor, onSelect, onChooseLine, onHoverLine, highlight } =
     props;
   const { disabled } = props;
   const intent = useHoverIntent<string>(props.onDwellLine);
-  if (!calls.length) return <p className="muted">No trips found in this window.</p>;
   const timeOf = (c: TransitCall) =>
     formatTime(direction === 'departures' ? c.departure : c.arrival);
   return (
     <>
       <p className="muted">
-        {direction === 'departures' ? 'The next' : 'The last'} {TRIPS_PER_LINE} trips of each
-        line. Pick a time, or a line (here or on the map) for its{' '}
+        Pick a time, or a line (here or on the map) for its{' '}
         {direction === 'departures' ? 'next trip' : 'last arrival'}.
       </p>
       <ul
@@ -60,7 +59,7 @@ export function CallList(props: Props) {
           }
         }}
       >
-        {groupCalls(calls, direction).map((group) => {
+        {lines.map((group) => {
           const { key, calls: trips } = group;
           const { route, headsign, stop } = trips[0];
           const noBikes = trips.filter((c) => c.bikes_allowed === 2).length;

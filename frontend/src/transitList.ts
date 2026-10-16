@@ -19,6 +19,8 @@ export interface TransitSearch {
 export interface TransitList {
   /** The departures (or arrivals) found, or null until they are. */
   calls: TransitCall[] | null;
+  /** Whether the search stopped at its limit, so later departures (earlier arrivals) are cut. */
+  cut: boolean;
   /** Where each listed line goes, once that has loaded too. */
   paths: LinePath[];
   searching: boolean;
@@ -29,7 +31,7 @@ export interface TransitList {
 
 type Outcome =
   | { key: string; status: 'searching' }
-  | { key: string; status: 'found'; calls: TransitCall[] }
+  | { key: string; status: 'found'; calls: TransitCall[]; cut: boolean }
   | { key: string; status: 'failed'; reason: string };
 
 const NO_PATHS: LinePath[] = [];
@@ -54,9 +56,9 @@ export function useTransitList(search: TransitSearch | null): TransitList {
     const timer = setTimeout(async () => {
       wanted.current = key;
       setOutcome({ key, status: 'searching' });
-      let calls: TransitCall[];
+      let found: Found;
       try {
-        calls = await findCalls(search);
+        found = await findCalls(search);
       } catch (e) {
         if (wanted.current === key) {
           setOutcome({ key, status: 'failed', reason: (e as Error).message });
@@ -64,10 +66,10 @@ export function useTransitList(search: TransitSearch | null): TransitList {
         return;
       }
       if (wanted.current !== key) return;
-      setOutcome({ key, status: 'found', calls });
+      setOutcome({ key, status: 'found', ...found });
       try {
-        const found = await findPaths(search.direction, calls);
-        if (wanted.current === key) setPaths({ key, paths: found });
+        const paths = await findPaths(search.direction, found.calls);
+        if (wanted.current === key) setPaths({ key, paths });
       } catch {
         // The paths are extra: the list works without them.
       }
@@ -79,6 +81,7 @@ export function useTransitList(search: TransitSearch | null): TransitList {
   const current = outcome && outcome.key === key ? outcome : null;
   return {
     calls: current?.status === 'found' ? current.calls : null,
+    cut: current?.status === 'found' && current.cut,
     paths: paths && paths.key === key ? paths.paths : NO_PATHS,
     searching: key !== null && (!current || current.status === 'searching'),
     error: current?.status === 'failed' ? current.reason : null,
@@ -86,12 +89,23 @@ export function useTransitList(search: TransitSearch | null): TransitList {
   };
 }
 
-/** The departures (or arrivals) for a search, without the trip you're already on. */
-export async function findCalls({ direction, query, skip }: TransitSearch) {
+interface Found {
+  calls: TransitCall[];
+  cut: boolean;
+}
+
+/**
+ * The departures (or arrivals) for a search, without the trip you're already on, and whether
+ * the search stopped at its limit.
+ */
+export async function findCalls({ direction, query, skip }: TransitSearch): Promise<Found> {
   const found = await (direction === 'forward' ? api.departures(query) : api.arrivals(query));
-  return found.filter(
-    (c) => !skip || c.trip_id !== skip.tripId || c.service_date !== skip.serviceDate,
-  );
+  return {
+    calls: found.filter(
+      (c) => !skip || c.trip_id !== skip.tripId || c.service_date !== skip.serviceDate,
+    ),
+    cut: !!query.limit && found.length >= query.limit,
+  };
 }
 
 /** Where each line in the list goes, from the trip it stands for (see lineCall). */

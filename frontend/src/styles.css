@@ -792,7 +792,7 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
 .map-tip .maplibregl-popup-content {
   padding: 4px 8px;
   font-size: 0.8rem;
-  white-space: pre-line;
+  max-width: min(360px, 80vw);
   color: #1d2330;
 }
 
@@ -803,7 +803,13 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
 
 .map-menu .maplibregl-popup-content {
   padding: 8px;
+  max-width: min(360px, 85vw);
   color: #1d2330;
+}
+
+.map-menu-heading {
+  display: block;
+  margin-bottom: 4px;
 }
 
 .map-menu-list {
@@ -839,4 +845,83 @@ button.call-line-button:hover:not(:disabled) .call-headsign {
 
 .swatch.pale {
   box-shadow: 0 0 0 1px #4b5563;
+}
+
+/* Which line? A long list scrolls under its heading, and covers less of the map. */
+.line-chooser .map-menu-list {
+  max-height: 30vh;
+}
+
+.line-choice {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* A line in a map label or menu, on one line: its time, name, stop and the way there. When
+   that's too long, the stop is cut short first, then the name. */
+.line-summary {
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.line-summary-time,
+.line-summary-access {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.line-summary-name,
+.line-summary-stop {
+  min-width: 3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Shrinking is shared out by width, and a name shrunk by a fraction of a pixel is cut short
+   already. With this much more, the stop takes all of it until it's down to its minimum. */
+.line-summary-stop {
+  flex-shrink: 100000;
+}
+
+.line-note {
+  font-size: 0.75rem;
+}
+
+.map-tip-line {
+  display: flex;
+  flex-direction: column;
+}
+
+.map-tip-line + .map-tip-line {
+  margin-top: 2px;
+}
+
+/* The colours of the panel's light theme: a map popup is white either way. */
+.map-tip .issue-warning,
+.map-menu .issue-warning {
+  color: #8a5a00;
+}
+
+.map-tip .issue-info,
+.map-menu .issue-info,
+.map-tip-more,
+.map-tip-action {
+  color: #6b7280;
+}
+
+/* Filter lines, above the departure (or arrival) list, and what it lets through. */
+.line-filter input {
+  flex: 1;
+  min-width: 12em;
+}
+
+/* An empty list: what was searched, and ways to look further. */
+.nothing-found {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }

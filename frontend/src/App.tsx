@@ -31,6 +31,7 @@ import { StartSection } from './components/StartSection';
 import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
 import { isTypingIn, isUndoKey } from './keys';
+import { filterLines } from './lineFilter';
 import { type LinePreview, lineCall, linePreviews } from './linePreviews';
 import { type ListSpot, listSpot, putListBack } from './listReturn';
 import { emptyClick, mapMenuItems } from './mapClicks';
@@ -69,6 +70,13 @@ import {
 } from './plan/plan';
 import { adjacentRide, transferContext, transferNote } from './plan/transfers';
 import type { Direction, Leg, LegMode, Place, Plan, Waypoint } from './plan/types';
+import {
+  CALL_LIMIT,
+  LONG_WINDOW_MIN,
+  type SearchScope,
+  WINDOW_MIN,
+  searchRadius,
+} from './searchScope';
 import { loadHistory, loadSession, saveHistory, saveSession } from './storage';
 import { isPlausibleInput, localInputToIso, nowLocalInput, toLocalInput } from './time';
 import { type TransitSearch, useTransitList } from './transitList';
@@ -76,11 +84,6 @@ import { type UndoLabel, type UndoStep, undoesTime } from './undo';
 
 const NO_LEGS: Leg[] = [];
 const NO_PREVIEWS: LinePreview[] = [];
-const RADIUS_MIN_M = 50;
-const RADIUS_MAX_M = 3000; // The backend's limit.
-// The backend's maximum too. With a few trips per line it holds every line downtown, even
-// within 3 km (about 360 trips at Civic Center).
-const CALL_LIMIT = 500;
 // The undo history can be large, so it's saved this long after it last changed (or when you
 // leave the page) rather than at every change, as the plan is.
 const HISTORY_SAVE_DELAY_MS = 1000;
@@ -138,6 +141,10 @@ export function App() {
   const [radiusM, setRadiusM] = useState(500);
   // How you get to (or from) the stop for a transit leg.
   const [access, setAccess] = useState<PathMode>('walk');
+  // What's typed in Filter lines, and whether the list looks 3 hours ahead (or back) rather
+  // than one. Both are for one end of the plan (see listFor).
+  const [lineFilter, setLineFilter] = useState('');
+  const [longWindow, setLongWindow] = useState(false);
   const [selection, setSelection] = useState<TripSelection | null>(null);
   // The line pointed at in the list (highlighted on the map), the one it rested on (framed on
   // the map), and those pointed at on the map (marked in the list).
@@ -252,17 +259,37 @@ export function App() {
   // The ride you'd change from (forwards) or to (backwards), for transfer rules.
   const ride = plan ? adjacentRide(plan, direction) : null;
 
+  // The line filter and the longer window are kept while you go into the stop chooser and back
+  // or change the radius, but not once the plan's end (or start, backwards) moves to another
+  // place, or you plan from the other end. Before the first leg that's the start point, which
+  // stays put while you type a time.
+  const at = frontier?.place ?? anchorPlace;
+  const listFor = at && JSON.stringify([direction, at.lat, at.lon]);
+  const [filterFor, setFilterFor] = useState(listFor);
+  if (filterFor !== listFor) {
+    setFilterFor(listFor);
+    setLineFilter('');
+    setLongWindow(false);
+  }
+
   // While Transit is chosen, the departures (or arrivals) near the frontier are listed, and
   // found again whenever anything they depend on changes.
   const onIt = ride?.transit;
+  const scope: SearchScope | null = frontier && {
+    direction,
+    time: frontier.time,
+    radiusM: searchRadius(radiusM),
+    windowMin: longWindow ? LONG_WINDOW_MIN : WINDOW_MIN,
+  };
   const transitSearch: TransitSearch | null =
-    mode === 'transit' && frontier && health?.gtfs_loaded !== false
+    mode === 'transit' && frontier && scope && health?.gtfs_loaded !== false
       ? {
           direction,
           query: {
             point: { lat: frontier.place.lat, lon: frontier.place.lon },
             time: frontier.time,
-            radiusM: Math.min(RADIUS_MAX_M, Math.max(RADIUS_MIN_M, radiusM || 500)),
+            radiusM: scope.radiusM,
+            windowMin: scope.windowMin,
             access,
             transfer: transferContext(ride, direction),
             perRoute: TRIPS_PER_LINE,
@@ -277,11 +304,20 @@ export function App() {
 
   const listing = forward ? 'departures' : 'arrivals';
   const lines = useMemo(() => (calls ? groupCalls(calls, listing) : []), [calls, listing]);
+  // Those that Filter lines lets through, in the list and on the map.
+  const shownLines = useMemo(() => filterLines(lines, lineFilter), [lines, lineFilter]);
   // The lines are on the map while the list is showing; a chosen trip takes their place.
   const previews = useMemo(
-    () => (selection ? NO_PREVIEWS : linePreviews(lines, listing, transit.paths)),
-    [selection, lines, listing, transit.paths],
+    () =>
+      selection
+        ? NO_PREVIEWS
+        : linePreviews(shownLines, listing, transit.paths, access, (call) =>
+            transferNote(call, ride, direction),
+          ),
+    [selection, shownLines, listing, transit.paths, access, ride, direction],
   );
+  // A row pointed at may have been filtered out since; its mouse-leave event never comes.
+  const shown = (key: string | null) => (key && previews.some((p) => p.key === key) ? key : null);
 
   const tripPreview: TripPreview | null = useMemo(() => {
     if (!selection) return null;
@@ -426,6 +462,9 @@ export function App() {
     setDirection('forward');
     resetBuilder();
     setAdded(null);
+    // Even when the plan ended where it started.
+    setLineFilter('');
+    setLongWindow(false);
   }
 
   /** Runs an action that waits for the backend. What goes wrong is said by `fail`. */
@@ -753,6 +792,8 @@ export function App() {
     setMovingAnchor(false);
     resetBuilder();
     setAdded(null);
+    setLineFilter('');
+    setLongWindow(false);
     setAlert({ text: `Opened ${file.name}.`, tone: 'notice' });
   }
 
@@ -841,7 +882,7 @@ export function App() {
             />
           )}
 
-          {plan && frontier && (
+          {plan && frontier && scope && (
             <NextLeg
               direction={direction}
               mode={mode}
@@ -860,7 +901,13 @@ export function App() {
               onRadius={setRadiusM}
               access={access}
               onAccess={setAccess}
-              calls={calls}
+              lines={calls && lines}
+              shownLines={shownLines}
+              scope={scope}
+              cut={transit.cut}
+              lineFilter={lineFilter}
+              onLineFilter={setLineFilter}
+              onLongWindow={setLongWindow}
               searching={transit.searching}
               searchError={transit.error}
               onRetrySearch={transit.retry}
@@ -906,8 +953,8 @@ export function App() {
           start={committed ? planStart(committed).place : anchorPlace}
           end={committed ? planEnd(committed).place : null}
           lines={showSummary ? NO_PREVIEWS : previews}
-          focusLine={listHover}
-          frameLine={listDwell}
+          focusLine={shown(listHover)}
+          frameLine={shown(listDwell)}
           tripPreview={tripPreview}
           pendingPoint={pending?.place ?? null}
           pendingRoute={pending?.route.geometry ?? null}
