@@ -1,5 +1,5 @@
 import { type RefObject, useEffect, useRef } from 'react';
-import type { PathMode, RouteResult, TransitCall, TripDetail } from '../api';
+import type { LatLon, PathMode, RouteResult, TransitCall, TripDetail } from '../api';
 import type { CallGroup } from '../callGroups';
 import { isFiltering } from '../lineFilter';
 import { type MissedTrip, pathDurationS, pathInfo } from '../plan/build';
@@ -30,6 +30,8 @@ export interface PendingPath {
   mode: PathMode;
   place: Place;
   route: RouteResult;
+  /** Where you clicked: the place can be the other end of the plan nearby (see namedPlaceNear). */
+  point: LatLon;
 }
 
 export interface TripSelection {

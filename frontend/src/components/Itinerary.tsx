@@ -10,6 +10,7 @@ import {
   planPlaces,
   planStart,
   removedWith,
+  samePlace,
   tidyName,
 } from '../plan/plan';
 import type { Direction, Leg, Place, Plan, PlanIssue } from '../plan/types';
@@ -83,7 +84,14 @@ export function Itinerary(props: Props) {
                 {formatTimeOnDay(leg.end.time, start.time)}
               </span>
               <div className="leg-body">
-                <LegSummary leg={leg} disabled={props.disabled} onRename={props.onRename} />
+                <LegSummary
+                  leg={leg}
+                  // Where the plan begins, unless the From line names it: after legs added
+                  // before the start, or the first ones removed, no other row does.
+                  from={i === 0 && !samePlace(leg.start.place, plan.anchor.place)}
+                  disabled={props.disabled}
+                  onRename={props.onRename}
+                />
               </div>
               <div className="leg-actions">
                 {(leg.mode === 'walk' || leg.mode === 'bike') && (
@@ -238,9 +246,13 @@ const MERGED_NAMES: Record<Leg['mode'], string> = {
 const editable = (leg: Leg) =>
   leg.mode === 'walk' || leg.mode === 'bike' || (leg.mode === 'wait' && !leg.auto);
 
-/** A leg in a few words. Its places' names can be clicked to rename them. */
+/**
+ * A leg in a few words. Its places' names can be clicked to rename them. With `from`, a walk or
+ * bike ride names where it leaves from too.
+ */
 function LegSummary(props: {
   leg: Leg;
+  from?: boolean;
   disabled?: boolean;
   onRename: (place: Place, name: string) => void;
 }) {
@@ -280,7 +292,8 @@ function LegSummary(props: {
   return (
     <>
       <p>
-        {MODE_NAMES[leg.mode]} to {nameOf(leg.end.place)}
+        {MODE_NAMES[leg.mode]} {props.from && <>from {nameOf(leg.start.place)} </>}to{' '}
+        {nameOf(leg.end.place)}
         <span className="muted"> · {notes.join(' · ')}</span>
       </p>
       {hills && <HillProfile profile={hills} />}

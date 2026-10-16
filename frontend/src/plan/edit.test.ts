@@ -221,6 +221,15 @@ describe('where the plan was started from', () => {
     const cafe = leg('cafe', 'walk', CAFE, '08:10', HOME, '08:30', { fixed: 'end' });
     expect(startsAtAnchor({ ...screenshot, legs: [cafe, ...screenshot.legs] })).toBe(false);
     expect(startsAtAnchor({ ...screenshot, legs: [ride] })).toBe(false);
+    expect(startsAtAnchor(ok(setLegStart(screenshot, 'walk', t('08:35'))))).toBe(false);
+  });
+
+  it('is the start of a first ride from a stop there, which leaves later', () => {
+    // Planned from 50 m away at 8:45, so there's no walk to the stop for the 8:52.
+    const nearVienna = { place: { lat: VIENNA.lat - 0.00045, lon: VIENNA.lon }, time: t('08:45') };
+    expect(startsAtAnchor({ anchor: nearVienna, legs: [ride] })).toBe(true);
+    const late = { ...nearVienna, time: t('09:00') };
+    expect(startsAtAnchor({ anchor: late, legs: [ride] })).toBe(false);
   });
 
   it('is still after the start has been renamed', () => {

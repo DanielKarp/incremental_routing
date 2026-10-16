@@ -386,10 +386,18 @@ export function tidyName(name: string): string {
 
 /**
  * Whether the plan begins where and when you started planning it. Not once legs have been
- * added before that point, or the first legs after it removed or moved.
+ * added before that point, or the first legs after it removed or moved. A first ride from a
+ * stop there (within SAME_PLACE_M, so with no walk to it) counts, though it leaves later: you're
+ * there in time to catch it.
  */
 export function startsAtAnchor(plan: Plan): boolean {
   const start = planStart(plan);
+  if (plan.legs[0]?.mode === 'transit') {
+    return (
+      distanceM(start.place, plan.anchor.place) <= SAME_PLACE_M &&
+      toMs(start.time) >= toMs(plan.anchor.time)
+    );
+  }
   return (
     toMs(start.time) === toMs(plan.anchor.time) &&
     start.place.lat === plan.anchor.place.lat &&

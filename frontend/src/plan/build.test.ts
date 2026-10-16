@@ -13,6 +13,7 @@ import {
   pathLeg,
   pathLegArriving,
   pinName,
+  placeAsNamed,
   previewLine,
   stopChoices,
   transitLeg,
@@ -456,6 +457,28 @@ describe('naming a new end point after a place you named', () => {
   it('nothing to go by in a plan without legs', () => {
     const noLegs = { anchor: at(HOME, '15:00'), legs: [] };
     expect(namedPlaceNear(noLegs, north(HOME, 20), 'forward')).toBeNull();
+  });
+
+  it('given a name of its own in the card, a point put on home goes back where you clicked', () => {
+    const point = north(HOME, 40);
+    const home = namedPlaceNear(plan, point, 'forward');
+    if (!home) throw new Error('Not called Home');
+    expect(placeAsNamed(plan, home, point)).toBe(home);
+    const spaced = { ...home, name: 'Home ' };
+    expect(placeAsNamed(plan, spaced, point)).toBe(spaced);
+    expect(placeAsNamed(plan, { ...home, name: 'Gym next door' }, point)).toEqual({
+      ...point,
+      name: 'Gym next door',
+      named: true,
+    });
+    // A name cleared in the card: it's then named by where you clicked.
+    expect(placeAsNamed(plan, { ...home, name: '' }, point)).toMatchObject(point);
+  });
+
+  it('elsewhere, a point named in the card is where you clicked already', () => {
+    const point = north(CAFE, 50);
+    const bakery = { ...point, name: 'Bakery', named: true };
+    expect(placeAsNamed(plan, bakery, point)).toBe(bakery);
   });
 });
 

@@ -49,6 +49,7 @@ import {
   pathLeg,
   pathLegArriving,
   pinName,
+  placeAsNamed,
   previewLine,
   stopChoices,
   stopPlace,
@@ -589,7 +590,7 @@ export function App() {
       named ? null : nearestStop(point),
     ]);
     const place = named ?? { ...point, name: pinName(point, nearest) };
-    return { path: { mode: m, place, route }, fallback };
+    return { path: { mode: m, place, route, point }, fallback };
   }
 
   /** Adds a walk or bike leg between the frontier and its place. */
@@ -625,12 +626,29 @@ export function App() {
       setNotice(fallback);
     });
 
+  /**
+   * Adds the walk or bike leg set up in the card, named as it is there. A point put on the other
+   * end of the plan and named otherwise goes back where you clicked (see placeAsNamed), and is
+   * routed there first.
+   */
   function addPending() {
     if (!plan || !pending || busy || pending.mode !== mode) return;
-    const typed = pending.place.name?.trim();
+    const at = placeAsNamed(plan, pending.place, pending.point);
+    const typed = at.name?.trim();
     // A name cleared in the card is named after its coordinates, which aren't yours.
-    const place = typed ? { ...pending.place, name: typed } : withName(pending.place, '');
-    addPath(plan, { ...pending, place: { ...place, name: place.name || pinName(place) } });
+    const named = typed ? { ...at, name: typed } : withName(at, '');
+    const place = { ...named, name: named.name || pinName(named) };
+    if (at === pending.place) {
+      addPath(plan, { ...pending, place });
+      return;
+    }
+    void run(async () => {
+      const request = ++pathRequest.current;
+      const { route, fallback } = await routeAtFrontier(plan, pending.mode, place);
+      if (request !== pathRequest.current) return; // Cancelled meanwhile.
+      addPath(plan, { ...pending, place, route });
+      setNotice(fallback);
+    });
   }
 
   function cancelPending() {

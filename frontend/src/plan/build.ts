@@ -20,6 +20,7 @@ import {
   planPlaces,
   planStart,
   samePlace,
+  tidyName,
   toMs,
 } from './plan';
 import type { Direction, Leg, PathInfo, Place, Plan, Waypoint } from './types';
@@ -73,6 +74,18 @@ export function namedPlaceNear(
   if (!nearest?.name) return null;
   const at = samePlace(nearest, otherEnd) ? nearest : point;
   return { lat: at.lat, lon: at.lon, name: nearest.name, named: true };
+}
+
+/**
+ * Where a walk or bike leg to a point you clicked goes, once you've named it in the card. That's
+ * the place namedPlaceNear gave it, unless that put it on the other end of the plan and you've
+ * given it a name of its own: then it's somewhere else, so it goes back where you clicked. Places
+ * at the same spot are one place, with one name.
+ */
+export function placeAsNamed(plan: Plan, place: Place, point: { lat: number; lon: number }): Place {
+  const there = planPlaces(plan).find((p) => samePlace(p, place));
+  if (!there || tidyName(there.name ?? '') === tidyName(place.name ?? '')) return place;
+  return { ...place, lat: point.lat, lon: point.lon };
 }
 
 /**
