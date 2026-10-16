@@ -82,6 +82,8 @@ export function CallList(props: Props) {
           return (
             <li
               key={key}
+              // Back from the stop chooser finds the line's row by this (see listReturn).
+              data-line={key}
               className={`call-group${highlight?.includes(key) ? ' highlighted' : ''}`}
               onMouseEnter={() => onHoverLine?.(key)}
               onMouseLeave={() => onHoverLine?.(null)}

@@ -9,6 +9,23 @@ export const REST_PX = 8;
 // for a moment doesn't undo anything.
 export const LEAVE_MS = 300;
 
+// Set while keyboard focus is being put on a row for you, rather than moved there by you (see
+// focusQuietly).
+let placingFocus = false;
+
+/**
+ * Puts keyboard focus on `el`, in a row of a list, for you: going back to the list of lines
+ * focuses the row you left it from. That isn't resting on the row, so it wants nothing.
+ */
+export function focusQuietly(el: { focus(options?: FocusOptions): void }) {
+  placingFocus = true;
+  try {
+    el.focus({ preventScroll: true });
+  } finally {
+    placingFocus = false;
+  }
+}
+
 /**
  * Tells pointing at a row on purpose from passing over it: the row the pointer rests on, or
  * keyboard focus stays on, becomes wanted after DWELL_MS. Sweeping across rows on the way
@@ -44,6 +61,7 @@ export class HoverIntent<K> {
 
   /** Keyboard focus moved onto a row. */
   focus(key: K) {
+    if (placingFocus) return;
     clearTimeout(this.leaving);
     this.restAt = null;
     this.restOn(key);

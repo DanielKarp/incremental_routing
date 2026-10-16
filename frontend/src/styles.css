@@ -236,7 +236,12 @@ button.secondary {
 }
 
 .stop-choice {
-  grid-template-columns: 4.5em 1fr;
+  grid-template-columns: 5.5em 1fr;
+}
+
+/* A stop's time stays on one line, so a stop with a short name takes one line too. */
+.stop-choice .call-time {
+  white-space: nowrap;
 }
 
 .no-bikes {
@@ -398,7 +403,9 @@ button.link {
 .next-leg-controls,
 .builder-messages,
 .pending,
-.missed {
+.missed,
+.trip-stops,
+.call-group {
   scroll-margin: 12px 0 72px;
 }
 
@@ -446,6 +453,35 @@ button.chip {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* The stop chooser's header: the way back to the list, the trip, and where you board it (or get
+   off it). It stays at the top of the panel while you scroll the stops, on a phone too. */
+.trip-stops-header {
+  position: sticky;
+  /* Over the panel's padding, which would otherwise show what scrolls under it. */
+  top: -16px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 -16px;
+  padding: 8px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.trip-stops-header .muted {
+  font-size: 0.85rem;
+}
+
+button.trip-stops-back {
+  flex: none;
+  padding: 4px 10px;
+}
+
+.trip-stops-trip {
+  min-width: 0;
 }
 
 .leg {

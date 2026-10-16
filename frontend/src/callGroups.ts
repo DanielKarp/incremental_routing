@@ -10,6 +10,11 @@ export interface CallGroup {
   calls: TransitCall[];
 }
 
+/** The line a call belongs to: its route, headsign and stop, as a key. */
+export function lineKey(call: TransitCall): string {
+  return JSON.stringify([call.route.route_id, call.headsign, call.stop.stop_id]);
+}
+
 /**
  * Calls grouped into lines by route, headsign and stop. Lines keep the order of their first
  * call, so with the API's sorting the soonest departure (or the latest arrival) comes first.
@@ -20,7 +25,7 @@ export function groupCalls(
 ): CallGroup[] {
   const lines = new Map<string, TransitCall[]>();
   for (const call of calls) {
-    const key = JSON.stringify([call.route.route_id, call.headsign, call.stop.stop_id]);
+    const key = lineKey(call);
     const line = lines.get(key);
     if (line) line.push(call);
     else lines.set(key, [call]);

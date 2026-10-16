@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DWELL_MS, HoverIntent, LEAVE_MS, REST_PX } from './hoverIntent';
+import { DWELL_MS, HoverIntent, LEAVE_MS, REST_PX, focusQuietly } from './hoverIntent';
 
 describe('telling pointing at a row from passing over it', () => {
   let wanted: (string | null)[];
@@ -132,6 +132,27 @@ describe('telling pointing at a row from passing over it', () => {
     intent.scroll(); // The browser brings the focused row into view.
     vi.advanceTimersByTime(DWELL_MS);
     expect(wanted).toEqual(['J']);
+  });
+
+  it('wants nothing for focus put on a row for you, until you point at it or tab on', () => {
+    // Going back to the list focuses the row you left it from; the row hears of it at once.
+    const focused: (FocusOptions | undefined)[] = [];
+    focusQuietly({
+      focus: (options) => {
+        focused.push(options);
+        intent.focus('N');
+      },
+    });
+    expect(focused).toEqual([{ preventScroll: true }]); // The list is put back by itself.
+    intent.scroll();
+    vi.advanceTimersByTime(5 * DWELL_MS);
+    expect(wanted).toEqual([]);
+
+    intent.move('N', 100, 100); // Pointing at it, and resting there, does count.
+    vi.advanceTimersByTime(DWELL_MS);
+    intent.focus('J'); // As does tabbing to the next row.
+    vi.advanceTimersByTime(DWELL_MS);
+    expect(wanted).toEqual(['N', 'J']);
   });
 
   it('lets go of the wanted row, and stops waiting, when the list goes', () => {

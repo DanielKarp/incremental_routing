@@ -1,4 +1,12 @@
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   api,
   type FeedInfo,
@@ -8,9 +16,9 @@ import {
   type RouteResult,
   type TransitCall,
 } from './api';
-import { TRIPS_PER_LINE, groupCalls } from './callGroups';
+import { TRIPS_PER_LINE, groupCalls, lineKey } from './callGroups';
 import { Itinerary, type LegMessage } from './components/Itinerary';
-import { type MapHandle, MapView, type TripPreview } from './components/MapView';
+import { type MapHandle, MapView, type SavedView, type TripPreview } from './components/MapView';
 import {
   type AddedLegs,
   NextLeg,
@@ -24,6 +32,7 @@ import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
 import { isTypingIn, isUndoKey } from './keys';
 import { type LinePreview, lineCall, linePreviews } from './linePreviews';
+import { type ListSpot, listSpot, putListBack } from './listReturn';
 import { emptyClick, mapMenuItems } from './mapClicks';
 import {
   NEAR_STOP_M,
@@ -90,6 +99,14 @@ interface Routed {
   fallback: string | null;
 }
 
+/** The list of lines as you left it for the stop chooser, and the map then (see backToList). */
+interface ListLeft {
+  spot: ListSpot;
+  /** The list then, to tell whether it has been found again since. */
+  calls: TransitCall[] | null;
+  view: SavedView | null;
+}
+
 async function routeWithFallback(m: PathMode, from: Place, to: Place): Promise<Routed> {
   try {
     return { route: await api.route(m, from, to), fallback: null };
@@ -140,6 +157,11 @@ export function App() {
     null,
   );
   const [connectorDone, setConnectorDone] = useState<{ key: string; routed: Routed } | null>(null);
+  // Where the list of lines was when a trip was picked from it, and the map's view then. Back
+  // from the stop chooser puts both back; anything else that leaves it forgets them.
+  const listLeft = useRef<ListLeft | null>(null);
+  // Back was chosen: the list is put back as soon as it shows.
+  const [returning, setReturning] = useState<ListLeft | null>(null);
 
   const [busy, setBusy] = useState(false);
   // What's gone wrong, or is worth knowing: about the app or a file you opened (at the top of
@@ -156,6 +178,7 @@ export function App() {
   const [mapImage, setMapImage] = useState<string | null | undefined>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const mapRef = useRef<MapHandle>(null);
+  const panel = useRef<HTMLElement>(null);
 
   useEffect(() => {
     api
@@ -285,6 +308,8 @@ export function App() {
 
   function resetBuilder() {
     setSelection(null);
+    listLeft.current = null;
+    setReturning(null);
     setPending(null);
     pathRequest.current++; // A walk or bike route still on its way is no longer wanted.
     // The rows pointed at may be gone; their mouse-leave events never come.
@@ -361,9 +386,9 @@ export function App() {
   // one step, not one for each repeat.
   const undoKey = useRef<() => void>(undefined);
   // Escape steps back out of what you're doing: it cancels moving the start, or else a walk or
-  // bike leg waiting to be added. It closes an open menu on the map first, and the summary next
-  // (they mark the key as used), and it's left to a field that has focus. It returns whether it
-  // did anything.
+  // bike leg waiting to be added, or else it leaves the stop chooser for the list of lines. It
+  // closes an open menu on the map first, and the summary next (they mark the key as used), and
+  // it's left to a field that has focus. It returns whether it did anything.
   const escapeKey = useRef<() => boolean>(undefined);
   useEffect(() => {
     undoKey.current = () => !showSummary && !busy && undo();
@@ -371,6 +396,7 @@ export function App() {
       if (showSummary) return false;
       if (movingAnchor) setMovingAnchor(false);
       else if (pending) cancelPending();
+      else if (selection && !busy) backToList();
       else return false;
       return true;
     };
@@ -578,6 +604,15 @@ export function App() {
   }
 
   const chooseCall = (call: TransitCall) => {
+    // From the list or the map, rather than instead of the trip being chosen: Back comes back to
+    // the list and the map as they are now.
+    if (!selection && panel.current) {
+      listLeft.current = {
+        spot: listSpot(panel.current, lineKey(call)),
+        calls,
+        view: mapRef.current?.saveView() ?? null,
+      };
+    }
     // The stops are listed without waiting for this route.
     routeConnector(call);
     return run(async () => {
@@ -588,6 +623,29 @@ export function App() {
       setMapHover([]);
     });
   };
+
+  /**
+   * From the stop chooser back to the list of lines, scrolled as you left it, with the row of
+   * the line you picked focused. The map eases back to where it was, unless you've moved it.
+   */
+  function backToList() {
+    if (!selection || busy) return;
+    clearMessages();
+    setSelection(null);
+    const left = listLeft.current;
+    listLeft.current = null;
+    if (!left) return;
+    setReturning(left);
+    if (left.view) mapRef.current?.restoreView(left.view);
+  }
+
+  // The list is put back once it's on the page again: straight after Back, or once it has been
+  // found again. Restoring its scroll doesn't frame a line on the map (see hoverIntent).
+  useLayoutEffect(() => {
+    if (!returning || selection || !calls || !panel.current) return;
+    putListBack(panel.current, returning.spot, calls !== returning.calls);
+    setReturning(null);
+  }, [returning, selection, calls]);
 
   /** A line picked by name, in the list or on the map: its next trip (or last arrival). */
   function chooseLine(key: string) {
@@ -701,7 +759,7 @@ export function App() {
   return (
     <>
       <div className="app">
-        <aside className="panel">
+        <aside className="panel" ref={panel}>
           <header className="panel-header">
             <h1>Incremental Routing</h1>
             <button type="button" className="link" onClick={() => fileInput.current?.click()}>
@@ -815,10 +873,7 @@ export function App() {
               onDwellLine={setListDwell}
               highlightLines={mapHover}
               onChooseStop={chooseStop}
-              onBackToCalls={() => {
-                clearMessages();
-                setSelection(null);
-              }}
+              onBackToCalls={backToList}
               pending={pending}
               onPendingName={(name) =>
                 setPending((p) => (p ? { ...p, place: { ...p.place, name } } : p))

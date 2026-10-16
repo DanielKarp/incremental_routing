@@ -48,9 +48,23 @@ export interface TripPreview {
   color?: string | null;
 }
 
+/** A view of the map to come back to (see MapHandle.saveView). */
+export interface SavedView {
+  camera: maplibregl.CameraOptions;
+  /** How many times you had moved the map yourself when it was saved. */
+  moves: number;
+}
+
 export interface MapHandle {
   /** A PNG data URL of the map fitted to the whole plan, or null if it can't be captured. */
   snapshot(): Promise<string | null>;
+  /**
+   * The view to come back to from the stop chooser: the map as it is now, or as it was before
+   * the line you rested on in the list was framed, since the trip's framing is much the same.
+   */
+  saveView(): SavedView | null;
+  /** Eases back to a saved view, unless you've moved the map yourself since it was saved. */
+  restoreView(view: SavedView): void;
 }
 
 interface Props {
@@ -108,8 +122,15 @@ export function MapView(props: Props) {
   // The lines under the pointer on the map: highlighted, but not framed (the map stays put).
   const [mapHover, setMapHover] = useState<string[]>([]);
   // The view before a line in the list was framed, to go back to when the pointer leaves, and
-  // the plan's legs then.
-  const viewBeforeFocus = useRef<{ view: maplibregl.CameraOptions; legs: Leg[] } | null>(null);
+  // the plan's legs and your moves then.
+  const viewBeforeFocus = useRef<{
+    view: maplibregl.CameraOptions;
+    legs: Leg[];
+    moves: number;
+  } | null>(null);
+  // How many times you've moved the map yourself: dragged, zoomed or turned it. The app's own
+  // moves don't count.
+  const userMoves = useRef(0);
 
   useEffect(() => {
     latest.current = props;
@@ -189,6 +210,10 @@ export function MapView(props: Props) {
       tip.remove();
       hover([]);
     });
+    // Only your moves come from an input event.
+    m.on('movestart', (e) => {
+      if (e.originalEvent) userMoves.current++;
+    });
     m.on('click', (e) => {
       singleClick.cancel(); // The newest click counts.
       // A click away from an open menu only closes it: it mustn't move the plan's start.
@@ -266,6 +291,17 @@ export function MapView(props: Props) {
           return null; // A tainted canvas (cross-origin tiles without CORS) can't be read.
         }
       },
+      saveView() {
+        const m = map.current;
+        if (!m) return null;
+        const framed = viewBeforeFocus.current;
+        const moves = userMoves.current;
+        return { camera: framed && framed.moves === moves ? framed.view : cameraOf(m), moves };
+      },
+      restoreView({ camera, moves }) {
+        const m = map.current;
+        if (m && moves === userMoves.current) m.easeTo({ ...camera, duration: 500 });
+      },
     }),
     [legs],
   );
@@ -328,15 +364,7 @@ export function MapView(props: Props) {
     const { lines: all, legs: now, tripPreview: trip } = latest.current;
     const bounds = frameLine && linesBounds(all.filter((l) => l.key === frameLine));
     if (bounds) {
-      viewBeforeFocus.current ??= {
-        view: {
-          center: m.getCenter(),
-          zoom: m.getZoom(),
-          bearing: m.getBearing(),
-          pitch: m.getPitch(),
-        },
-        legs: now,
-      };
+      viewBeforeFocus.current ??= { view: cameraOf(m), legs: now, moves: userMoves.current };
       m.fitBounds(bounds, { padding: 60, maxZoom: 15, duration: 500 });
     } else if (!frameLine && viewBeforeFocus.current) {
       // Not when a trip was just chosen, or the plan changed: the map shows those instead.
@@ -354,6 +382,11 @@ export function MapView(props: Props) {
   }, [styleReady, highlight]);
 
   return <div ref={container} className="map" data-testid="map" />;
+}
+
+/** Where the map is looking now. */
+function cameraOf(m: maplibregl.Map): maplibregl.CameraOptions {
+  return { center: m.getCenter(), zoom: m.getZoom(), bearing: m.getBearing(), pitch: m.getPitch() };
 }
 
 /** A pin you can drag while `drag.enabled`: where it's dropped goes to `drag.onDrop`. */
