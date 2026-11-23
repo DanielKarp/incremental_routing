@@ -1,6 +1,7 @@
 // The timetable the tests read: conftest.py's synthetic feed and a few more trips, built and
-// published as the real one is, with what the server answers on it (expected.json). Rebuild
-// all three with `uv run python tests/frontend_fixture.py` in backend/.
+// published as the real one is, with what the server answered on it (expected.json, frozen: see
+// README.md here). Rebuild the timetable and manifest with
+// `uv run python tests/frontend_fixture.py` in builder/.
 
 import initSqlJs from 'sql.js';
 import { downloadTimetable, openTimetable } from '../load';

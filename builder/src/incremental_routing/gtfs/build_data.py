@@ -1,12 +1,12 @@
 """CLI: build the timetable the static site downloads, and the manifest that names it.
 
-uv run ir-build-data                                # download the feed (needs API_511_KEY), build
-uv run ir-build-data --skip-download                # build from the feed already on disk
-uv run ir-build-data --from-db data/gtfs.sqlite     # from a database ir-load-gtfs built
+uv run ir-build-data                                     # download the feed (needs API_511_KEY)
+uv run ir-build-data --skip-download                     # use the feed already on disk
+uv run ir-build-data --from-db data/build/gtfs.sqlite    # from a full database built before
 
-The full database is built as ir-load-gtfs builds it, but in a working folder (backend/data/build
-by default, not the server's), and the compact timetable is derived from it and checked against
-it (see compact.py). The output folder, frontend/public/data by default, then gets
+The feed (data/feeds/bayarea.zip) is loaded into the full database (loader.py), in a working
+folder (data/build by default), and the compact timetable is derived from it and checked
+against it (see compact.py). The output folder, frontend/public/data by default, then gets
 timetable-<hash>.sqlite.gz and manifest.json, and loses the timetables earlier builds left there.
 """
 
@@ -22,8 +22,8 @@ from pathlib import Path
 
 from ..config import REPO_DIR, Settings
 from .compact import SCHEMA_VERSION, CompactMismatch, build_compact, check_compact
+from .database import GtfsUnavailable, feeds
 from .download import RefreshError, refresh
-from .query import GtfsStore, GtfsUnavailable
 
 DEFAULT_OUT_DIR = REPO_DIR / "frontend" / "public" / "data"
 MANIFEST = "manifest.json"
@@ -55,15 +55,15 @@ def publish(
     )
     print(f"  {stats.shapes} shapes: {stats.kept_points} of {stats.shape_points} points kept")
     check_compact(full_db, compact_db)
-    print("  Checked: it gives back every table the server reads")
+    print("  Checked: it gives back every table the app's queries read")
 
     raw = compact_db.read_bytes()
     # mtime=0, and no file name inside: the same timetable always packs to the same bytes.
     packed = gzip.compress(raw, compresslevel=9, mtime=0)
     digest = hashlib.sha256(packed).hexdigest()
     name = f"timetable-{digest[:HASH_DIGITS]}.sqlite.gz"
-    # Just as /api/feeds lists them, each agency's dates included.
-    feeds = [feed.model_dump(mode="json") for feed in GtfsStore(full_db).feeds()]
+    # Each agency's dates included, as the server's /api/feeds listed them.
+    feed_list = feeds(full_db)
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "built_at": built_at,
@@ -74,11 +74,11 @@ def publish(
             "sqlite_bytes": len(raw),
             "sqlite_sha256": hashlib.sha256(raw).hexdigest(),
         },
-        # Where request times without a UTC offset are, as the server's DEFAULT_TIMEZONE.
+        # Where the app reads request times without a UTC offset (DEFAULT_TIMEZONE).
         "default_timezone": default_timezone,
         # The timezones the feeds' times are in.
-        "timezones": sorted({feed["timezone"] for feed in feeds}),
-        "feeds": feeds,
+        "timezones": sorted({feed["timezone"] for feed in feed_list}),
+        "feeds": feed_list,
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> None:
         "--from-db",
         type=Path,
         metavar="PATH",
-        help="derive the timetable from this database (built by ir-load-gtfs) instead",
+        help="derive the timetable from this full database (as built in --work) instead",
     )
     parser.add_argument(
         "--out",

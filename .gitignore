@@ -5,8 +5,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Downloaded feeds and the built database
-backend/data/
+# The downloaded feed and the full database the timetable is built from
+builder/data/
 # The static site's timetable (uv run ir-build-data): built, never committed
 frontend/public/data/
 

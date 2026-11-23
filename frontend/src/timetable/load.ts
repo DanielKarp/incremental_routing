@@ -23,8 +23,8 @@ export interface DownloadOptions {
   signal?: AbortSignal;
 }
 
-// What a missing timetable means, and how to get one, as the server says it.
-const REBUILD = 'Run `uv run ir-build-data` in backend/ (add --skip-download to reuse the feed).';
+// How to get a missing timetable, for whoever runs the site.
+const REBUILD = 'Run `uv run ir-build-data` in builder/ (add --skip-download to reuse the feed).';
 
 // Every SQLite database file starts with this.
 const SQLITE_HEADER = 'SQLite format 3\0';

@@ -104,7 +104,7 @@ function readJsonc(path: string): { vars?: Record<string, string> } {
 
 // --- No timetable -------------------------------------------------------------------------------
 
-const BUILD_IT = 'cd backend && uv run ir-build-data';
+const BUILD_IT = 'cd builder && uv run ir-build-data';
 
 function warnIfNoTimetable(publicDir: string, logger: Logger): void {
   if (existsSync(join(publicDir, 'data', 'manifest.json'))) return;

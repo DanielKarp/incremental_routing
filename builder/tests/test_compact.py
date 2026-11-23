@@ -15,11 +15,7 @@ import struct
 import httpx
 import pytest
 from conftest import FEED_FILES, write_feed
-from fastapi.testclient import TestClient
 
-from incremental_routing.api import create_app
-from incremental_routing.config import Settings
-from incremental_routing.geo import EARTH_RADIUS_M
 from incremental_routing.gtfs import build_data, download
 from incremental_routing.gtfs.compact import (
     SCHEMA,
@@ -33,11 +29,9 @@ from incremental_routing.gtfs.compact import (
     pack_shape,
 )
 from incremental_routing.gtfs.loader import build_database
-from incremental_routing.gtfs.query import GtfsStore
-from incremental_routing.routing import StraightLineProvider
+from incremental_routing.gtfs.shapes import EARTH_RADIUS_M, stop_indices
 
 SECRET = "not-a-real-key-123"
-MONDAY = dt.date(2026, 10, 12)
 
 # A trip's stop times, read from the compact tables as compact_schema.sql shows.
 STOP_TIMES = """
@@ -65,18 +59,18 @@ def compact_of(tmp_path, files: dict[str, str]):
 
 
 @pytest.fixture(scope="session")
-def compact_db(settings, tmp_path_factory):
+def compact_db(full_db, tmp_path_factory):
     path = tmp_path_factory.mktemp("compact") / "timetable.sqlite"
-    build_compact(settings.db_path, path)
+    build_compact(full_db, path)
     return path
 
 
 # --- stop times ----------------------------------------------------------------------------
 
 
-def test_every_stop_time_comes_back_from_its_trips_start_and_pattern(settings, compact_db):
+def test_every_stop_time_comes_back_from_its_trips_start_and_pattern(full_db, compact_db):
     full = rows(
-        settings.db_path,
+        full_db,
         "SELECT trip_id, stop_sequence, stop_id, arrival_s, departure_s, pickup_type,"
         " drop_off_type, shape_dist FROM stop_times ORDER BY trip_id, stop_sequence",
     )
@@ -85,10 +79,10 @@ def test_every_stop_time_comes_back_from_its_trips_start_and_pattern(settings, c
     # Charlie's interpolated 08:13, and T_LATE's 24:20, both as the loader worked them out.
     assert ("tr:T_MORNING", 3, "tr:CHARLIE", 29580, 29580, 0, 0, None) in full
     assert ("tr:T_LATE", 3, "tr:CHARLIE", 87600, 87600, 0, 0, None) in full
-    check_compact(settings.db_path, compact_db)
+    check_compact(full_db, compact_db)
 
 
-def test_check_compact_notices_what_doesnt_come_back(settings, compact_db, tmp_path):
+def test_check_compact_notices_what_doesnt_come_back(full_db, compact_db, tmp_path):
     for sql, what in [
         (
             "UPDATE pattern_times SET departure = departure + 60 WHERE stop_sequence = 2",
@@ -103,7 +97,7 @@ def test_check_compact_notices_what_doesnt_come_back(settings, compact_db, tmp_p
         with sqlite3.connect(broken) as conn:
             conn.execute(sql)
         with pytest.raises(CompactMismatch, match=what):
-            check_compact(settings.db_path, broken)
+            check_compact(full_db, broken)
 
 
 def test_trips_that_run_alike_share_a_pattern(compact_db):
@@ -217,6 +211,23 @@ def float32(value: float) -> float:
     return struct.unpack("<f", struct.pack("<f", value))[0]
 
 
+def server_placement(full, trip_id: str) -> tuple[list[tuple], list[int | None]]:
+    """A trip's full shape, and where on it each stop with a time falls, as the server placed
+    them (its _shape_with_stops, until commit 1c15be0: stop_indices on the full shape)."""
+    with sqlite3.connect(full) as conn:
+        [(shape_id,)] = conn.execute("SELECT shape_id FROM trips WHERE trip_id = ?", (trip_id,))
+        shape = conn.execute(
+            "SELECT lat, lon, dist FROM shapes WHERE shape_id = ? ORDER BY seq", (shape_id,)
+        ).fetchall()
+        stops = conn.execute(
+            "SELECT s.lat, s.lon, st.shape_dist FROM stop_times st"
+            " JOIN stops s ON s.stop_id = st.stop_id"
+            " WHERE st.trip_id = ? AND st.arrival_s IS NOT NULL ORDER BY st.stop_sequence",
+            (trip_id,),
+        ).fetchall()
+    return shape, stop_indices(shape, stops)
+
+
 def test_shapes_stay_within_5_m_and_keep_their_distances():
     points = wiggle(600)
     blob, kept = pack_shape(points)
@@ -271,7 +282,7 @@ def test_shape_index_is_where_the_server_places_each_stop(tmp_path):
     full, compact = compact_of(tmp_path, files)
     check_compact(full, compact)
     for trip_id in ["tr:T_WIGGLE", "tr:T_WIGGLE_D", "tr:T_MORNING"]:
-        server = GtfsStore(full).trip(trip_id, MONDAY)
+        full_shape, placed = server_placement(full, trip_id)
         found = rows(
             compact,
             "SELECT h.points, ps.shape_index FROM trips t JOIN patterns p ON p.id = t.pattern"
@@ -280,15 +291,14 @@ def test_shape_index_is_where_the_server_places_each_stop(tmp_path):
             (trip_id,),
         )
         shape = decode_shape(found[0][0])
-        assert len(shape) < len(server.shape)
-        for stop, (_, index) in zip(server.stops, found, strict=True):
-            # The same point: the server's rounded to 1e-6 degree, the timetable's to 1e-5.
-            lon, lat = server.shape[stop.shape_index]
-            assert abs(shape[index][0] - lat) <= 1e-5 and abs(shape[index][1] - lon) <= 1e-5
+        assert len(shape) < len(full_shape)
+        for i, (_, index) in zip(placed, found, strict=True):
+            # The same point, rounded to 1e-5 degree in the timetable.
+            lat, lon, _ = full_shape[i]
+            assert abs(shape[index][0] - lat) <= 0.5e-5 and abs(shape[index][1] - lon) <= 0.5e-5
     # T_MORNING's shape is a straight line, so only its ends and the points its stops are
     # placed at are left. Bravo, in the middle, keeps its own point instead of Alpha's.
-    morning = GtfsStore(full).trip("tr:T_MORNING", MONDAY)
-    assert [s.shape_index for s in morning.stops] == [0, 4, 8, 12]
+    assert server_placement(full, "tr:T_MORNING")[1] == [0, 4, 8, 12]
     assert rows(
         compact,
         "SELECT ps.shape_index FROM path_stops ps JOIN paths pa ON pa.id = ps.path"
@@ -354,9 +364,9 @@ def test_build_data_writes_the_timetable_and_its_manifest(data_dir, feed_zip, mo
     assert manifest["default_timezone"] == "America/Denver"
     assert manifest["timezones"] == ["America/Los_Angeles"]
 
-    # The full database was built in the working folder, not over the server's.
+    # The full database was built in the working folder, beside the feed.
     work = data_dir / "build"
-    assert not (data_dir / "gtfs.sqlite").exists()
+    assert sorted(p.name for p in data_dir.iterdir()) == ["build", "feeds", "site"]
     assert (work / "timetable.sqlite").read_bytes() == raw
     check_compact(work / "gtfs.sqlite", work / "timetable.sqlite")
     assert rows(work / "timetable.sqlite", "PRAGMA user_version") == [(SCHEMA_VERSION,)]
@@ -364,31 +374,31 @@ def test_build_data_writes_the_timetable_and_its_manifest(data_dir, feed_zip, mo
     assert built_at == manifest["built_at"]
     assert dt.datetime.fromisoformat(built_at).tzinfo is not None
 
-    # Feeds and each agency's dates, just as the server lists them.
-    with TestClient(create_app(Settings(data_dir=work), StraightLineProvider())) as client:
-        assert manifest["feeds"] == client.get("/api/feeds").json()
-    assert [a["name"] for a in manifest["feeds"][0]["agencies"]] == ["Test Bus", "Test Rail"]
+    # Feeds and each agency's dates, as the server listed them (see test_gtfs.py).
+    [feed] = manifest["feeds"]
+    assert (feed["feed_id"], feed["start_date"], feed["end_date"]) == (
+        "bayarea",
+        "2026-01-01",
+        "2026-12-31",
+    )
+    assert [a["name"] for a in feed["agencies"]] == ["Test Bus", "Test Rail"]
 
 
-def test_build_data_removes_the_timetables_of_earlier_builds(settings, tmp_path):
+def test_build_data_removes_the_timetables_of_earlier_builds(full_db, tmp_path):
     out = tmp_path / "site"
     out.mkdir()
     for name in ["timetable-0123456789ab.sqlite.gz", "timetable-old.sqlite.gz", "notes.txt"]:
         (out / name).write_text("left over")
     monday = dt.datetime(2026, 10, 12, 4, tzinfo=dt.UTC)
-    first = build_data.publish(
-        settings.db_path, out, tmp_path / "work", default_timezone="UTC", now=monday
-    )
+    first = build_data.publish(full_db, out, tmp_path / "work", default_timezone="UTC", now=monday)
     assert sorted(p.name for p in out.iterdir()) == sorted(
         ["manifest.json", "notes.txt", first["timetable"]["file"]]
     )
     # The same data packs to the same file; new data replaces it.
-    again = build_data.publish(
-        settings.db_path, out, tmp_path / "work", default_timezone="UTC", now=monday
-    )
+    again = build_data.publish(full_db, out, tmp_path / "work", default_timezone="UTC", now=monday)
     assert again["timetable"] == first["timetable"]
     later = build_data.publish(
-        settings.db_path,
+        full_db,
         out,
         tmp_path / "work",
         default_timezone="UTC",
@@ -448,15 +458,15 @@ def test_build_data_reports_a_failed_download_without_the_key(data_dir, monkeypa
     assert not (data_dir / "site").exists()
 
 
-def test_build_data_from_a_database_ir_load_gtfs_built(settings, tmp_path):
+def test_build_data_from_a_full_database_built_before(full_db, tmp_path):
     out, work = tmp_path / "site", tmp_path / "work"
-    build_data.main(["--from-db", str(settings.db_path), "--out", str(out), "--work", str(work)])
+    build_data.main(["--from-db", str(full_db), "--out", str(out), "--work", str(work)])
     assert (out / "manifest.json").exists()
     assert sorted(p.name for p in work.iterdir()) == ["timetable.sqlite"]
 
 
 def test_build_data_writes_nothing_unless_the_timetable_checks_out(
-    settings, tmp_path, monkeypatch, capsys
+    full_db, tmp_path, monkeypatch, capsys
 ):
     def mismatch(full_db, compact_db):
         raise CompactMismatch("stop_times, row 3: ...")
@@ -464,7 +474,7 @@ def test_build_data_writes_nothing_unless_the_timetable_checks_out(
     monkeypatch.setattr(build_data, "check_compact", mismatch)
     out, work = str(tmp_path / "site"), str(tmp_path / "work")
     with pytest.raises(SystemExit):
-        build_data.main(["--from-db", str(settings.db_path), "--out", out, "--work", work])
+        build_data.main(["--from-db", str(full_db), "--out", out, "--work", work])
     assert "doesn't match the full database: stop_times, row 3" in capsys.readouterr().err
     assert not (tmp_path / "site").exists()
 

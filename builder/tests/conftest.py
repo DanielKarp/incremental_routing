@@ -27,7 +27,6 @@ from pathlib import Path
 
 import pytest
 
-from incremental_routing.config import Settings
 from incremental_routing.gtfs.loader import build_database
 
 FEED_FILES = {
@@ -103,11 +102,6 @@ SAT,20261126,1
 """,
 }
 
-ALPHA = (37.40, -122.10)
-BRAVO = (37.41, -122.10)
-DELTA = (37.43, -122.10)
-SOUTH_OF_ALPHA = (37.3937, -122.10)  # ~700 m: 12 min on foot, 4 min by bike
-
 
 def write_feed(path: Path, files: dict[str, str]) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
@@ -131,7 +125,8 @@ def bus_ends_early_zip(tmp_path_factory) -> Path:
 
 
 @pytest.fixture(scope="session")
-def settings(tmp_path_factory, feed_zip) -> Settings:
-    settings = Settings(data_dir=tmp_path_factory.mktemp("data"))
-    build_database(settings.db_path, [("tr", feed_zip)])
-    return settings
+def full_db(tmp_path_factory, feed_zip) -> Path:
+    """The feed, loaded into the full database (loader.py)."""
+    path = tmp_path_factory.mktemp("data") / "gtfs.sqlite"
+    build_database(path, [("tr", feed_zip)])
+    return path

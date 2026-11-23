@@ -1,20 +1,16 @@
 [project]
 name = "incremental-routing"
 version = "0.1.0"
-description = "Backend for an incremental, leg-by-leg multimodal trip planner"
+description = "Builds the transit timetable for Incremental Routing, a leg-by-leg trip planner"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
     "httpx>=0.27",
-    "pydantic>=2.7",
     "python-dotenv>=1.0",
     "tzdata>=2024.1",
 ]
 
 [project.scripts]
-ir-load-gtfs = "incremental_routing.gtfs.download:main"
 ir-build-data = "incremental_routing.gtfs.build_data:main"
 
 [dependency-groups]

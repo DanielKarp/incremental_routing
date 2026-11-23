@@ -20,7 +20,8 @@ from .timeutil import parse_gtfs_date, parse_gtfs_time
 
 log = logging.getLogger(__name__)
 
-# Bump when the tables change; the API then asks for a rebuild instead of failing obscurely.
+# Bump when the tables change; ir-build-data --from-db then asks for a rebuild instead of failing
+# obscurely.
 SCHEMA_VERSION = 2
 
 SCHEMA = """

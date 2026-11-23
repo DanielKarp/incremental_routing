@@ -7,6 +7,10 @@ its pattern and its start time; and shapes are simplified to SHAPE_TOLERANCE_M a
 one blob each. Where the server places each stop on its trip's shape is worked out here, on the
 full shape, and kept with the path. Everything else is copied, so check_compact() can confirm
 that each table the server's queries read comes back exactly.
+
+"The server" is the FastAPI server the app had until commit 1c15be0, which queried the full
+database. Its queries now run in the browser (frontend/src/timetable/), on this timetable, and
+give the same answers.
 """
 
 from __future__ import annotations
@@ -23,10 +27,9 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..geo import EARTH_RADIUS_M
+from .database import check_database
 from .loader import WEEKDAYS
-from .query import GtfsStore, GtfsUnavailable
-from .shapes import Point, stop_indices
+from .shapes import EARTH_RADIUS_M, Point, stop_indices
 
 log = logging.getLogger(__name__)
 
@@ -147,9 +150,7 @@ class CompactStats:
 
 def build_compact(full_db: Path, out_path: Path, *, built_at: str | None = None) -> CompactStats:
     """(Re)build out_path from full_db, a database loader.py built, replacing it atomically."""
-    problem = GtfsStore(full_db).problem()
-    if problem:
-        raise GtfsUnavailable(problem)
+    check_database(full_db)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = out_path.with_name(out_path.name + ".tmp")
     tmp_path.unlink(missing_ok=True)
@@ -406,7 +407,7 @@ def _place_stops(
     stops: Sequence[PathStop],
     coords: dict[int, tuple[float | None, float | None]],
 ) -> list[int | None]:
-    """Where on the shape the server places each of a path's stops (query._shape_with_stops).
+    """Where on the shape the server placed each of a path's stops (its _shape_with_stops).
 
     None for the stops it doesn't show (without a time, or not in stops.txt), and for every
     stop when the shape has fewer than 2 points. A stop without coordinates can't be placed.

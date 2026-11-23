@@ -2,7 +2,9 @@
 --
 -- compact.py derives it from the full database that loader.py builds, and checks that it gives
 -- back every table the server's queries read (see ROUND_TRIPS there for the SQL that does it).
--- So it holds the same data, in less space:
+-- (The server is the FastAPI server the app had until commit 1c15be0; its queries now run in
+-- the browser, in frontend/src/timetable/, on this timetable.) So it holds the same data, in
+-- less space:
 --
 -- - How a trip runs is stored once: where it goes is a path (its shape, and its stops with
 --   their GTFS stop_sequence, pickup and drop-off types and shape distances), and the path

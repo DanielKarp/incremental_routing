@@ -6,7 +6,8 @@ import bisect
 import math
 from collections.abc import Sequence
 
-from ..geo import EARTH_RADIUS_M
+# The mean radius of the Earth, in metres.
+EARTH_RADIUS_M = 6_371_008.8
 
 # (lat, lon, shape_dist_traveled or None)
 Point = tuple[float, float, float | None]

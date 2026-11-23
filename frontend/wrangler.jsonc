@@ -4,7 +4,7 @@
 //   npm run preview   builds, then runs it all locally with `wrangler dev` (http://localhost:8787)
 //   npm run deploy    builds, then `wrangler deploy` (`npx wrangler login` first, once)
 //
-// Build the timetable before either: `cd ../backend && uv run ir-build-data`.
+// Build the timetable before either: `cd ../builder && uv run ir-build-data`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "incremental-routing",
