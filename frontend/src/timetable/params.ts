@@ -1,5 +1,5 @@
-// What the server's endpoints accept (backend/src/incremental_routing/api.py), checked the way
-// FastAPI checks it: the same defaults and limits, and for a request it can't accept, the same
+// What the server's endpoints accepted (its api.py, until commit 1c15be0), checked the way
+// FastAPI checked it: the same defaults and limits, and for a request it can't accept, the same
 // messages, put as errorDetail() in api.ts puts FastAPI's ("Invalid radius_m: input should be
 // less than or equal to 3000."), every field at fault in the endpoint's order.
 //

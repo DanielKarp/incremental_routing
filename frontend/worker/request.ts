@@ -1,4 +1,4 @@
-// Reading a walk or bike route request as the server did (POST /api/route in api.py): FastAPI
+// Reading a walk or bike route request as the server did (POST /api/route in its api.py): FastAPI
 // read the body as JSON only when its Content-Type said JSON, and pydantic checked it against
 // models.RouteRequest. A request it can't accept gets the same 422 detail as there: every field
 // at fault, in the model's order, each with pydantic's type, location, message and input, which
@@ -12,7 +12,7 @@ export interface RouteRequest {
   destination: LatLon;
 }
 
-/** One of pydantic's errors, as FastAPI sends them in `detail`. */
+/** One of pydantic's errors, as FastAPI sent them in `detail`. */
 export interface FieldError {
   type: string;
   loc: (string | number)[];

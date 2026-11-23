@@ -210,7 +210,9 @@ export function App() {
     api
       .health()
       .then(setHealth)
-      .catch((e: Error) => setAlert({ text: `Backend unreachable: ${e.message}`, tone: 'error' }));
+      .catch((e: Error) =>
+        setAlert({ text: `Walk and bike routing is unreachable: ${e.message}`, tone: 'error' }),
+      );
   }, []);
   // Each feed's dates come with the timetable, once it's in (perhaps only after Try again).
   useEffect(() => {
@@ -519,7 +521,7 @@ export function App() {
     setLongWindow(false);
   }
 
-  /** Runs an action that waits for the backend. What goes wrong is said by `fail`. */
+  /** Runs an action that waits for the timetable or the router; `fail` says what went wrong. */
   async function run(task: () => Promise<void>, fail: (reason: string) => void = setError) {
     setRequests((n) => n + 1);
     setAlert(null);
@@ -944,8 +946,8 @@ export function App() {
           <TimetableStatus />
           {uncovered.length > 0 && (
             <p className="warning">
-              Schedule data doesn't cover {day} for: {uncovered.join(', ')}. Re-run{' '}
-              <code>ir-load-gtfs</code>.
+              Schedule data doesn't cover {day} for: {uncovered.join(', ')}. The timetable is
+              updated from 511.org every week.
             </p>
           )}
           {alert && (

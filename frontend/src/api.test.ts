@@ -18,7 +18,7 @@ describe('errorDetail', () => {
   });
 
   it('names the fields a request got wrong', () => {
-    // What FastAPI sends for /api/departures?time=202609-10-20T09:00&radius_m=5000.
+    // What FastAPI sent for /api/departures?time=202609-10-20T09:00&radius_m=5000.
     const detail = [
       {
         type: 'datetime_from_date_parsing',

@@ -1,5 +1,5 @@
 // Walk and bike routing behind one interface, so providers can be swapped by config: the
-// server's routing/ package (backend/src/incremental_routing/routing), ported. Each provider
+// server's routing/ package (until commit 1c15be0), ported. Each provider
 // asks the same of its router and gives back the same RouteResult as the server's.
 
 import { DETOUR_FACTOR, SPEEDS_MPS, decodePolyline, haversineM, pyRound } from './geo';

@@ -27,7 +27,7 @@ import type { Direction, Leg, PathInfo, Place, Plan, Waypoint } from './types';
 
 const ACCESS_WORDS: Record<PathMode, string> = { walk: 'walk', bike: 'bike ride' };
 
-// Mirror backend/src/incremental_routing/geo.py, for when the router is unavailable.
+// As timetable/geo.ts estimates access times, for when the router is unavailable.
 const DETOUR_FACTOR = 1.3;
 const SPEEDS_MPS: Record<PathMode, number> = { walk: 1.3, bike: 4.5 };
 

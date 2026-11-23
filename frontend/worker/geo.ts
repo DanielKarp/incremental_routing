@@ -1,5 +1,5 @@
 // The geometry the routing needs, ported operation for operation from the server's geo.py
-// (backend/src/incremental_routing/geo.py), so that routes come out as the server's did.
+// (until commit 1c15be0), so that routes come out as the server's did.
 
 const EARTH_RADIUS_M = 6_371_008.8;
 

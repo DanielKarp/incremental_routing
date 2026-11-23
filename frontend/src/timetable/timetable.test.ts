@@ -1,5 +1,6 @@
-// The queries on the fixture's timetable (see fixtures/fixture.ts), as backend/tests/test_gtfs.py
-// tests the server's, and the cases where order decides that the fixture adds.
+// The queries on the fixture's timetable (see fixtures/fixture.ts), as the server's tests
+// (tests/test_gtfs.py, until commit 1c15be0) tested its own, and the cases where order decides
+// that the fixture adds.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { CallQuery, LatLon, TransitCall } from '../api';

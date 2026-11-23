@@ -1,4 +1,4 @@
-// What's left of the server's HTTP API (backend/src/incremental_routing/api.py) once the
+// What's left of the server's HTTP API (its api.py, until commit 1c15be0) once the
 // timetable is in the browser: walk and bike routes, which need a router and maybe its key.
 // The Worker answers /api/* with this, and so does `npm run dev` (worker/vitePlugin.ts):
 //

@@ -1,4 +1,4 @@
-// The transit queries the server answers (backend/src/incremental_routing/gtfs/query.py), over
+// The transit queries the server answered (its gtfs/query.py, until commit 1c15be0), over
 // the compact timetable the browser downloads (compact_schema.sql). Each query takes what the
 // matching call in api.ts takes and gives back what that endpoint sends, field for field, in the
 // same order, and the same answer: the same trips, stops and times, ties included. Only shapes

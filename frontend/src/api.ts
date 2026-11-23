@@ -1,7 +1,7 @@
-// The app's data, as the FastAPI server's endpoints gave it (shapes mirror
-// backend/src/incremental_routing/models.py): the transit queries are answered here in the
-// browser, from the timetable (./timetable), downloaded once and kept in a Web Worker; walk and
-// bike routes come from the site's Cloudflare Worker (worker/api.ts), which holds any router key.
+// The app's data, in the shapes the FastAPI server's endpoints gave it until commit 1c15be0
+// (its models.py): the transit queries are answered here in the browser, from the timetable
+// (./timetable), downloaded once and kept in a Web Worker; walk and bike routes come from the
+// site's Cloudflare Worker (worker/api.ts), which holds any router key.
 
 import type { LoadProgress } from './timetable/load';
 import { TimetableError } from './timetable/params';
@@ -128,7 +128,7 @@ export interface RouteResult {
 
 export interface CallQuery {
   point: LatLon;
-  /** ISO datetime; without an offset the backend reads it as Bay Area local time. */
+  /** ISO datetime; without an offset it's read as Bay Area local time. */
   time: string;
   radiusM?: number;
   windowMin?: number;
@@ -138,7 +138,7 @@ export interface CallQuery {
   transfer?: { stopId: string; tripId?: string };
   /** At most this many trips of each route, headsign and stop. */
   perRoute?: number;
-  /** At most this many trips in all (the backend allows up to 500). */
+  /** At most this many trips in all (up to 500). */
   limit?: number;
 }
 
@@ -160,8 +160,9 @@ export class ApiError extends Error {
 }
 
 /**
- * An error's `detail` as text. FastAPI sends a message, or for a request it can't accept (422)
- * a list of the fields at fault: "Invalid time: input should be a valid datetime or date."
+ * An error's `detail` as text: a message, or for a request that can't be accepted (422) a list
+ * of the fields at fault, as FastAPI sent them and the timetable and the Worker still do:
+ * "Invalid time: input should be a valid datetime or date."
  */
 export function errorDetail(detail: unknown): string {
   if (typeof detail === 'string') return detail;
@@ -240,7 +241,7 @@ function timetable(): Promise<RemoteTimetable> {
   return loading;
 }
 
-/** What the server said with an HTTP error, said as it was. */
+/** A timetable error, with its HTTP status and message as the server's endpoint gave them. */
 function apiError(e: unknown): unknown {
   return e instanceof TimetableError ? new ApiError(e.status, e.message) : e;
 }

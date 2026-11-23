@@ -1,5 +1,5 @@
-// Dates, times and time zones for the timetable, as the server works them out with zoneinfo
-// (backend/src/incremental_routing/gtfs/timeutil.py), but with nothing more than Intl.
+// Dates, times and time zones for the timetable, as the server worked them out with zoneinfo
+// (its gtfs/timeutil.py, until commit 1c15be0), but with nothing more than Intl.
 //
 // Instants are milliseconds since the epoch (UTC), and may carry microseconds as a fraction.
 // Dates are ISO text, "2026-10-12". GTFS times are seconds from the service day's origin: noon

@@ -10,7 +10,7 @@ const outside = (r: Dated, day: string) =>
 
 /**
  * Who has no schedule on `day` (YYYY-MM-DD): each agency whose dates don't include it, or the
- * whole feed when the backend doesn't list agencies.
+ * whole feed when the timetable doesn't list agencies.
  */
 export function uncoveredOn(feeds: FeedInfo[], day: string): string[] {
   return feeds.flatMap((f) => {

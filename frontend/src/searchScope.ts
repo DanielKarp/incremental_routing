@@ -6,13 +6,13 @@ import type { Direction } from './plan/types';
 import { formatTime } from './time';
 
 export const RADIUS_MIN_M = 50;
-export const RADIUS_MAX_M = 3000; // The backend's limit.
+export const RADIUS_MAX_M = 3000; // The timetable's limit (see timetable/params.ts).
 const RADIUS_DEFAULT_M = 500;
 // How far ahead (or back) the list looks, in minutes, and how far with "Look 3 hours ahead".
-// The backend allows up to 360.
+// The timetable allows up to 360.
 export const WINDOW_MIN = 60;
 export const LONG_WINDOW_MIN = 180;
-// The most trips a search lists: the backend's maximum too. With a few trips per line, an hour
+// The most trips a search lists: the timetable's maximum too. With a few trips per line, an hour
 // of them holds every line downtown, even within 3 km (about 360 trips at Civic Center).
 export const CALL_LIMIT = 500;
 // Over a wider radius, a longer window can reach the trip limit downtown and leave lines out,

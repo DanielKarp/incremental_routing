@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [react(), workerApi()],
   // The timetable fixture the tests read, inlined as a data: URL (src/timetable/fixtures).
   assetsInclude: ['**/*.sqlite.gz'],
-  // maplibre-gl alone is ~1 MB minified; fine for a locally served app.
+  // maplibre-gl alone is ~1 MB minified, and the browser keeps it (public/_headers).
   build: { chunkSizeWarningLimit: 1500 },
 });
