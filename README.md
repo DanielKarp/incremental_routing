@@ -64,8 +64,8 @@ other end of its route, into Terminal A at 10:39. Planning one leg at a time mak
 ride you want to take, not just the quickest one.
 
 ![The itinerary for the Caltrain Express from Sunnyvale to San José Diridon, a walk and a wait,
-and the Rapid 500 to Berryessa, with a loop on the map from Sunnyvale to downtown San José, north
-to Milpitas and back south to the airport](docs/screenshots/trip-5-the-long-way.jpg)
+and the Rapid 500 to Berryessa, with a loop on the map from Sunnyvale to downtown San José,
+north to Milpitas and back south to the airport](docs/screenshots/trip-5-the-long-way.jpg)
 
 ## Run it with Docker
 
