@@ -23,9 +23,9 @@ smoother flow (M12).
 
 ## Examples
 
-Four trips planned in the app for a Tuesday morning, from a single bus ride to a trip across
-three agencies. Each shows the itinerary on the left and the whole trip on the map. Close-ups of
-each step are under [Using it](#using-it).
+Five trips planned in the app for a Tuesday morning: four from a single bus ride to a trip
+across three agencies, and one that goes the long way on purpose. Each shows the itinerary on
+the left and the whole trip on the map. Close-ups of each step are under [Using it](#using-it).
 
 **One bus line.** Union Square to Ocean Beach in San Francisco: a short walk to the stop, a
 two-minute wait, the Muni 38R along Geary, and a walk to the beach.
@@ -55,6 +55,17 @@ Muni 30 bus to the Marina, walking at each change.
 ![The itinerary for a bike ride to McKee station, the VTA Orange Line to Mountain View, a walk,
 a wait and the Caltrain Express, with the trip from San Jose to the Marina on the
 map](docs/screenshots/trip-4-three-agencies.jpg)
+
+**The long way, for fun.** Sunnyvale Caltrain to San José airport. A journey planner would send
+you south on Caltrain to Santa Clara and then on the 60, arriving at 10:03. Here you choose
+every ride instead: the Rapid 523 north to Lockheed Martin, 14 stops of VTA's Orange Line light
+rail across North San Jose to Milpitas, and the 60 from the other end of its route, into
+Terminal A at 10:39.
+Planning one leg at a time makes room for a ride you want to take, not just the quickest one.
+
+![The itinerary for the Rapid 523 from Sunnyvale to Lockheed Martin and the start of the Orange
+Line, with a loop on the map from Sunnyvale north and east to Milpitas, then south to the
+airport](docs/screenshots/trip-5-the-long-way.jpg)
 
 ## Run it with Docker
 
