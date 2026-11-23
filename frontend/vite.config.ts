@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  // The timetable fixture the tests read, inlined as a data: URL (src/timetable/fixtures).
+  assetsInclude: ['**/*.sqlite.gz'],
   // maplibre-gl alone is ~1 MB minified; fine for a locally served app.
   build: { chunkSizeWarningLimit: 1500 },
   server: {

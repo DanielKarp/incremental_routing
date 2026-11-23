@@ -1,0 +1,9058 @@
+[
+ {
+  "method": "GET",
+  "path": "/api/feeds",
+  "params": {},
+  "status": 200,
+  "body": [
+   {
+    "feed_id": "tr",
+    "timezone": "America/Los_Angeles",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "loaded_at": "2026-11-23T00:00:00Z",
+    "has_frequencies": false,
+    "agencies": [
+     {
+      "name": "Test Bus",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31"
+     },
+     {
+      "name": "Test Rail",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "radius_m": 200
+  },
+  "status": 200,
+  "body": [
+   {
+    "stop_id": "tr:DELTA_1",
+    "feed_id": "tr",
+    "name": "Delta Platform 1",
+    "lat": 37.43,
+    "lon": -122.1,
+    "parent_station": "tr:DELTA",
+    "distance_m": 0.0,
+    "access_s": 0
+   },
+   {
+    "stop_id": "tr:DELTA_2",
+    "feed_id": "tr",
+    "name": "Delta Bus Bay",
+    "lat": 37.4302,
+    "lon": -122.1003,
+    "parent_station": "tr:DELTA",
+    "distance_m": 34.58736861062031,
+    "access_s": 60
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "radius_m": 50
+  },
+  "status": 200,
+  "body": [
+   {
+    "stop_id": "tr:KILO_B",
+    "feed_id": "tr",
+    "name": "Kilo Platform B",
+    "lat": 37.5,
+    "lon": -122.2,
+    "parent_station": "tr:KILO_STN",
+    "distance_m": 0.0,
+    "access_s": 0
+   },
+   {
+    "stop_id": "tr:KILO_A",
+    "feed_id": "tr",
+    "name": "Kilo Platform A",
+    "lat": 37.5,
+    "lon": -122.2,
+    "parent_station": "tr:KILO_STN",
+    "distance_m": 0.0,
+    "access_s": 0
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 37.3937,
+   "lon": -122.1,
+   "radius_m": 1000,
+   "access": "bike"
+  },
+  "status": 200,
+  "body": [
+   {
+    "stop_id": "tr:ALPHA",
+    "feed_id": "tr",
+    "name": "Alpha",
+    "lat": 37.4,
+    "lon": -122.1,
+    "parent_station": null,
+    "distance_m": 700.5290054712704,
+    "access_s": 240
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 37.0,
+   "lon": -121.0
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "radius_m": 0
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "radius_m"
+     ],
+     "msg": "Input should be greater than 0"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/stops/nearby",
+  "params": {
+   "lat": 91,
+   "lon": -122.2,
+   "access": "car"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "lat"
+     ],
+     "msg": "Input should be less than or equal to 90"
+    },
+    {
+     "loc": [
+      "query",
+      "access"
+     ],
+     "msg": "Input should be 'walk' or 'bike'"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12T07:50"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12T07:50:00-07:00",
+   "limit": 10
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12T14:50Z"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12T07:59:59.999999-07:00"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12 07:50"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12",
+   "window_min": 360
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "1791816600"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.402,
+   "lon": -122.1,
+   "time": "2026-10-12T07:55"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 222.39016046719345,
+     "access_s": 240
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.402,
+   "lon": -122.1,
+   "time": "2026-10-12T07:57"
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.41,
+   "lon": -122.1,
+   "time": "2026-10-13T00:05"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_LATE",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Charlie",
+    "stop": {
+     "stop_id": "tr:BRAVO",
+     "feed_id": "tr",
+     "name": "Bravo",
+     "lat": 37.41,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-13T00:10:00-07:00",
+    "departure": "2026-10-13T00:10:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-11-26T07:50",
+   "window_min": 120
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SATURDAY",
+    "service_date": "2026-11-26",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Charlie",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-26T09:00:00-08:00",
+    "departure": "2026-11-26T09:00:00-08:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:15"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:23:00-07:00",
+    "departure": "2026-10-12T08:23:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:40:00-07:00",
+    "departure": "2026-10-12T08:40:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:15",
+   "per_route": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:23:00-07:00",
+    "departure": "2026-10-12T08:23:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:20",
+   "transfer_stop": "tr:DELTA_1",
+   "transfer_trip": "tr:T_MORNING"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:23:00-07:00",
+    "departure": "2026-10-12T08:23:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 120
+    }
+   },
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:40:00-07:00",
+    "departure": "2026-10-12T08:40:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 3,
+     "min_transfer_s": null
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:20",
+   "transfer_stop": "tr:DELTA_1"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:23:00-07:00",
+    "departure": "2026-10-12T08:23:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 300
+    }
+   },
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:40:00-07:00",
+    "departure": "2026-10-12T08:40:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 300
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:20",
+   "transfer_stop": "tr:DELTA_2",
+   "transfer_trip": "tr:T_BUS"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:23:00-07:00",
+    "departure": "2026-10-12T08:23:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 300
+    }
+   },
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:DELTA_2",
+     "feed_id": "tr",
+     "name": "Delta Bus Bay",
+     "lat": 37.4302,
+     "lon": -122.1003,
+     "parent_station": "tr:DELTA",
+     "distance_m": 34.58736861062031,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:40:00-07:00",
+    "departure": "2026-10-12T08:40:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 300
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.3937,
+   "lon": -122.1,
+   "time": "2026-10-12T07:50",
+   "radius_m": 1000
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.3937,
+   "lon": -122.1,
+   "time": "2026-10-12T07:50",
+   "radius_m": 1000,
+   "access": "bike"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 700.5290054712704,
+     "access_s": 240
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T08:00:00-07:00",
+    "departure": "2026-10-12T08:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-11-01T07:30"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNDAY",
+    "service_date": "2026-11-01",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Bravo",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T08:00:00-08:00",
+    "departure": "2026-11-01T08:00:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-03-08T07:30"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNDAY",
+    "service_date": "2026-03-08",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Bravo",
+    "stop": {
+     "stop_id": "tr:ALPHA",
+     "feed_id": "tr",
+     "name": "Alpha",
+     "lat": 37.4,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-03-08T08:00:00-07:00",
+    "departure": "2026-03-08T08:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100,
+   "limit": 2
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100,
+   "limit": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100,
+   "per_route": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 3000,
+   "per_route": 2,
+   "limit": 3
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100,
+   "transfer_stop": "tr:KILO_B"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 60
+    }
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 60
+    }
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 60
+    }
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 60
+    }
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 60
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 100,
+   "transfer_stop": "tr:KILO_A"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": {
+     "type": 0,
+     "min_transfer_s": null
+    }
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 0,
+     "min_transfer_s": null
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "transfer_stop": "tr:KILO_A",
+   "transfer_trip": "tr:NOPE"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_A",
+     "feed_id": "tr",
+     "name": "Kilo Platform A",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 90
+    }
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": {
+     "type": 0,
+     "min_transfer_s": null
+    }
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:KILO_B",
+     "feed_id": "tr",
+     "name": "Kilo Platform B",
+     "lat": 37.5,
+     "lon": -122.2,
+     "parent_station": "tr:KILO_STN",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T09:00:00-07:00",
+    "departure": "2026-10-12T09:00:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 0,
+     "min_transfer_s": null
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T09:25"
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-10-13T00:05"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3LATE",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-13T00:10:00-07:00",
+    "departure": "2026-10-13T00:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3EARLY",
+    "service_date": "2026-10-13",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-13T00:10:00-07:00",
+    "departure": "2026-10-13T00:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-10-13T00:05",
+   "per_route": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3LATE",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-13T00:10:00-07:00",
+    "departure": "2026-10-13T00:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.53,
+   "lon": -122.2,
+   "time": "2026-10-12T09:55",
+   "radius_m": 100
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_X",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:NOV_2",
+     "feed_id": "tr",
+     "name": "November 2",
+     "lat": 37.53,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T10:00:00-07:00",
+    "departure": "2026-10-12T10:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_Y",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:NOV_1",
+     "feed_id": "tr",
+     "name": "November 1",
+     "lat": 37.53,
+     "lon": -122.2005,
+     "parent_station": null,
+     "distance_m": 44.090766583683155,
+     "access_s": 60
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-10-12T10:00:00-07:00",
+    "departure": "2026-10-12T10:00:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-11-01T01:00:00-07:00",
+   "window_min": 120
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-11-01",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T01:10:00-08:00",
+    "departure": "2026-11-01T01:10:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_SATLATE",
+    "service_date": "2026-10-31",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T01:30:00-07:00",
+    "departure": "2026-11-01T01:30:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-11-01T01:00",
+   "window_min": 120
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-11-01",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T01:10:00-08:00",
+    "departure": "2026-11-01T01:10:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_SATLATE",
+    "service_date": "2026-10-31",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T01:30:00-07:00",
+    "departure": "2026-11-01T01:30:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-11-01T01:05:00-08:00",
+   "window_min": 120
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-11-01",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-11-01T01:10:00-08:00",
+    "departure": "2026-11-01T01:10:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-03-08T00:00",
+   "window_min": 180
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-03-08",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-03-08T00:10:00-08:00",
+    "departure": "2026-03-08T00:10:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_SATLATE",
+    "service_date": "2026-03-07",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-03-08T01:30:00-08:00",
+    "departure": "2026-03-08T01:30:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-03-08T02:30",
+   "window_min": 180
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-12-01T11:50"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_EXTRA",
+    "service_date": "2026-12-01",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-12-01T12:00:00-08:00",
+    "departure": "2026-12-01T12:00:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-12-02T11:50"
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-12-05T11:50"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_EXTRA",
+    "service_date": "2026-12-05",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 1,
+    "arrival": "2026-12-05T12:00:00-08:00",
+    "departure": "2026-12-05T12:00:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2027-06-01T09:00"
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.0,
+   "lon": -121.0,
+   "time": "2026-10-12T09:00",
+   "radius_m": 3000
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 0,
+   "window_min": 0,
+   "limit": 501
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "radius_m"
+     ],
+     "msg": "Input should be greater than 0"
+    },
+    {
+     "loc": [
+      "query",
+      "window_min"
+     ],
+     "msg": "Input should be greater than 0"
+    },
+    {
+     "loc": [
+      "query",
+      "limit"
+     ],
+     "msg": "Input should be less than or equal to 500"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "radius_m": 3001,
+   "window_min": 361,
+   "per_route": 21
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "radius_m"
+     ],
+     "msg": "Input should be less than or equal to 3000"
+    },
+    {
+     "loc": [
+      "query",
+      "window_min"
+     ],
+     "msg": "Input should be less than or equal to 360"
+    },
+    {
+     "loc": [
+      "query",
+      "per_route"
+     ],
+     "msg": "Input should be less than or equal to 20"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T08:55",
+   "window_min": 1.5,
+   "per_route": -1,
+   "access": "car"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "window_min"
+     ],
+     "msg": "Input should be a valid integer, unable to parse string as an integer"
+    },
+    {
+     "loc": [
+      "query",
+      "access"
+     ],
+     "msg": "Input should be 'walk' or 'bike'"
+    },
+    {
+     "loc": [
+      "query",
+      "per_route"
+     ],
+     "msg": "Input should be greater than or equal to 1"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 91,
+   "lon": -181,
+   "time": "nope"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "lat"
+     ],
+     "msg": "Input should be less than or equal to 90"
+    },
+    {
+     "loc": [
+      "query",
+      "lon"
+     ],
+     "msg": "Input should be greater than or equal to -180"
+    },
+    {
+     "loc": [
+      "query",
+      "time"
+     ],
+     "msg": "Input should be a valid datetime or date, input is too short"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-02-30T08:00"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "time"
+     ],
+     "msg": "Input should be a valid datetime or date, day value is outside expected range"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/departures",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T24:00"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "time"
+     ],
+     "msg": "Input should be a valid datetime or date, unexpected extra characters at the end of the input"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:30"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:DELTA_1",
+     "feed_id": "tr",
+     "name": "Delta Platform 1",
+     "lat": 37.43,
+     "lon": -122.1,
+     "parent_station": "tr:DELTA",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 4,
+    "arrival": "2026-10-12T08:20:00-07:00",
+    "departure": "2026-10-12T08:20:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.4,
+   "lon": -122.1,
+   "time": "2026-10-12T08:30"
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.09,
+   "time": "2026-10-12T09:00"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:ECHO",
+     "feed_id": "tr",
+     "name": "Echo",
+     "lat": 37.43,
+     "lon": -122.09,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T08:47:00-07:00",
+    "departure": "2026-10-12T08:47:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_BUS",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:ECHO",
+     "feed_id": "tr",
+     "name": "Echo",
+     "lat": 37.43,
+     "lon": -122.09,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T08:30:00-07:00",
+    "departure": "2026-10-12T08:30:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.09,
+   "time": "2026-10-12T09:00",
+   "per_route": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_BUS2",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:B2",
+     "short_name": "B2",
+     "long_name": "Bus Two",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Bus"
+    },
+    "headsign": "Echo",
+    "stop": {
+     "stop_id": "tr:ECHO",
+     "feed_id": "tr",
+     "name": "Echo",
+     "lat": 37.43,
+     "lon": -122.09,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T08:47:00-07:00",
+    "departure": "2026-10-12T08:47:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.43,
+   "lon": -122.1,
+   "time": "2026-10-12T08:23",
+   "transfer_stop": "tr:DELTA_2",
+   "transfer_trip": "tr:T_BUS"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Delta",
+    "stop": {
+     "stop_id": "tr:DELTA_1",
+     "feed_id": "tr",
+     "name": "Delta Platform 1",
+     "lat": 37.43,
+     "lon": -122.1,
+     "parent_station": "tr:DELTA",
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 4,
+    "arrival": "2026-10-12T08:20:00-07:00",
+    "departure": "2026-10-12T08:20:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": {
+     "type": 2,
+     "min_transfer_s": 120
+    }
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.41,
+   "lon": -122.1,
+   "time": "2026-10-13T00:15"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_LATE",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:L1",
+     "short_name": "L1",
+     "long_name": "Line One",
+     "route_type": 2,
+     "color": "E31837",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Charlie",
+    "stop": {
+     "stop_id": "tr:BRAVO",
+     "feed_id": "tr",
+     "name": "Bravo",
+     "lat": 37.41,
+     "lon": -122.1,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-13T00:10:00-07:00",
+    "departure": "2026-10-13T00:10:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-10-12T09:15"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-10-12T09:15",
+   "limit": 2
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-10-12T09:15",
+   "per_route": 1
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:10:00-07:00",
+    "departure": "2026-10-12T09:10:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-10-12T09:40"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R4A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T09:06:00-07:00",
+    "departure": "2026-10-12T09:06:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:06:00-07:00",
+    "departure": "2026-10-12T09:06:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.51,
+   "lon": -122.2,
+   "time": "2026-10-12T07:25"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_GHOST",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-12T07:20:00-07:00",
+    "departure": "2026-10-12T07:20:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-11-01T02:00:00-08:00",
+   "window_min": 120
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SATLATE",
+    "service_date": "2026-10-31",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-11-01T01:40:00-07:00",
+    "departure": "2026-11-01T01:40:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-11-01",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-11-01T01:20:00-08:00",
+    "departure": "2026-11-01T01:20:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-03-08T02:00",
+   "window_min": 180
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_SATLATE",
+    "service_date": "2026-03-07",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-03-08T01:40:00-08:00",
+    "departure": "2026-03-08T01:40:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_SUNEARLY",
+    "service_date": "2026-03-08",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-03-08T00:20:00-08:00",
+    "departure": "2026-03-08T00:20:00-08:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.52,
+   "lon": -122.2,
+   "time": "2026-10-13T00:30",
+   "transfer_stop": "tr:MIKE"
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3LATE",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 3,
+    "arrival": "2026-10-13T00:20:00-07:00",
+    "departure": "2026-10-13T00:20:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3EARLY",
+    "service_date": "2026-10-13",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:MIKE",
+     "feed_id": "tr",
+     "name": "Mike",
+     "lat": 37.52,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 0.0,
+     "access_s": 0
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-13T00:20:00-07:00",
+    "departure": "2026-10-13T00:20:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T09:15",
+   "radius_m": 3000,
+   "access": "bike",
+   "limit": 4
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R4B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R4",
+     "short_name": "R4",
+     "long_name": "Route Four",
+     "route_type": 3,
+     "color": "0000FF",
+     "text_color": "FFFFFF",
+     "agency": "Test Rail"
+    },
+    "headsign": null,
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 1111.9508023352598,
+     "access_s": 360
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:06:00-07:00",
+    "departure": "2026-10-12T09:06:00-07:00",
+    "bikes_allowed": 1,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3A",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 1111.9508023352598,
+     "access_s": 360
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 1111.9508023352598,
+     "access_s": 360
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": 2,
+    "transfer": null
+   },
+   {
+    "trip_id": "tr:T_R3D",
+    "service_date": "2026-10-12",
+    "route": {
+     "route_id": "tr:R3",
+     "short_name": "R3",
+     "long_name": "Route Three",
+     "route_type": 3,
+     "color": null,
+     "text_color": null,
+     "agency": "Test Rail"
+    },
+    "headsign": "Mike",
+    "stop": {
+     "stop_id": "tr:LIMA",
+     "feed_id": "tr",
+     "name": "Lima",
+     "lat": 37.51,
+     "lon": -122.2,
+     "parent_station": null,
+     "distance_m": 1111.9508023352598,
+     "access_s": 360
+    },
+    "stop_sequence": 2,
+    "arrival": "2026-10-12T09:05:00-07:00",
+    "departure": "2026-10-12T09:05:00-07:00",
+    "bikes_allowed": null,
+    "transfer": null
+   }
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "/api/arrivals",
+  "params": {
+   "lat": 37.5,
+   "lon": -122.2,
+   "time": "2026-10-12T09:15",
+   "window_min": 0
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "window_min"
+     ],
+     "msg": "Input should be greater than 0"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Delta",
+   "bikes_allowed": 1,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T08:00:00-07:00",
+     "departure": "2026-10-12T08:00:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": 0
+    },
+    {
+     "stop": {
+      "stop_id": "tr:BRAVO",
+      "feed_id": "tr",
+      "name": "Bravo",
+      "lat": 37.41,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-12T08:05:00-07:00",
+     "departure": "2026-10-12T08:06:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": 4
+    },
+    {
+     "stop": {
+      "stop_id": "tr:CHARLIE",
+      "feed_id": "tr",
+      "name": "Charlie",
+      "lat": 37.42,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-12T08:13:00-07:00",
+     "departure": "2026-10-12T08:13:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": 8
+    },
+    {
+     "stop": {
+      "stop_id": "tr:DELTA_1",
+      "feed_id": "tr",
+      "name": "Delta Platform 1",
+      "lat": 37.43,
+      "lon": -122.1,
+      "parent_station": "tr:DELTA"
+     },
+     "stop_sequence": 4,
+     "arrival": "2026-10-12T08:20:00-07:00",
+     "departure": "2026-10-12T08:20:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": 12
+    }
+   ],
+   "shape": [
+    [
+     -122.1,
+     37.4
+    ],
+    [
+     -122.1,
+     37.4025
+    ],
+    [
+     -122.1,
+     37.405
+    ],
+    [
+     -122.1,
+     37.4075
+    ],
+    [
+     -122.1,
+     37.41
+    ],
+    [
+     -122.1,
+     37.4125
+    ],
+    [
+     -122.1,
+     37.415
+    ],
+    [
+     -122.1,
+     37.4175
+    ],
+    [
+     -122.1,
+     37.42
+    ],
+    [
+     -122.1,
+     37.4225
+    ],
+    [
+     -122.1,
+     37.425
+    ],
+    [
+     -122.1,
+     37.4275
+    ],
+    [
+     -122.1,
+     37.43
+    ]
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-10-10"
+  },
+  "status": 404,
+  "body": {
+   "detail": "Trip 'tr:T_MORNING' does not run on 2026-10-10"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:NOPE",
+   "service_date": "2026-10-12"
+  },
+  "status": 404,
+  "body": {
+   "detail": "Unknown trip 'tr:NOPE'"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_BUS",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_BUS",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:B2",
+    "short_name": "B2",
+    "long_name": "Bus Two",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Bus"
+   },
+   "headsign": "Echo",
+   "bikes_allowed": 1,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:DELTA_2",
+      "feed_id": "tr",
+      "name": "Delta Bus Bay",
+      "lat": 37.4302,
+      "lon": -122.1003,
+      "parent_station": "tr:DELTA"
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T08:23:00-07:00",
+     "departure": "2026-10-12T08:23:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:ECHO",
+      "feed_id": "tr",
+      "name": "Echo",
+      "lat": 37.43,
+      "lon": -122.09,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-12T08:30:00-07:00",
+     "departure": "2026-10-12T08:30:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_LATE",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_LATE",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Charlie",
+   "bikes_allowed": 1,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T23:50:00-07:00",
+     "departure": "2026-10-12T23:50:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:BRAVO",
+      "feed_id": "tr",
+      "name": "Bravo",
+      "lat": 37.41,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-13T00:10:00-07:00",
+     "departure": "2026-10-13T00:10:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:CHARLIE",
+      "feed_id": "tr",
+      "name": "Charlie",
+      "lat": 37.42,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-13T00:20:00-07:00",
+     "departure": "2026-10-13T00:20:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_SUNDAY",
+   "service_date": "2026-11-01"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_SUNDAY",
+   "service_date": "2026-11-01",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Bravo",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-11-01T08:00:00-08:00",
+     "departure": "2026-11-01T08:00:00-08:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:BRAVO",
+      "feed_id": "tr",
+      "name": "Bravo",
+      "lat": 37.41,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-11-01T08:05:00-08:00",
+     "departure": "2026-11-01T08:05:00-08:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_SUNDAY",
+   "service_date": "2026-03-08"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_SUNDAY",
+   "service_date": "2026-03-08",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Bravo",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-03-08T08:00:00-07:00",
+     "departure": "2026-03-08T08:00:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:BRAVO",
+      "feed_id": "tr",
+      "name": "Bravo",
+      "lat": 37.41,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-03-08T08:05:00-07:00",
+     "departure": "2026-03-08T08:05:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_SATURDAY",
+   "service_date": "2026-11-26"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_SATURDAY",
+   "service_date": "2026-11-26",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Charlie",
+   "bikes_allowed": 2,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-11-26T09:00:00-08:00",
+     "departure": "2026-11-26T09:00:00-08:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:CHARLIE",
+      "feed_id": "tr",
+      "name": "Charlie",
+      "lat": 37.42,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-11-26T09:10:00-08:00",
+     "departure": "2026-11-26T09:10:00-08:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_R3A",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_R3A",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:R3",
+    "short_name": "R3",
+    "long_name": "Route Three",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:KILO_A",
+      "feed_id": "tr",
+      "name": "Kilo Platform A",
+      "lat": 37.5,
+      "lon": -122.2,
+      "parent_station": "tr:KILO_STN"
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T09:00:00-07:00",
+     "departure": "2026-10-12T09:00:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": 0
+    },
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-12T09:05:00-07:00",
+     "departure": "2026-10-12T09:05:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": 96
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-12T09:10:00-07:00",
+     "departure": "2026-10-12T09:10:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": 193
+    }
+   ],
+   "shape": [
+    [
+     -122.2,
+     37.5
+    ],
+    [
+     -122.199933,
+     37.5001
+    ],
+    [
+     -122.199867,
+     37.5002
+    ],
+    [
+     -122.1998,
+     37.5003
+    ],
+    [
+     -122.199734,
+     37.5004
+    ],
+    [
+     -122.199668,
+     37.5005
+    ],
+    [
+     -122.199603,
+     37.5006
+    ],
+    [
+     -122.199538,
+     37.5007
+    ],
+    [
+     -122.199473,
+     37.5008
+    ],
+    [
+     -122.199409,
+     37.5009
+    ],
+    [
+     -122.199346,
+     37.501
+    ],
+    [
+     -122.199283,
+     37.5011
+    ],
+    [
+     -122.199221,
+     37.5012
+    ],
+    [
+     -122.19916,
+     37.5013
+    ],
+    [
+     -122.1991,
+     37.5014
+    ],
+    [
+     -122.199041,
+     37.5015
+    ],
+    [
+     -122.198983,
+     37.5016
+    ],
+    [
+     -122.198926,
+     37.5017
+    ],
+    [
+     -122.198871,
+     37.5018
+    ],
+    [
+     -122.198816,
+     37.5019
+    ],
+    [
+     -122.198763,
+     37.502
+    ],
+    [
+     -122.198712,
+     37.5021
+    ],
+    [
+     -122.198661,
+     37.5022
+    ],
+    [
+     -122.198613,
+     37.5023
+    ],
+    [
+     -122.198565,
+     37.5024
+    ],
+    [
+     -122.19852,
+     37.5025
+    ],
+    [
+     -122.198476,
+     37.5026
+    ],
+    [
+     -122.198433,
+     37.5027
+    ],
+    [
+     -122.198393,
+     37.5028
+    ],
+    [
+     -122.198354,
+     37.5029
+    ],
+    [
+     -122.198317,
+     37.503
+    ],
+    [
+     -122.198282,
+     37.5031
+    ],
+    [
+     -122.198249,
+     37.5032
+    ],
+    [
+     -122.198218,
+     37.5033
+    ],
+    [
+     -122.198188,
+     37.5034
+    ],
+    [
+     -122.198161,
+     37.5035
+    ],
+    [
+     -122.198136,
+     37.5036
+    ],
+    [
+     -122.198113,
+     37.5037
+    ],
+    [
+     -122.198092,
+     37.5038
+    ],
+    [
+     -122.198073,
+     37.5039
+    ],
+    [
+     -122.198056,
+     37.504
+    ],
+    [
+     -122.198042,
+     37.5041
+    ],
+    [
+     -122.198029,
+     37.5042
+    ],
+    [
+     -122.198019,
+     37.5043
+    ],
+    [
+     -122.198011,
+     37.5044
+    ],
+    [
+     -122.198005,
+     37.5045
+    ],
+    [
+     -122.198001,
+     37.5046
+    ],
+    [
+     -122.198,
+     37.5047
+    ],
+    [
+     -122.198001,
+     37.5048
+    ],
+    [
+     -122.198004,
+     37.5049
+    ],
+    [
+     -122.198009,
+     37.505
+    ],
+    [
+     -122.198017,
+     37.5051
+    ],
+    [
+     -122.198026,
+     37.5052
+    ],
+    [
+     -122.198038,
+     37.5053
+    ],
+    [
+     -122.198052,
+     37.5054
+    ],
+    [
+     -122.198069,
+     37.5055
+    ],
+    [
+     -122.198087,
+     37.5056
+    ],
+    [
+     -122.198107,
+     37.5057
+    ],
+    [
+     -122.19813,
+     37.5058
+    ],
+    [
+     -122.198155,
+     37.5059
+    ],
+    [
+     -122.198181,
+     37.506
+    ],
+    [
+     -122.19821,
+     37.5061
+    ],
+    [
+     -122.198241,
+     37.5062
+    ],
+    [
+     -122.198274,
+     37.5063
+    ],
+    [
+     -122.198308,
+     37.5064
+    ],
+    [
+     -122.198345,
+     37.5065
+    ],
+    [
+     -122.198383,
+     37.5066
+    ],
+    [
+     -122.198423,
+     37.5067
+    ],
+    [
+     -122.198465,
+     37.5068
+    ],
+    [
+     -122.198509,
+     37.5069
+    ],
+    [
+     -122.198554,
+     37.507
+    ],
+    [
+     -122.198601,
+     37.5071
+    ],
+    [
+     -122.198649,
+     37.5072
+    ],
+    [
+     -122.198699,
+     37.5073
+    ],
+    [
+     -122.19875,
+     37.5074
+    ],
+    [
+     -122.198803,
+     37.5075
+    ],
+    [
+     -122.198857,
+     37.5076
+    ],
+    [
+     -122.198912,
+     37.5077
+    ],
+    [
+     -122.198969,
+     37.5078
+    ],
+    [
+     -122.199027,
+     37.5079
+    ],
+    [
+     -122.199085,
+     37.508
+    ],
+    [
+     -122.199145,
+     37.5081
+    ],
+    [
+     -122.199206,
+     37.5082
+    ],
+    [
+     -122.199268,
+     37.5083
+    ],
+    [
+     -122.19933,
+     37.5084
+    ],
+    [
+     -122.199393,
+     37.5085
+    ],
+    [
+     -122.199457,
+     37.5086
+    ],
+    [
+     -122.199522,
+     37.5087
+    ],
+    [
+     -122.199586,
+     37.5088
+    ],
+    [
+     -122.199652,
+     37.5089
+    ],
+    [
+     -122.199718,
+     37.509
+    ],
+    [
+     -122.199784,
+     37.5091
+    ],
+    [
+     -122.19985,
+     37.5092
+    ],
+    [
+     -122.199917,
+     37.5093
+    ],
+    [
+     -122.199983,
+     37.5094
+    ],
+    [
+     -122.20005,
+     37.5095
+    ],
+    [
+     -122.200117,
+     37.5096
+    ],
+    [
+     -122.200183,
+     37.5097
+    ],
+    [
+     -122.200249,
+     37.5098
+    ],
+    [
+     -122.200315,
+     37.5099
+    ],
+    [
+     -122.200381,
+     37.51
+    ],
+    [
+     -122.200446,
+     37.5101
+    ],
+    [
+     -122.200511,
+     37.5102
+    ],
+    [
+     -122.200575,
+     37.5103
+    ],
+    [
+     -122.200639,
+     37.5104
+    ],
+    [
+     -122.200702,
+     37.5105
+    ],
+    [
+     -122.200764,
+     37.5106
+    ],
+    [
+     -122.200825,
+     37.5107
+    ],
+    [
+     -122.200885,
+     37.5108
+    ],
+    [
+     -122.200944,
+     37.5109
+    ],
+    [
+     -122.201003,
+     37.511
+    ],
+    [
+     -122.20106,
+     37.5111
+    ],
+    [
+     -122.201116,
+     37.5112
+    ],
+    [
+     -122.20117,
+     37.5113
+    ],
+    [
+     -122.201224,
+     37.5114
+    ],
+    [
+     -122.201276,
+     37.5115
+    ],
+    [
+     -122.201326,
+     37.5116
+    ],
+    [
+     -122.201376,
+     37.5117
+    ],
+    [
+     -122.201423,
+     37.5118
+    ],
+    [
+     -122.201469,
+     37.5119
+    ],
+    [
+     -122.201514,
+     37.512
+    ],
+    [
+     -122.201556,
+     37.5121
+    ],
+    [
+     -122.201597,
+     37.5122
+    ],
+    [
+     -122.201637,
+     37.5123
+    ],
+    [
+     -122.201674,
+     37.5124
+    ],
+    [
+     -122.20171,
+     37.5125
+    ],
+    [
+     -122.201743,
+     37.5126
+    ],
+    [
+     -122.201775,
+     37.5127
+    ],
+    [
+     -122.201805,
+     37.5128
+    ],
+    [
+     -122.201832,
+     37.5129
+    ],
+    [
+     -122.201858,
+     37.513
+    ],
+    [
+     -122.201882,
+     37.5131
+    ],
+    [
+     -122.201903,
+     37.5132
+    ],
+    [
+     -122.201923,
+     37.5133
+    ],
+    [
+     -122.20194,
+     37.5134
+    ],
+    [
+     -122.201955,
+     37.5135
+    ],
+    [
+     -122.201968,
+     37.5136
+    ],
+    [
+     -122.201979,
+     37.5137
+    ],
+    [
+     -122.201987,
+     37.5138
+    ],
+    [
+     -122.201994,
+     37.5139
+    ],
+    [
+     -122.201998,
+     37.514
+    ],
+    [
+     -122.202,
+     37.5141
+    ],
+    [
+     -122.202,
+     37.5142
+    ],
+    [
+     -122.201997,
+     37.5143
+    ],
+    [
+     -122.201992,
+     37.5144
+    ],
+    [
+     -122.201985,
+     37.5145
+    ],
+    [
+     -122.201976,
+     37.5146
+    ],
+    [
+     -122.201965,
+     37.5147
+    ],
+    [
+     -122.201951,
+     37.5148
+    ],
+    [
+     -122.201936,
+     37.5149
+    ],
+    [
+     -122.201918,
+     37.515
+    ],
+    [
+     -122.201898,
+     37.5151
+    ],
+    [
+     -122.201876,
+     37.5152
+    ],
+    [
+     -122.201852,
+     37.5153
+    ],
+    [
+     -122.201825,
+     37.5154
+    ],
+    [
+     -122.201797,
+     37.5155
+    ],
+    [
+     -122.201767,
+     37.5156
+    ],
+    [
+     -122.201735,
+     37.5157
+    ],
+    [
+     -122.201701,
+     37.5158
+    ],
+    [
+     -122.201665,
+     37.5159
+    ],
+    [
+     -122.201627,
+     37.516
+    ],
+    [
+     -122.201587,
+     37.5161
+    ],
+    [
+     -122.201546,
+     37.5162
+    ],
+    [
+     -122.201502,
+     37.5163
+    ],
+    [
+     -122.201458,
+     37.5164
+    ],
+    [
+     -122.201411,
+     37.5165
+    ],
+    [
+     -122.201363,
+     37.5166
+    ],
+    [
+     -122.201314,
+     37.5167
+    ],
+    [
+     -122.201263,
+     37.5168
+    ],
+    [
+     -122.20121,
+     37.5169
+    ],
+    [
+     -122.201156,
+     37.517
+    ],
+    [
+     -122.201101,
+     37.5171
+    ],
+    [
+     -122.201045,
+     37.5172
+    ],
+    [
+     -122.200988,
+     37.5173
+    ],
+    [
+     -122.200929,
+     37.5174
+    ],
+    [
+     -122.20087,
+     37.5175
+    ],
+    [
+     -122.200809,
+     37.5176
+    ],
+    [
+     -122.200748,
+     37.5177
+    ],
+    [
+     -122.200686,
+     37.5178
+    ],
+    [
+     -122.200623,
+     37.5179
+    ],
+    [
+     -122.200559,
+     37.518
+    ],
+    [
+     -122.200495,
+     37.5181
+    ],
+    [
+     -122.20043,
+     37.5182
+    ],
+    [
+     -122.200364,
+     37.5183
+    ],
+    [
+     -122.200299,
+     37.5184
+    ],
+    [
+     -122.200233,
+     37.5185
+    ],
+    [
+     -122.200166,
+     37.5186
+    ],
+    [
+     -122.2001,
+     37.5187
+    ],
+    [
+     -122.200033,
+     37.5188
+    ],
+    [
+     -122.199966,
+     37.5189
+    ],
+    [
+     -122.1999,
+     37.519
+    ],
+    [
+     -122.199833,
+     37.5191
+    ],
+    [
+     -122.199767,
+     37.5192
+    ],
+    [
+     -122.199701,
+     37.5193
+    ],
+    [
+     -122.199635,
+     37.5194
+    ],
+    [
+     -122.19957,
+     37.5195
+    ],
+    [
+     -122.199505,
+     37.5196
+    ],
+    [
+     -122.199441,
+     37.5197
+    ],
+    [
+     -122.199377,
+     37.5198
+    ],
+    [
+     -122.199314,
+     37.5199
+    ],
+    [
+     -122.199252,
+     37.52
+    ]
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_R3C",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_R3C",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:R3",
+    "short_name": "R3",
+    "long_name": "Route Three",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:KILO_A",
+      "feed_id": "tr",
+      "name": "Kilo Platform A",
+      "lat": 37.5,
+      "lon": -122.2,
+      "parent_station": "tr:KILO_STN"
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T09:30:00-07:00",
+     "departure": "2026-10-12T09:30:00-07:00",
+     "can_board": false,
+     "can_alight": false,
+     "shape_index": 0
+    },
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-12T09:35:00-07:00",
+     "departure": "2026-10-12T09:35:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": 96
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-12T09:40:00-07:00",
+     "departure": "2026-10-12T09:40:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": 193
+    }
+   ],
+   "shape": [
+    [
+     -122.2,
+     37.5
+    ],
+    [
+     -122.199933,
+     37.5001
+    ],
+    [
+     -122.199867,
+     37.5002
+    ],
+    [
+     -122.1998,
+     37.5003
+    ],
+    [
+     -122.199734,
+     37.5004
+    ],
+    [
+     -122.199668,
+     37.5005
+    ],
+    [
+     -122.199603,
+     37.5006
+    ],
+    [
+     -122.199538,
+     37.5007
+    ],
+    [
+     -122.199473,
+     37.5008
+    ],
+    [
+     -122.199409,
+     37.5009
+    ],
+    [
+     -122.199346,
+     37.501
+    ],
+    [
+     -122.199283,
+     37.5011
+    ],
+    [
+     -122.199221,
+     37.5012
+    ],
+    [
+     -122.19916,
+     37.5013
+    ],
+    [
+     -122.1991,
+     37.5014
+    ],
+    [
+     -122.199041,
+     37.5015
+    ],
+    [
+     -122.198983,
+     37.5016
+    ],
+    [
+     -122.198926,
+     37.5017
+    ],
+    [
+     -122.198871,
+     37.5018
+    ],
+    [
+     -122.198816,
+     37.5019
+    ],
+    [
+     -122.198763,
+     37.502
+    ],
+    [
+     -122.198712,
+     37.5021
+    ],
+    [
+     -122.198661,
+     37.5022
+    ],
+    [
+     -122.198613,
+     37.5023
+    ],
+    [
+     -122.198565,
+     37.5024
+    ],
+    [
+     -122.19852,
+     37.5025
+    ],
+    [
+     -122.198476,
+     37.5026
+    ],
+    [
+     -122.198433,
+     37.5027
+    ],
+    [
+     -122.198393,
+     37.5028
+    ],
+    [
+     -122.198354,
+     37.5029
+    ],
+    [
+     -122.198317,
+     37.503
+    ],
+    [
+     -122.198282,
+     37.5031
+    ],
+    [
+     -122.198249,
+     37.5032
+    ],
+    [
+     -122.198218,
+     37.5033
+    ],
+    [
+     -122.198188,
+     37.5034
+    ],
+    [
+     -122.198161,
+     37.5035
+    ],
+    [
+     -122.198136,
+     37.5036
+    ],
+    [
+     -122.198113,
+     37.5037
+    ],
+    [
+     -122.198092,
+     37.5038
+    ],
+    [
+     -122.198073,
+     37.5039
+    ],
+    [
+     -122.198056,
+     37.504
+    ],
+    [
+     -122.198042,
+     37.5041
+    ],
+    [
+     -122.198029,
+     37.5042
+    ],
+    [
+     -122.198019,
+     37.5043
+    ],
+    [
+     -122.198011,
+     37.5044
+    ],
+    [
+     -122.198005,
+     37.5045
+    ],
+    [
+     -122.198001,
+     37.5046
+    ],
+    [
+     -122.198,
+     37.5047
+    ],
+    [
+     -122.198001,
+     37.5048
+    ],
+    [
+     -122.198004,
+     37.5049
+    ],
+    [
+     -122.198009,
+     37.505
+    ],
+    [
+     -122.198017,
+     37.5051
+    ],
+    [
+     -122.198026,
+     37.5052
+    ],
+    [
+     -122.198038,
+     37.5053
+    ],
+    [
+     -122.198052,
+     37.5054
+    ],
+    [
+     -122.198069,
+     37.5055
+    ],
+    [
+     -122.198087,
+     37.5056
+    ],
+    [
+     -122.198107,
+     37.5057
+    ],
+    [
+     -122.19813,
+     37.5058
+    ],
+    [
+     -122.198155,
+     37.5059
+    ],
+    [
+     -122.198181,
+     37.506
+    ],
+    [
+     -122.19821,
+     37.5061
+    ],
+    [
+     -122.198241,
+     37.5062
+    ],
+    [
+     -122.198274,
+     37.5063
+    ],
+    [
+     -122.198308,
+     37.5064
+    ],
+    [
+     -122.198345,
+     37.5065
+    ],
+    [
+     -122.198383,
+     37.5066
+    ],
+    [
+     -122.198423,
+     37.5067
+    ],
+    [
+     -122.198465,
+     37.5068
+    ],
+    [
+     -122.198509,
+     37.5069
+    ],
+    [
+     -122.198554,
+     37.507
+    ],
+    [
+     -122.198601,
+     37.5071
+    ],
+    [
+     -122.198649,
+     37.5072
+    ],
+    [
+     -122.198699,
+     37.5073
+    ],
+    [
+     -122.19875,
+     37.5074
+    ],
+    [
+     -122.198803,
+     37.5075
+    ],
+    [
+     -122.198857,
+     37.5076
+    ],
+    [
+     -122.198912,
+     37.5077
+    ],
+    [
+     -122.198969,
+     37.5078
+    ],
+    [
+     -122.199027,
+     37.5079
+    ],
+    [
+     -122.199085,
+     37.508
+    ],
+    [
+     -122.199145,
+     37.5081
+    ],
+    [
+     -122.199206,
+     37.5082
+    ],
+    [
+     -122.199268,
+     37.5083
+    ],
+    [
+     -122.19933,
+     37.5084
+    ],
+    [
+     -122.199393,
+     37.5085
+    ],
+    [
+     -122.199457,
+     37.5086
+    ],
+    [
+     -122.199522,
+     37.5087
+    ],
+    [
+     -122.199586,
+     37.5088
+    ],
+    [
+     -122.199652,
+     37.5089
+    ],
+    [
+     -122.199718,
+     37.509
+    ],
+    [
+     -122.199784,
+     37.5091
+    ],
+    [
+     -122.19985,
+     37.5092
+    ],
+    [
+     -122.199917,
+     37.5093
+    ],
+    [
+     -122.199983,
+     37.5094
+    ],
+    [
+     -122.20005,
+     37.5095
+    ],
+    [
+     -122.200117,
+     37.5096
+    ],
+    [
+     -122.200183,
+     37.5097
+    ],
+    [
+     -122.200249,
+     37.5098
+    ],
+    [
+     -122.200315,
+     37.5099
+    ],
+    [
+     -122.200381,
+     37.51
+    ],
+    [
+     -122.200446,
+     37.5101
+    ],
+    [
+     -122.200511,
+     37.5102
+    ],
+    [
+     -122.200575,
+     37.5103
+    ],
+    [
+     -122.200639,
+     37.5104
+    ],
+    [
+     -122.200702,
+     37.5105
+    ],
+    [
+     -122.200764,
+     37.5106
+    ],
+    [
+     -122.200825,
+     37.5107
+    ],
+    [
+     -122.200885,
+     37.5108
+    ],
+    [
+     -122.200944,
+     37.5109
+    ],
+    [
+     -122.201003,
+     37.511
+    ],
+    [
+     -122.20106,
+     37.5111
+    ],
+    [
+     -122.201116,
+     37.5112
+    ],
+    [
+     -122.20117,
+     37.5113
+    ],
+    [
+     -122.201224,
+     37.5114
+    ],
+    [
+     -122.201276,
+     37.5115
+    ],
+    [
+     -122.201326,
+     37.5116
+    ],
+    [
+     -122.201376,
+     37.5117
+    ],
+    [
+     -122.201423,
+     37.5118
+    ],
+    [
+     -122.201469,
+     37.5119
+    ],
+    [
+     -122.201514,
+     37.512
+    ],
+    [
+     -122.201556,
+     37.5121
+    ],
+    [
+     -122.201597,
+     37.5122
+    ],
+    [
+     -122.201637,
+     37.5123
+    ],
+    [
+     -122.201674,
+     37.5124
+    ],
+    [
+     -122.20171,
+     37.5125
+    ],
+    [
+     -122.201743,
+     37.5126
+    ],
+    [
+     -122.201775,
+     37.5127
+    ],
+    [
+     -122.201805,
+     37.5128
+    ],
+    [
+     -122.201832,
+     37.5129
+    ],
+    [
+     -122.201858,
+     37.513
+    ],
+    [
+     -122.201882,
+     37.5131
+    ],
+    [
+     -122.201903,
+     37.5132
+    ],
+    [
+     -122.201923,
+     37.5133
+    ],
+    [
+     -122.20194,
+     37.5134
+    ],
+    [
+     -122.201955,
+     37.5135
+    ],
+    [
+     -122.201968,
+     37.5136
+    ],
+    [
+     -122.201979,
+     37.5137
+    ],
+    [
+     -122.201987,
+     37.5138
+    ],
+    [
+     -122.201994,
+     37.5139
+    ],
+    [
+     -122.201998,
+     37.514
+    ],
+    [
+     -122.202,
+     37.5141
+    ],
+    [
+     -122.202,
+     37.5142
+    ],
+    [
+     -122.201997,
+     37.5143
+    ],
+    [
+     -122.201992,
+     37.5144
+    ],
+    [
+     -122.201985,
+     37.5145
+    ],
+    [
+     -122.201976,
+     37.5146
+    ],
+    [
+     -122.201965,
+     37.5147
+    ],
+    [
+     -122.201951,
+     37.5148
+    ],
+    [
+     -122.201936,
+     37.5149
+    ],
+    [
+     -122.201918,
+     37.515
+    ],
+    [
+     -122.201898,
+     37.5151
+    ],
+    [
+     -122.201876,
+     37.5152
+    ],
+    [
+     -122.201852,
+     37.5153
+    ],
+    [
+     -122.201825,
+     37.5154
+    ],
+    [
+     -122.201797,
+     37.5155
+    ],
+    [
+     -122.201767,
+     37.5156
+    ],
+    [
+     -122.201735,
+     37.5157
+    ],
+    [
+     -122.201701,
+     37.5158
+    ],
+    [
+     -122.201665,
+     37.5159
+    ],
+    [
+     -122.201627,
+     37.516
+    ],
+    [
+     -122.201587,
+     37.5161
+    ],
+    [
+     -122.201546,
+     37.5162
+    ],
+    [
+     -122.201502,
+     37.5163
+    ],
+    [
+     -122.201458,
+     37.5164
+    ],
+    [
+     -122.201411,
+     37.5165
+    ],
+    [
+     -122.201363,
+     37.5166
+    ],
+    [
+     -122.201314,
+     37.5167
+    ],
+    [
+     -122.201263,
+     37.5168
+    ],
+    [
+     -122.20121,
+     37.5169
+    ],
+    [
+     -122.201156,
+     37.517
+    ],
+    [
+     -122.201101,
+     37.5171
+    ],
+    [
+     -122.201045,
+     37.5172
+    ],
+    [
+     -122.200988,
+     37.5173
+    ],
+    [
+     -122.200929,
+     37.5174
+    ],
+    [
+     -122.20087,
+     37.5175
+    ],
+    [
+     -122.200809,
+     37.5176
+    ],
+    [
+     -122.200748,
+     37.5177
+    ],
+    [
+     -122.200686,
+     37.5178
+    ],
+    [
+     -122.200623,
+     37.5179
+    ],
+    [
+     -122.200559,
+     37.518
+    ],
+    [
+     -122.200495,
+     37.5181
+    ],
+    [
+     -122.20043,
+     37.5182
+    ],
+    [
+     -122.200364,
+     37.5183
+    ],
+    [
+     -122.200299,
+     37.5184
+    ],
+    [
+     -122.200233,
+     37.5185
+    ],
+    [
+     -122.200166,
+     37.5186
+    ],
+    [
+     -122.2001,
+     37.5187
+    ],
+    [
+     -122.200033,
+     37.5188
+    ],
+    [
+     -122.199966,
+     37.5189
+    ],
+    [
+     -122.1999,
+     37.519
+    ],
+    [
+     -122.199833,
+     37.5191
+    ],
+    [
+     -122.199767,
+     37.5192
+    ],
+    [
+     -122.199701,
+     37.5193
+    ],
+    [
+     -122.199635,
+     37.5194
+    ],
+    [
+     -122.19957,
+     37.5195
+    ],
+    [
+     -122.199505,
+     37.5196
+    ],
+    [
+     -122.199441,
+     37.5197
+    ],
+    [
+     -122.199377,
+     37.5198
+    ],
+    [
+     -122.199314,
+     37.5199
+    ],
+    [
+     -122.199252,
+     37.52
+    ]
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_GHOST",
+   "service_date": "2026-10-12"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_GHOST",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:R4",
+    "short_name": "R4",
+    "long_name": "Route Four",
+    "route_type": 3,
+    "color": "0000FF",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-12T07:20:00-07:00",
+     "departure": "2026-10-12T07:20:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 4,
+     "arrival": "2026-10-12T07:30:00-07:00",
+     "departure": "2026-10-12T07:30:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_SATLATE",
+   "service_date": "2026-10-31"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_SATLATE",
+   "service_date": "2026-10-31",
+   "route": {
+    "route_id": "tr:R3",
+    "short_name": "R3",
+    "long_name": "Route Three",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-11-01T01:30:00-07:00",
+     "departure": "2026-11-01T01:30:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-11-01T01:40:00-07:00",
+     "departure": "2026-11-01T01:40:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_NOROUTE",
+   "service_date": "2026-10-12"
+  },
+  "status": 404,
+  "body": {
+   "detail": "Unknown trip 'tr:T_NOROUTE'"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_EXTRA",
+   "service_date": "2026-12-01"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_EXTRA",
+   "service_date": "2026-12-01",
+   "route": {
+    "route_id": "tr:R3",
+    "short_name": "R3",
+    "long_name": "Route Three",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-12-01T12:00:00-08:00",
+     "departure": "2026-12-01T12:00:00-08:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-12-01T12:10:00-08:00",
+     "departure": "2026-12-01T12:10:00-08:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_EXTRA",
+   "service_date": "2026-12-02"
+  },
+  "status": 404,
+  "body": {
+   "detail": "Trip 'tr:T_EXTRA' does not run on 2026-12-02"
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_EXTRA",
+   "service_date": "2026-12-05"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_EXTRA",
+   "service_date": "2026-12-05",
+   "route": {
+    "route_id": "tr:R3",
+    "short_name": "R3",
+    "long_name": "Route Three",
+    "route_type": 3,
+    "color": null,
+    "text_color": null,
+    "agency": "Test Rail"
+   },
+   "headsign": "Mike",
+   "bikes_allowed": null,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:LIMA",
+      "feed_id": "tr",
+      "name": "Lima",
+      "lat": 37.51,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-12-05T12:00:00-08:00",
+     "departure": "2026-12-05T12:00:00-08:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": null
+    },
+    {
+     "stop": {
+      "stop_id": "tr:MIKE",
+      "feed_id": "tr",
+      "name": "Mike",
+      "lat": 37.52,
+      "lon": -122.2,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-12-05T12:10:00-08:00",
+     "departure": "2026-12-05T12:10:00-08:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": null
+    }
+   ],
+   "shape": null
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-10-12T00:00"
+  },
+  "status": 200,
+  "body": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-10-12",
+   "route": {
+    "route_id": "tr:L1",
+    "short_name": "L1",
+    "long_name": "Line One",
+    "route_type": 2,
+    "color": "E31837",
+    "text_color": "FFFFFF",
+    "agency": "Test Rail"
+   },
+   "headsign": "Delta",
+   "bikes_allowed": 1,
+   "stops": [
+    {
+     "stop": {
+      "stop_id": "tr:ALPHA",
+      "feed_id": "tr",
+      "name": "Alpha",
+      "lat": 37.4,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 1,
+     "arrival": "2026-10-12T08:00:00-07:00",
+     "departure": "2026-10-12T08:00:00-07:00",
+     "can_board": true,
+     "can_alight": false,
+     "shape_index": 0
+    },
+    {
+     "stop": {
+      "stop_id": "tr:BRAVO",
+      "feed_id": "tr",
+      "name": "Bravo",
+      "lat": 37.41,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 2,
+     "arrival": "2026-10-12T08:05:00-07:00",
+     "departure": "2026-10-12T08:06:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": 4
+    },
+    {
+     "stop": {
+      "stop_id": "tr:CHARLIE",
+      "feed_id": "tr",
+      "name": "Charlie",
+      "lat": 37.42,
+      "lon": -122.1,
+      "parent_station": null
+     },
+     "stop_sequence": 3,
+     "arrival": "2026-10-12T08:13:00-07:00",
+     "departure": "2026-10-12T08:13:00-07:00",
+     "can_board": true,
+     "can_alight": true,
+     "shape_index": 8
+    },
+    {
+     "stop": {
+      "stop_id": "tr:DELTA_1",
+      "feed_id": "tr",
+      "name": "Delta Platform 1",
+      "lat": 37.43,
+      "lon": -122.1,
+      "parent_station": "tr:DELTA"
+     },
+     "stop_sequence": 4,
+     "arrival": "2026-10-12T08:20:00-07:00",
+     "departure": "2026-10-12T08:20:00-07:00",
+     "can_board": false,
+     "can_alight": true,
+     "shape_index": 12
+    }
+   ],
+   "shape": [
+    [
+     -122.1,
+     37.4
+    ],
+    [
+     -122.1,
+     37.4025
+    ],
+    [
+     -122.1,
+     37.405
+    ],
+    [
+     -122.1,
+     37.4075
+    ],
+    [
+     -122.1,
+     37.41
+    ],
+    [
+     -122.1,
+     37.4125
+    ],
+    [
+     -122.1,
+     37.415
+    ],
+    [
+     -122.1,
+     37.4175
+    ],
+    [
+     -122.1,
+     37.42
+    ],
+    [
+     -122.1,
+     37.4225
+    ],
+    [
+     -122.1,
+     37.425
+    ],
+    [
+     -122.1,
+     37.4275
+    ],
+    [
+     -122.1,
+     37.43
+    ]
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "tr:T_MORNING",
+   "service_date": "2026-1-2"
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "query",
+      "service_date"
+     ],
+     "msg": "Input should be a valid date or datetime, input is too short"
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/api/trip",
+  "params": {
+   "trip_id": "it's",
+   "service_date": "2026-10-12"
+  },
+  "status": 404,
+  "body": {
+   "detail": "Unknown trip \"it's\""
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": [
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 2
+    },
+    {
+     "trip_id": "tr:T_BUS",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "stop_sequence": 2,
+    "geometry": [
+     [
+      -122.1,
+      37.41
+     ],
+     [
+      -122.1,
+      37.43
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_BUS",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.1003,
+      37.4302
+     ],
+     [
+      -122.09,
+      37.43
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "backward",
+   "trips": [
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 2
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "stop_sequence": 2,
+    "geometry": [
+     [
+      -122.1,
+      37.4
+     ],
+     [
+      -122.1,
+      37.41
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": [
+    {
+     "trip_id": "tr:NOPE",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 99
+    }
+   ]
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": [
+    {
+     "trip_id": "tr:T_R3A",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_R3A",
+     "stop_sequence": 2
+    },
+    {
+     "trip_id": "tr:T_R3B",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.2,
+      37.5
+     ],
+     [
+      -122.198317,
+      37.503
+     ],
+     [
+      -122.198029,
+      37.5042
+     ],
+     [
+      -122.198052,
+      37.5054
+     ],
+     [
+      -122.19875,
+      37.5074
+     ],
+     [
+      -122.201469,
+      37.5119
+     ],
+     [
+      -122.201858,
+      37.513
+     ],
+     [
+      -122.202,
+      37.5141
+     ],
+     [
+      -122.201876,
+      37.5152
+     ],
+     [
+      -122.201458,
+      37.5164
+     ],
+     [
+      -122.199701,
+      37.5193
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_R3A",
+    "stop_sequence": 2,
+    "geometry": [
+     [
+      -122.2,
+      37.51
+     ],
+     [
+      -122.200117,
+      37.5096
+     ],
+     [
+      -122.201556,
+      37.5121
+     ],
+     [
+      -122.202,
+      37.5141
+     ],
+     [
+      -122.201876,
+      37.5152
+     ],
+     [
+      -122.201458,
+      37.5164
+     ],
+     [
+      -122.199701,
+      37.5193
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_R3B",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.2,
+      37.5
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "backward",
+   "trips": [
+    {
+     "trip_id": "tr:T_R3A",
+     "stop_sequence": 3
+    },
+    {
+     "trip_id": "tr:T_R3A",
+     "stop_sequence": 2
+    },
+    {
+     "trip_id": "tr:T_R3A",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_R3A",
+    "stop_sequence": 3,
+    "geometry": [
+     [
+      -122.2,
+      37.5
+     ],
+     [
+      -122.198317,
+      37.503
+     ],
+     [
+      -122.198029,
+      37.5042
+     ],
+     [
+      -122.198052,
+      37.5054
+     ],
+     [
+      -122.19875,
+      37.5074
+     ],
+     [
+      -122.201469,
+      37.5119
+     ],
+     [
+      -122.201858,
+      37.513
+     ],
+     [
+      -122.202,
+      37.5141
+     ],
+     [
+      -122.201876,
+      37.5152
+     ],
+     [
+      -122.201458,
+      37.5164
+     ],
+     [
+      -122.199701,
+      37.5193
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_R3A",
+    "stop_sequence": 2,
+    "geometry": [
+     [
+      -122.2,
+      37.5
+     ],
+     [
+      -122.198433,
+      37.5027
+     ],
+     [
+      -122.198,
+      37.5047
+     ],
+     [
+      -122.198345,
+      37.5065
+     ],
+     [
+      -122.200117,
+      37.5096
+     ],
+     [
+      -122.2,
+      37.51
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_R3A",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.2,
+      37.5
+     ],
+     [
+      -122.2,
+      37.5
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": [
+    {
+     "trip_id": "tr:T_NOROUTE",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_GHOST",
+     "stop_sequence": 3
+    },
+    {
+     "trip_id": "tr:T_GHOST",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_NOROUTE",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.2,
+      37.51
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_GHOST",
+    "stop_sequence": 3,
+    "geometry": [
+     [
+      -122.2,
+      37.51
+     ],
+     [
+      -122.2,
+      37.52
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "backward",
+   "trips": [
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 4
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 200,
+  "body": [
+   {
+    "trip_id": "tr:T_MORNING",
+    "stop_sequence": 4,
+    "geometry": [
+     [
+      -122.1,
+      37.4
+     ],
+     [
+      -122.1,
+      37.43
+     ]
+    ]
+   },
+   {
+    "trip_id": "tr:T_MORNING",
+    "stop_sequence": 1,
+    "geometry": [
+     [
+      -122.1,
+      37.4
+     ],
+     [
+      -122.1,
+      37.4
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": []
+  },
+  "status": 200,
+  "body": []
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "up",
+   "trips": [
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "body",
+      "direction"
+     ],
+     "msg": "Input should be 'forward' or 'backward'"
+    }
+   ]
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/api/lines",
+  "params": {
+   "direction": "forward",
+   "trips": [
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    },
+    {
+     "trip_id": "tr:T_MORNING",
+     "stop_sequence": 1
+    }
+   ]
+  },
+  "status": 422,
+  "body": {
+   "detail": [
+    {
+     "loc": [
+      "body",
+      "trips"
+     ],
+     "msg": "List should have at most 500 items after validation, not 501"
+    }
+   ]
+  }
+ }
+]

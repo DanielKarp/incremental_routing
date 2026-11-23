@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "built_at": "2026-11-23T00:00:00+00:00",
+  "timetable": {
+    "file": "timetable-41fefc2ce34b.sqlite.gz",
+    "gzip_bytes": 6284,
+    "gzip_sha256": "41fefc2ce34b82cededf4fd21f0c5fda5205a6f98ff9d5e55a8439b94e3da61c",
+    "sqlite_bytes": 118784,
+    "sqlite_sha256": "28d37e789fbb3ea9268dc399a1572c586c7c07f1eaee13b75a7e5de516ba798e"
+  },
+  "default_timezone": "America/Los_Angeles",
+  "timezones": [
+    "America/Los_Angeles"
+  ],
+  "feeds": [
+    {
+      "feed_id": "tr",
+      "timezone": "America/Los_Angeles",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31",
+      "loaded_at": "2026-11-23T00:00:00Z",
+      "has_frequencies": false,
+      "agencies": [
+        {
+          "name": "Test Bus",
+          "start_date": "2026-01-01",
+          "end_date": "2026-12-31"
+        },
+        {
+          "name": "Test Rail",
+          "start_date": "2026-01-01",
+          "end_date": "2026-12-31"
+        }
+      ]
+    }
+  ]
+}
