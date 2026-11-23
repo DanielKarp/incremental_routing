@@ -75,8 +75,12 @@ class RefreshError(RuntimeError):
     """The database couldn't be refreshed; the message says why."""
 
 
-def refresh(settings: Settings, *, download: bool = True) -> None:
-    """Download the 511 feed (unless `download` is false) and rebuild the database from it."""
+def refresh(settings: Settings, *, download: bool = True, db_path: Path | None = None) -> None:
+    """Download the 511 feed (unless `download` is false) and rebuild the database from it.
+
+    The database is settings.db_path, the server's, unless db_path says otherwise.
+    """
+    db_path = db_path or settings.db_path
     zip_path = settings.feeds_dir / f"{REGIONAL_511.feed_id}.zip"
     if download:
         if not settings.api_511_key:
@@ -92,9 +96,9 @@ def refresh(settings: Settings, *, download: bool = True) -> None:
     if not zip_path.exists():
         raise RefreshError(f"no downloaded feed at {zip_path}")
 
-    print(f"Building {settings.db_path} from {zip_path.name}")
-    build_database(settings.db_path, [(REGIONAL_511.feed_id, zip_path)])
-    _print_summary(settings.db_path)
+    print(f"Building {db_path} from {zip_path.name}")
+    build_database(db_path, [(REGIONAL_511.feed_id, zip_path)])
+    _print_summary(db_path)
 
 
 def keep_fresh(

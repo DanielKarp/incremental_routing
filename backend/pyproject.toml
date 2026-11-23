@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 ir-load-gtfs = "incremental_routing.gtfs.download:main"
+ir-build-data = "incremental_routing.gtfs.build_data:main"
 
 [dependency-groups]
 dev = [

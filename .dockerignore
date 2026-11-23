@@ -7,4 +7,5 @@
 **/.pytest_cache
 **/.ruff_cache
 backend/data
+frontend/public/data
 frontend/dist
