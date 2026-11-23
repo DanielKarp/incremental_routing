@@ -1,10 +1,12 @@
 # The checks: the timetable builder's tests and lint, and the frontend's tests, type checks and
-# build. On every push and pull request, and as the first job of the Deploy workflow. They use
-# the synthetic feed in builder/tests, so they need no secrets.
+# build. On every push and pull request, and as the first job of the Deploy workflow (which is
+# why a push to main doesn't run them here too). They use the synthetic feed in builder/tests,
+# so they need no secrets.
 name: CI
 
 on:
   push:
+    branches-ignore: [main]
   pull_request:
   workflow_call:
 
