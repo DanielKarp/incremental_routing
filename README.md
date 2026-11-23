@@ -21,6 +21,41 @@ smoother flow (M12).
   open again or send to someone.
 - The plan is autosaved in your browser.
 
+## Examples
+
+Four trips planned in the app for a Tuesday morning, from a single bus ride to a trip across
+three agencies. Each shows the itinerary on the left and the whole trip on the map. Close-ups of
+each step are under [Using it](#using-it).
+
+**One bus line.** Union Square to Ocean Beach in San Francisco: a short walk to the stop, a
+two-minute wait, the Muni 38R along Geary, and a walk to the beach.
+
+![The itinerary for a walk, the 38R from Union Square to 48th Avenue, and a walk to Ocean Beach,
+with the route on the map](docs/screenshots/trip-1-bus.jpg)
+
+**A simple transfer.** Downtown Berkeley to Washington Square: BART to Montgomery Street, a
+short walk and a four-minute wait, then the Muni 30 to North Beach.
+
+![The itinerary for BART from Downtown Berkeley to Montgomery Street, a walk and a wait, and
+the 30 to Columbus Ave and Union St, with the route on the
+map](docs/screenshots/trip-2-transfer.jpg)
+
+**Biking to, between and from transit.** Mountain View to Lake Merritt: bike to Caltrain, ride
+the Express to San Francisco, bike across the city to the Ferry Building, take the ferry to
+Oakland and bike to the lake.
+
+![The itinerary for a bike ride to Mountain View Caltrain, the Express to San Francisco, a bike
+ride to the Ferry Building and the start of the ferry to Oakland, with the whole trip on the
+map](docs/screenshots/trip-3-bike.jpg)
+
+**Three agencies, three kinds of transit and a bike.** East San Jose to the Marina: bike to
+VTA's Orange Line, take the light rail to Mountain View, Caltrain to San Francisco and the
+Muni 30 bus to the Marina, walking at each change.
+
+![The itinerary for a bike ride to McKee station, the VTA Orange Line to Mountain View, a walk,
+a wait and the Caltrain Express, with the trip from San Jose to the Marina on the
+map](docs/screenshots/trip-4-three-agencies.jpg)
+
 ## Run it with Docker
 
 This is the easy way, on a home server or on your own computer. You need:
@@ -151,6 +186,14 @@ does in Docker.
      Scrolling the list, or sweeping the pointer across it, leaves the map where it is. Point
      at a line on the map to see its next time, its stop and the walk there.
 
+     ![The departures near Union Square filtered to "38", with the pointer resting on the 38R
+     row and the 38R's route highlighted on the map](docs/screenshots/list-and-map.jpg)
+
+     With *Get to the stop by Bike* and a wider radius, each row gives the ride to its stop:
+
+     <img src="docs/screenshots/bike-access.png" width="380" alt="Next leg set to reach the
+     stop by bike within 3 km, filtered to Caltrain: each row says how many minutes by bike">
+
      Pick a time, or click a line's name for its next departure (or last arrival). You can
      also click the line itself on the map; where lines overlap, *Which line?* lists them by
      time. Then choose the stop where you get off (or on), in the list or on the map. The walk
@@ -158,6 +201,9 @@ does in Docker.
      would miss the trip, the list of stops says so, with a button for the line's next trip
      you can make (*Take the 9:55 AM instead*). *← Lines* stays at the top while you scroll
      the stops; it, or Escape, goes back to the list as you left it.
+
+     ![Choosing where to get off the 38R: the stops with their times in the panel, and the
+     trip with its stops on the map](docs/screenshots/stop-chooser.jpg)
 
      When you change from another ride, the list notes the agency's transfer rules. It warns
      when a connection is shorter than the agency's minimum, or when the agency says the
@@ -173,12 +219,19 @@ does in Docker.
      leg is added straight away, and *Next leg* stays as it was. A point within 75 m of a
      place you named takes its name, so the walk back home is "Home" again; otherwise it's
      named after a stop nearby (or its coordinates).
+
+     <img src="docs/screenshots/map-menu.jpg" width="490" alt="A click on Ocean Beach opens a
+     small menu on the map: Walk here, Bike here">
    - **Wait:** add a stop of a set number of minutes, e.g. for coffee. One click on *5*, *10*,
      *15* or *30 min* adds it, and *Next leg* then goes back to the mode you had.
 3. **Adjust** the plan in the itinerary.
    - Change when walk, bike and wait legs leave or arrive, or how long they take; click into
      a time to see how far it can move. An end that meets a ride directly is fixed. Next to a
      wait, or at either end of the plan, it can move. A leg can't run into its neighbours.
+
+     <img src="docs/screenshots/leg-times.png" width="380" alt="Editing the walk between BART
+     and the bus: its arrival time is selected, and a note says it leaves as the ride arrives
+     and can take up to 7 min, keeping the departure">
    - *Switch to bike* / *Switch to walk* re-routes a leg.
    - Click a place's name, in a leg or in the *From* line, and type over it. Enter renames it
      everywhere it appears, and Escape puts it back. *Rename places* lists every place.
@@ -196,6 +249,9 @@ does in Docker.
    - *Save plan (.json)* to keep the plan or send it to someone. *Open plan…* (top of the
      page) loads it again.
 
+   ![The trip summary for the San Jose to Marina trip: print and export buttons, a map of the
+   whole trip, and a table of every leg](docs/screenshots/summary.jpg)
+
 **Good to know.**
 
 - After each leg the panel scrolls back to *Next leg*, which says what was added. Messages show
@@ -207,6 +263,10 @@ does in Docker.
   you're typing in keeps it.
 - On a phone, the map stays at the top of the screen and only the panel below it scrolls, so
   what you pick in the list shows on the map. Held sideways, the panel sits beside the map.
+
+  <img src="docs/screenshots/phone-itinerary.jpg" width="260" alt="On a phone: the whole trip
+  on the map at the top, the itinerary below"> <img src="docs/screenshots/phone-list.jpg"
+  width="260" alt="On a phone: the lines near the Marina on the map, their departures below">
 
 ## Tests
 
