@@ -1,4 +1,16 @@
-// Typed client for the FastAPI backend. Shapes mirror backend/src/incremental_routing/models.py.
+// The app's data, as the FastAPI server's endpoints gave it (shapes mirror
+// backend/src/incremental_routing/models.py): the transit queries are answered here in the
+// browser, from the timetable (./timetable), downloaded once and kept in a Web Worker; walk and
+// bike routes come from the site's Cloudflare Worker (worker/api.ts), which holds any router key.
+
+import type { LoadProgress } from './timetable/load';
+import { TimetableError } from './timetable/params';
+import {
+  type Method,
+  type Queries,
+  type RemoteTimetable,
+  openRemoteTimetable,
+} from './timetable/remote';
 
 export interface LatLon {
   lat: number;
@@ -181,49 +193,110 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function callParams(q: CallQuery): string {
-  const { point, time, radiusM = 500, windowMin = 60, access = 'walk', transfer } = q;
-  const { perRoute, limit } = q;
-  return new URLSearchParams({
-    lat: String(point.lat),
-    lon: String(point.lon),
-    time,
-    radius_m: String(radiusM),
-    window_min: String(windowMin),
-    access,
-    ...(transfer && { transfer_stop: transfer.stopId }),
-    ...(transfer?.tripId && { transfer_trip: transfer.tripId }),
-    ...(perRoute && { per_route: String(perRoute) }),
-    ...(limit && { limit: String(limit) }),
-  }).toString();
+/** How getting the timetable is going, for the panel to say. */
+export type TimetableState =
+  | { status: 'loading'; progress: LoadProgress | null }
+  | { status: 'ready' }
+  | { status: 'failed'; reason: string };
+
+let loading: Promise<RemoteTimetable> | null = null;
+let state: TimetableState = { status: 'loading', progress: null };
+const listeners = new Set<() => void>();
+
+function setState(next: TimetableState) {
+  state = next;
+  for (const listener of listeners) listener();
+}
+
+/**
+ * The timetable: downloaded and opened once, the first time anything asks, and then shared.
+ * If that fails (or its worker does, later), everything waiting is told why, and the next to
+ * ask tries again.
+ */
+function timetable(): Promise<RemoteTimetable> {
+  if (!loading) {
+    setState({ status: 'loading', progress: null });
+    const remote = openRemoteTimetable(
+      new Worker(new URL('./timetable/worker.ts', import.meta.url), { type: 'module' }),
+      {
+        onProgress: (progress) => setState({ status: 'loading', progress }),
+        onFailure: (e) => {
+          if (loading === attempt) loading = null;
+          setState({ status: 'failed', reason: e.message });
+        },
+      },
+    );
+    const attempt = remote.ready.then(
+      () => {
+        setState({ status: 'ready' });
+        return remote;
+      },
+      (e) => {
+        throw apiError(e);
+      },
+    );
+    loading = attempt;
+  }
+  return loading;
+}
+
+/** What the server said with an HTTP error, said as it was. */
+function apiError(e: unknown): unknown {
+  return e instanceof TimetableError ? new ApiError(e.status, e.message) : e;
+}
+
+/** A query of the timetable, once it's there: it fails as the server's endpoint failed. */
+async function query<M extends Method>(
+  method: M,
+  ...args: Parameters<Queries[M]>
+): Promise<ReturnType<Queries[M]>> {
+  const remote = await timetable();
+  try {
+    return await remote.call(method, ...args);
+  } catch (e) {
+    throw apiError(e);
+  }
+}
+
+/** Whether the timetable is loading (and how far it's got), ready, or failed (and why). */
+export const timetableState = {
+  get: (): TimetableState => state,
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
+  /** Get it, if nothing has yet; after a failure, try again. */
+  load(): void {
+    timetable().catch(() => {}); // Said by the state.
+  },
+};
+
+/** What /api/info says: which walk and bike router the Worker uses. */
+interface Info {
+  routing_provider: string;
 }
 
 export const api = {
-  health: () => request<Health>('/api/health'),
-  feeds: () => request<FeedInfo[]>('/api/feeds'),
-  nearbyStops: (point: LatLon, radiusM: number) =>
-    request<NearbyStop[]>(
-      `/api/stops/nearby?${new URLSearchParams({
-        lat: String(point.lat),
-        lon: String(point.lon),
-        radius_m: String(radiusM),
-      })}`,
-    ),
-  departures: (q: CallQuery) => request<TransitCall[]>(`/api/departures?${callParams(q)}`),
-  arrivals: (q: CallQuery) => request<TransitCall[]>(`/api/arrivals?${callParams(q)}`),
-  trip: (tripId: string, serviceDate: string) =>
-    request<TripDetail>(
-      `/api/trip?${new URLSearchParams({ trip_id: tripId, service_date: serviceDate })}`,
-    ),
+  health: async (): Promise<Health> => {
+    const [transit, info] = await Promise.all([
+      query('health').catch((e: Error) => ({
+        status: 'ok',
+        gtfs_loaded: false,
+        gtfs_problem: e.message,
+      })),
+      request<Info>('/api/info'),
+    ]);
+    return { ...transit, routing_provider: info.routing_provider };
+  },
+  feeds: () => query('feeds'),
+  nearbyStops: (point: LatLon, radiusM: number) => query('nearbyStops', point, radiusM),
+  departures: (q: CallQuery) => query('departures', q),
+  arrivals: (q: CallQuery) => query('arrivals', q),
+  trip: (tripId: string, serviceDate: string) => query('trip', tripId, serviceDate),
   lines: (
     direction: 'forward' | 'backward',
     trips: { trip_id: string; stop_sequence: number }[],
-  ) =>
-    request<LinePath[]>('/api/lines', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction, trips }),
-    }),
+  ) => query('lines', direction, trips),
   route: (mode: PathMode, origin: LatLon, destination: LatLon) =>
     request<RouteResult>('/api/route', {
       method: 'POST',

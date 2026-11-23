@@ -1,5 +1,6 @@
-// The timetable in the page: downloaded from the site's data/ folder (the manifest first, then
-// the file it names), and opened with sql.js, whose wasm Vite serves next to the app.
+// The timetable in the app: downloaded from the site's data/ folder (the manifest first, then
+// the file it names), and opened with sql.js, whose wasm Vite serves next to the app. The app
+// keeps it in a Web Worker (worker.ts, remote.ts).
 
 import initSqlJs from 'sql.js';
 import wasmUrl from 'sql.js/dist/sql-wasm-browser.wasm?url';

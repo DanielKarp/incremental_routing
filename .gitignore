@@ -10,12 +10,15 @@ backend/data/
 # The static site's timetable (uv run ir-build-data): built, never committed
 frontend/public/data/
 
-# Local secrets
+# Local secrets (.dev.vars: the Worker's keys for npm run dev and wrangler dev)
 .env
+.dev.vars*
 
 # Node
 node_modules/
 frontend/dist/
+# wrangler dev's local state
+.wrangler/
 
 # Editors / OS
 .DS_Store

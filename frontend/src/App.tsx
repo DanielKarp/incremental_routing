@@ -28,6 +28,7 @@ import {
 import { PlanSummary } from './components/PlanSummary';
 import { PlanTable } from './components/PlanTable';
 import { StartSection } from './components/StartSection';
+import { TimetableStatus, useTimetableStatus } from './components/TimetableStatus';
 import { UndoBar } from './components/UndoBar';
 import { uncoveredOn } from './coverage';
 import { DoubleClicks } from './doubleClicks';
@@ -203,15 +204,18 @@ export function App() {
   const mapRef = useRef<MapHandle>(null);
   const panel = useRef<HTMLElement>(null);
 
+  // The timetable starts loading with the page (see api.ts); the departures wait for it.
+  const timetable = useTimetableStatus();
   useEffect(() => {
     api
       .health()
-      .then((h) => {
-        setHealth(h);
-        if (h.gtfs_loaded) return api.feeds().then(setFeeds);
-      })
+      .then(setHealth)
       .catch((e: Error) => setAlert({ text: `Backend unreachable: ${e.message}`, tone: 'error' }));
   }, []);
+  // Each feed's dates come with the timetable, once it's in (perhaps only after Try again).
+  useEffect(() => {
+    if (timetable === 'ready') void api.feeds().then(setFeeds);
+  }, [timetable]);
 
   useEffect(() => {
     saveSession({ anchor: anchorPlace, timeInput, plan: committed, direction });
@@ -298,7 +302,7 @@ export function App() {
     windowMin: longWindow ? LONG_WINDOW_MIN : WINDOW_MIN,
   };
   const transitSearch: TransitSearch | null =
-    mode === 'transit' && frontier && scope && health?.gtfs_loaded !== false
+    mode === 'transit' && frontier && scope && timetable !== 'failed'
       ? {
           direction,
           query: {
@@ -937,11 +941,7 @@ export function App() {
             />
           </header>
 
-          {health && !health.gtfs_loaded && (
-            <p className="warning">
-              {health.gtfs_problem ?? 'No transit data loaded. Run uv run ir-load-gtfs in backend/.'}
-            </p>
-          )}
+          <TimetableStatus />
           {uncovered.length > 0 && (
             <p className="warning">
               Schedule data doesn't cover {day} for: {uncovered.join(', ')}. Re-run{' '}

@@ -1,0 +1,19 @@
+{
+  // The Worker, checked against the Workers runtime's types (`npm run typecheck`). Its tests run
+  // in Node under vitest and are checked with the app (../tsconfig.json).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["."],
+  "exclude": ["*.test.ts", "vitePlugin.ts"]
+}

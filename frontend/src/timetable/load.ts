@@ -2,7 +2,7 @@
 // a new name whenever the data changes), which is downloaded, unpacked as it arrives, checked
 // against the manifest and opened with sql.js. Only web APIs are used (fetch, streams,
 // DecompressionStream, crypto.subtle), so this runs in a page, a worker or Node 22; index.ts
-// is the page's way in, with sql.js's wasm from Vite.
+// is the app's way in (from its worker, worker.ts), with sql.js's wasm from Vite.
 
 import type { SqlJsStatic } from 'sql.js';
 import { TimetableError } from './params';
