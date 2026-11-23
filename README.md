@@ -57,15 +57,15 @@ a wait and the Caltrain Express, with the trip from San Jose to the Marina on th
 map](docs/screenshots/trip-4-three-agencies.jpg)
 
 **The long way, for fun.** Sunnyvale Caltrain to San José airport. A journey planner would send
-you south on Caltrain to Santa Clara and then on the 60, arriving at 10:03. Here you choose
-every ride instead: the Rapid 523 north to Lockheed Martin, 14 stops of VTA's Orange Line light
-rail across North San Jose to Milpitas, and the 60 from the other end of its route, into
-Terminal A at 10:39.
-Planning one leg at a time makes room for a ride you want to take, not just the quickest one.
+you on the 9:28 Caltrain to Santa Clara and then the 60, into Terminal A at 10:03. Here you
+choose every ride instead, across three agencies: the 9:09 Caltrain Express past the airport to
+San José Diridon, the Rapid 500 to Berryessa, BART one stop to Milpitas, and the 60 from the
+other end of its route, into Terminal A at 10:39. Planning one leg at a time makes room for a
+ride you want to take, not just the quickest one.
 
-![The itinerary for the Rapid 523 from Sunnyvale to Lockheed Martin and the start of the Orange
-Line, with a loop on the map from Sunnyvale north and east to Milpitas, then south to the
-airport](docs/screenshots/trip-5-the-long-way.jpg)
+![The itinerary for the Caltrain Express from Sunnyvale to San José Diridon, a walk and a wait,
+and the Rapid 500 to Berryessa, with a loop on the map from Sunnyvale to downtown San José, north
+to Milpitas and back south to the airport](docs/screenshots/trip-5-the-long-way.jpg)
 
 ## Run it with Docker
 
