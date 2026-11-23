@@ -13,9 +13,11 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // Any page path gets the app, which reads its state from the browser, not the URL.
-    "not_found_handling": "single-page-application",
-    // Everything else is served without running the Worker (public/_headers sets the caching).
+    // A path without a file is a 404, as it was with the server: a file missing from data/
+    // above all, so the app can say there's no timetable rather than read the page as one.
+    // The app is at /, and reads its state from the browser, not the URL.
+    "not_found_handling": "none",
+    // /api/* runs the Worker; files are served without it (public/_headers sets the caching).
     "run_worker_first": ["/api/*"]
   },
   // Walk and bike routing, as the server's settings were (see worker/routing.ts): "valhalla",
