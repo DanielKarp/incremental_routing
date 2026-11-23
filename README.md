@@ -4,9 +4,10 @@ Plan a multi-leg trip one leg at a time, mixing Bay Area transit (every operator
 511.org's regional feed) with walking and cycling. See [PLAN.md](PLAN.md) for the concept, data
 sources, architecture, decisions and what's next.
 
-**Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), packaged for Docker
-(M8), with line previews on the map (M9), fewer clicks (M10), leg merging (M11) and a
-smoother flow (M12).
+**Status:** MVP complete (milestones M0–M5), plus refinements (M6–M7), with line previews on
+the map (M9), fewer clicks (M10), leg merging (M11) and a smoother flow (M12). Since M13 it's a
+static site on Cloudflare's free plan, open to anyone, with the timetable searched in your
+browser; it replaces M8's Docker setup.
 
 - Build a trip forwards and backwards from transit, walk, bike and wait legs.
 - The lines nearby are listed as soon as you choose Transit, and the map shows where each one
@@ -67,112 +68,135 @@ ride you want to take, not just the quickest one.
 and the Rapid 500 to Berryessa, with a loop on the map from Sunnyvale to downtown San José,
 north to Milpitas and back south to the airport](docs/screenshots/trip-5-the-long-way.jpg)
 
-## Run it with Docker
+## Deploy it on Cloudflare (free)
 
-This is the easy way, on a home server or on your own computer. You need:
+The app is a static site: the page and the timetable, which your browser downloads once and
+searches itself, plus a small Cloudflare Worker that fetches walk and bike routes. Cloudflare's
+free Workers plan serves it on your own domain. A GitHub Actions workflow builds the timetable
+from 511.org's feed and deploys the site whenever `main` changes, and again every Monday
+morning, so the schedules stay current.
 
-- Docker with Compose: Docker Engine on Linux, or Docker Desktop on Windows and macOS;
-- about 1 GB of disk;
+Anyone with the address can use it: there are no logins. Each person's plans stay in their own
+browser (they can save them as JSON files to keep or share), and the site stores none of them.
+Walk and bike routes come from the public FOSSGIS Valhalla server, which is free under a
+fair-use policy: fine for a few friends planning trips, not for heavy use. If you share the
+address widely, use a routing service with a key (below).
+
+You need:
+
+- a Cloudflare account, with your domain on it;
+- this repository on GitHub (yours, or a fork), with Actions enabled;
 - a free 511.org API token: <https://511.org/open-data/token>.
 
+One-time setup:
+
+1. **A Cloudflare API token.** In the Cloudflare dashboard, go to *My Profile → API Tokens →
+   Create Token* and use the *Edit Cloudflare Workers* template. Under *Account Resources*
+   pick your account, and under *Zone Resources* your domain. Create it and copy the token;
+   it's shown only once.
+2. **Your account ID.** Open your domain's *Overview* page in the dashboard: the account ID is
+   under *API*, on the right. It's also the 32-character code in the dashboard's address,
+   `dash.cloudflare.com/<account ID>/…`. If you've never used Workers, open *Workers & Pages*
+   once too, so that Cloudflare sets up your `workers.dev` subdomain.
+3. **Three repository secrets.** On GitHub, in the repository's *Settings → Secrets and
+   variables → Actions*, add a *New repository secret* for each:
+
+   - `CLOUDFLARE_API_TOKEN`: the token from step 1;
+   - `CLOUDFLARE_ACCOUNT_ID`: the account ID from step 2;
+   - `API_511_KEY`: your 511.org token.
+4. **The first deploy.** In the repository's *Actions* tab, choose *Deploy*, then *Run
+   workflow* on `main`. It runs the tests, downloads the feed and builds the timetable (a
+   couple of minutes), and deploys the Worker `incremental-routing`. The site is then up at
+   the `workers.dev` address at the end of the deploy step's log.
+5. **Your domain.** In the dashboard, go to *Workers & Pages →* `incremental-routing` *→
+   Settings → Domains & Routes → Add → Custom domain*, and enter a name on your domain, such
+   as `trips.example.com`. Cloudflare adds the DNS record and the certificate, and the site is
+   there within minutes.
+
+After that:
+
+- Every push to `main` deploys, and every Monday a run rebuilds the timetable from that week's
+  feed. A run that fails (511.org is down, say) deploys nothing, so the site keeps the
+  timetable it has, and GitHub emails you. *Run workflow* tries again.
+- In a public repository, GitHub turns off scheduled workflows after 60 days without
+  activity. If the Monday runs stop, turn *Deploy* back on in the *Actions* tab.
+- The page and the timetable are static files, which Cloudflare serves free without limit.
+  The Worker runs only for walk and bike routes, well within the free plan's 100,000
+  requests a day.
+
+**Walk and bike routing.** The Worker's settings are vars in
+[frontend/wrangler.jsonc](frontend/wrangler.jsonc); change them there rather than in the
+dashboard, since each deploy sets them from the file.
+
+- `ROUTING_PROVIDER` is `valhalla` (the default), `ors` or `straight-line`. Valhalla's bike
+  times already allow for hills. `straight-line` works without any routing service. `ors`
+  (openrouteservice) needs `ORS_API_KEY`; its bike times ignore hills, and it gives no height
+  profiles.
+- `VALHALLA_ROUTE_URL` is the public FOSSGIS server by default. Any Valhalla-compatible
+  `/route` endpoint works, such as Stadia Maps (`https://api.stadiamaps.com/route/v1`) with
+  its key as `VALHALLA_API_KEY`.
+
+Keys are secrets, set once and kept across deploys. From `frontend/`, after
+`npx wrangler login`:
+
 ```sh
-git clone https://github.com/DanielKarp/incremental_routing.git
-cd incremental_routing
-cp .env.example .env              # then put your token in .env: API_511_KEY=...
-docker compose up -d --build
+npx wrangler secret put VALHALLA_API_KEY    # or ORS_API_KEY
 ```
 
-Open <http://localhost:8000>.
+They can also be added in the dashboard: the Worker's *Settings → Variables and Secrets*, as
+type *Secret*.
 
-- **First start.** The app downloads the transit data and builds its database, which takes
-  about a minute. Reload the page once it's done.
-- **Data refresh.** The data is checked every few hours and downloaded again once it's a week
-  old. `REFRESH_DAYS` in `.env` changes that.
-- **Storage.** The data lives in a Docker volume, so it survives restarts and updates.
+## Develop locally
 
-Day to day:
-
-| To | Run |
-| --- | --- |
-| Update to the latest version | `git pull && docker compose up -d --build` |
-| See what it's doing | `docker compose logs -f app` |
-| Fetch fresh schedules now | `docker compose exec app ir-load-gtfs` |
-| Stop it | `docker compose down` (the data is kept) |
-
-The app listens on this machine only. To reach it from other devices on your network, set
-`BIND=0.0.0.0` in `.env` and use the machine's address. The app has no logins of its own, so
-don't open it to the internet directly; use the tunnel below instead.
-
-### Share it with friends through a Cloudflare tunnel
-
-A Cloudflare tunnel gives the app a web address without opening ports on your router.
-Cloudflare Access then asks visitors for an emailed one-time code, so only the people you list
-get in. Both are free, for up to 50 people. You need a domain whose DNS is on Cloudflare.
-
-1. In the Cloudflare Zero Trust dashboard, create a tunnel (type *Cloudflared*). Copy its
-   token into `.env` as `TUNNEL_TOKEN=...`.
-2. Give the tunnel a public hostname, such as `trips.example.com`, pointing to the service
-   `http://app:8000`.
-3. Under Access, add a *self-hosted* application for that hostname. Its policy should allow
-   your friends' email addresses, with one-time PIN as the login method. Don't skip this step:
-   without it, anyone who finds the address can use the app.
-4. Start the app and the tunnel:
-
-   ```sh
-   docker compose --profile tunnel up -d --build
-   ```
-
-Your friends open `https://trips.example.com`, enter their email and the code they receive,
-and plan away. Each person's plans stay in their own browser; they can save them as JSON files
-to keep or share. Cloudflare's guides cover the details:
-[tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) and
-[self-hosted applications](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/).
-
-### Settings
-
-Everything goes in `.env`; [.env.example](.env.example) lists each setting.
-
-- `API_511_KEY` is the only one you must set.
-- Walk and bike routes come from the public FOSSGIS Valhalla server (fair use, no key). Its bike
-  times already allow for hills.
-- `ROUTING_PROVIDER=straight-line` works without any routing service.
-- `ROUTING_PROVIDER=ors`, with an `ORS_API_KEY`, uses openrouteservice instead. Its bike times
-  ignore hills, and it gives no height profiles.
-
-## Develop without Docker
-
-You need Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22.12+, and the same `.env`
-at the repository root. Each block starts from the repository root, in its own terminal; both
-must keep running.
+You need Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22.12+, and your 511.org
+token in `builder/.env`: copy [.env.example](.env.example) there and fill in `API_511_KEY`.
 
 ```sh
-# Backend (first terminal)
-cd backend
-uv sync
-uv run ir-load-gtfs         # downloads the 511 regional feed, then builds data/gtfs.sqlite
-uv run uvicorn --factory incremental_routing.api:create_app --reload   # http://127.0.0.1:8000
+# Build the timetable: downloads the 511 feed, then writes frontend/public/data
+cd builder
+uv run ir-build-data
 
-# Frontend (second terminal)
-cd frontend
+# Run the app
+cd ../frontend
 npm install
-npm run dev                 # http://localhost:5173 (proxies /api to the backend)
+npm run dev                 # http://localhost:5173
 ```
 
-After `npm run build`, the backend also serves the built app at <http://127.0.0.1:8000>, as it
-does in Docker.
+- `npm run dev` answers `/api/*` with the Worker's own code. Its settings come from
+  `wrangler.jsonc`, then `frontend/.dev.vars` (for keys, never committed), then the
+  environment: `ROUTING_PROVIDER=straight-line npm run dev` needs no routing service.
+- `npm run preview` builds the site and runs it as Cloudflare does, with `wrangler dev`, at
+  <http://localhost:8787>.
+- `npm run deploy` deploys from your machine (`npx wrangler login` first), as the workflow
+  does.
 
 **The transit data.**
 
 - It's 511.org's regional feed: one GTFS feed for every Bay Area operator. That's 41 agencies,
   including Caltrain, BART, VTA, Muni, AC Transit, SamTrans, Golden Gate Transit and the
   ferries.
-- The download is about 60 MB. Building takes about a minute and gives a database of about
-  620 MB. The key is never printed, even when a download fails.
-- Re-run `uv run ir-load-gtfs` every month or so. Agencies update their schedules at different
-  times, so the load summary lists any agency whose schedule ends within 30 days. The app also
-  names any agency whose schedule doesn't cover the day you're planning.
-- `uv run ir-load-gtfs --skip-download` rebuilds from the feed already on disk. Run it after
-  pulling an update if the app says the database was built by an older version.
+- The download is about 60 MB. `ir-build-data` loads it into a full SQLite database (about
+  620 MB, in `builder/data/build`) and derives the timetable the browser downloads from it:
+  28 MB, 8.6 MB gzipped, in `frontend/public/data`, which is never committed. It all takes
+  about a minute. The key is never printed, even when a download fails.
+- Agencies update their schedules at different times, so the build lists any agency whose
+  schedule ends within 30 days. The app also names any agency whose schedule doesn't cover
+  the day you're planning.
+- `uv run ir-build-data --skip-download` builds from the feed already on disk.
+
+**Tests.**
+
+```sh
+cd builder && uv run pytest && uv run ruff check .
+cd frontend && npm test && npm run build
+```
+
+The builder tests run against a small synthetic GTFS feed (`builder/tests/conftest.py`). It
+covers trips past midnight, holiday exceptions, stops without scheduled times, parent
+stations, the daylight-saving change day, shapes and transfer rules. The frontend's timetable
+tests read the same feed, built as the real timetable is, and compare the answers with ones
+recorded from the app's former server. The CI workflow runs all of these on every push and
+pull request.
 
 ## Using it
 
@@ -265,6 +289,9 @@ does in Docker.
 
 **Good to know.**
 
+- The first visit downloads the timetable, about 9 MB. The panel says how far it's got, and
+  the map and the start point work meanwhile. The browser keeps it until a new one is
+  published, so later visits don't download it again.
 - After each leg the panel scrolls back to *Next leg*, which says what was added. Messages show
   where you're working: under the mode buttons in *Next leg*, or under the leg they're about.
 - A double-click (or double tap) on the map only zooms, so a click on empty map acts a moment
@@ -278,17 +305,6 @@ does in Docker.
   <img src="docs/screenshots/phone-itinerary.jpg" width="260" alt="On a phone: the whole trip
   on the map at the top, the itinerary below"> <img src="docs/screenshots/phone-list.jpg"
   width="260" alt="On a phone: the lines near the Marina on the map, their departures below">
-
-## Tests
-
-```sh
-cd backend && uv run pytest && uv run ruff check .
-cd frontend && npm test && npm run build
-```
-
-The backend tests run against a small synthetic GTFS feed (`backend/tests/conftest.py`). It
-covers trips past midnight, holiday exceptions, stops without scheduled times, parent stations,
-the daylight-saving change day, shapes and transfer rules.
 
 ## License
 

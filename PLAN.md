@@ -4,8 +4,9 @@ A route planner for building a multi-leg trip **one leg at a time**, mixing publ
 cycling and walking. Instead of asking a journey planner for "the best route", you choose
 every leg yourself and the app keeps the itinerary consistent in space and time.
 
-This document describes the planner as built (the MVP plus two rounds of refinements,
-packaged for Docker), the data sources and decisions behind it, and what might come next.
+This document describes the planner as built (the MVP plus refinements, served since M13 as
+a static site on Cloudflare), the data sources and decisions behind it, and what might come
+next.
 
 ---
 
@@ -27,9 +28,9 @@ built from either end.
 
 **In scope**
 
-- A few people, in a browser. It runs on a home server and is shared through a Cloudflare
-  tunnel, or a technical friend runs the same Docker setup on their own machine (decision 13).
-  There are no accounts: each person's plans stay in their own browser.
+- Anyone with the address, in a browser. It's a static site on Cloudflare's free plan, with
+  no logins (decisions 13 and 22). There are no accounts: each person's plans stay in their
+  own browser.
 - Transit schedules for every Bay Area operator, from the **511 SF Bay regional feed** (static
   GTFS; decisions 7 and 9).
 - Leg types: transit, walk, bike, wait (waits inserted automatically, or added by hand).
@@ -132,10 +133,10 @@ The real definitions are in `frontend/src/plan/types.ts`.
    never go stale.
 
 **Where state lives.** The plan lives in the browser: React state, autosaved to localStorage
-with the direction and the undo history (decision 19), and exportable as JSON. The backend is a
-stateless facts service ("what departs from here?", "how long is this ride?"). For a
-single-user local app this keeps the backend trivial and makes the plan rules pure functions
-that are easy to test.
+with the direction and the undo history (decision 19), and exportable as JSON. The timetable
+(in the browser too) and the site's Worker only answer facts ("what departs from here?", "how
+long is this ride?") and keep nothing. This keeps the site static and makes the plan rules pure
+functions that are easy to test.
 
 ## 5. Data sources
 
@@ -147,23 +148,27 @@ API](https://511.org/open-data/transit) (`operator_id=RG`). On 2026-10-10 it hel
 21,627 stops, 90,168 trips and 3.1 million stop times. It needs a free API key
 (`API_511_KEY`).
 
-`uv run ir-load-gtfs` downloads it (about 60 MB) and builds one SQLite file (about 620 MB) in
-about a minute. The feed is defined in `backend/src/incremental_routing/gtfs/feeds.py`. The
-agencies' own Caltrain, BART and VTA feeds were used until M6, and are no longer supported.
+`uv run ir-build-data` (in `builder/`) downloads it (about 60 MB), loads it into one SQLite
+file (about 620 MB) and derives from that the compact timetable the browser downloads (28 MB,
+8.6 MB gzipped; see the M13 notes), in about a minute. The feed is defined in
+`builder/src/incremental_routing/gtfs/feeds.py`. The agencies' own Caltrain, BART and VTA feeds
+were used until M6, and are no longer supported.
 
 **Freshness.** Each agency's schedule in the feed ends on its own date, and 511 republishes the
 feed as agencies update. The feed's overall date range (2021–2099) says nothing, so dates are
 tracked per agency:
-- the loader lists agencies whose schedules end within 30 days, and flags expired ones;
+
+- the build lists agencies whose schedules end within 30 days, and flags expired ones;
 - the UI names any agency whose schedule doesn't cover the day being planned.
 
-Re-run the loader monthly. In October 2026, VTA's schedule ends on 2026-10-25.
+The Deploy workflow rebuilds the timetable from the current feed every Monday (§6). In
+October 2026, VTA's schedule ends on 2026-10-25.
 
 Dates come from the service calendars, not from `feed_info.txt`, which publishers forget to
 update. BART's own August 2026 feed still declared an end date of 2026-08-30, while its
 calendar ran to 2027-01-10.
 
-**GTFS details the loader and queries handle:**
+**GTFS details the loader and the queries handle:**
 
 - Times past `24:00:00` for trips that run past midnight. Every query checks yesterday's
   service day too.
@@ -196,18 +201,20 @@ and speed up on descents, so they are used as they are. Bike routes are requeste
 `elevation_interval` = 30 m, and Valhalla returns the heights along the route for the height
 profile, interpolated across bridges and tunnels.
 
-All providers sit behind one `RoutingProvider` interface
-(`backend/src/incremental_routing/routing/`), selected by `ROUTING_PROVIDER`:
+All providers sit behind one `RoutingProvider` interface (`frontend/worker/routing.ts`, the
+site's Worker; until M13 the server's `routing/` package), selected by `ROUTING_PROVIDER`:
+
 - `valhalla` (the default): the FOSSGIS server, or any Valhalla endpoint such as Stadia Maps.
 - `ors` (needs `ORS_API_KEY`): openrouteservice. Its hosted bike times ignore hills, and it
   returns no heights, so there are no profiles.
 - `straight-line`: an estimate for offline development and tests. It is also the fallback when
   the router fails, labelled "(estimated)".
 
-One user making a request or two per leg is well within fair use: one per walk or bike leg
-(another if you switch it between Walk and Bike before adding it), and one per trip picked
-whose stop needs a walk or ride, reused when you choose where to get off. Quotas are fine for
-now, and self-hosted routing is on hold (§10).
+One user makes a request or two per leg: one per walk or bike leg (another if you switch it
+between Walk and Bike before adding it), and one per trip picked whose stop needs a walk or
+ride, reused when you choose where to get off. A few people planning at a time are well within
+fair use. Since M13 the site is open to anyone, so heavy use would call for a routing service
+with a key (README) or self-hosted routing, which is on hold (§10).
 
 Router speeds are generic. Typical defaults are about 5 km/h walking and roughly 15–20 km/h cycling.
 That's one reason duration overrides are a core feature rather than an extra.
@@ -226,50 +233,81 @@ stations, and Photon or Nominatim (fair use) could cover addresses.
 ## 6. Architecture
 
 ```
-Browser: React + MapLibre                       Backend: FastAPI (Python)
-┌──────────────────────────────┐                ┌──────────────────────────────────────┐
-│ plan/  pure plan rules (TS)  │   GET /api/    │ gtfs/query.py  ──▶ data/gtfs.sqlite  │
-│ components/  map, lists,     │ ─ departures ─▶│                       ▲              │
-│   leg builder, itinerary     │   arrivals     │ ir-load-gtfs ─────────┘ (download +  │
-│ localStorage + JSON export   │   trip         │                         build)       │
-│                              │   POST /lines  │                                      │
-│                              │   POST /route ▶│ routing/ ─▶ Valhalla | ORS | straight│
-└──────────────────────────────┘                └──────────────────────────────────────┘
+Browser                                     Cloudflare, free plan: one Worker with assets
+┌──────────────────────────────────┐        ┌──────────────────────────────────────┐
+│ React + MapLibre                 │  POST  │ worker/ (the Worker)                 │
+│ plan/  pure plan rules (TS)      │───────▶│   /api/route ─▶ Valhalla, ORS or     │
+│ components/  map, lists, leg     │        │     a straight line                  │
+│   builder, itinerary             │        │   /api/info: which router            │
+│ localStorage + JSON export       │        │                                      │
+│                                  │        │ static assets (dist/)                │
+│ Web Worker: timetable/ (sql.js)  │  GET   │   the built app                      │
+│   stops, departures, arrivals,   │◀───────│   data/manifest.json                 │
+│   trips, lines                   │        │   data/timetable-<hash>.sqlite.gz    │
+└──────────────────────────────────┘        └──────────────────────────────────────┘
+                                                                ▲ npm run deploy
+GitHub Actions, Deploy (push to main, Mondays, by hand):        │
+  511.org feed ─▶ builder/: ir-build-data ─▶ frontend/public/data
 ```
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/health` | Whether GTFS data is loaded (and if not, why), and the routing provider |
-| `GET /api/feeds` | Loaded feeds, with each agency's schedule dates |
-| `GET /api/stops/nearby?lat&lon&radius_m&access` | Boardable stops near a point, with the time to reach them on foot or by bike |
-| `GET /api/departures?lat&lon&time&radius_m&window_min&limit&access&per_route&transfer_stop&transfer_trip` | Trips you can reach and board after `time` (forward), each with any transfer rule |
-| `GET /api/arrivals?…` (same parameters) | Trips you can ride to arrive before `time` (backward) |
-| `GET /api/trip?trip_id&service_date` | A trip's stops with times and board/alight flags, and its shape |
-| `POST /api/lines {direction, trips}` | For the map: the part of each listed trip you could ride from its stop (forward) or to it (backward), simplified |
-| `POST /api/route {mode, origin, destination}` | Walk or bike path, distance and duration, with heights along bike routes |
+| Call in `api.ts` | Answered by | Gives |
+| --- | --- | --- |
+| `health()` | The timetable, and `GET /api/info` on the Worker | Whether the timetable is loaded (and if not, why), and the routing provider |
+| `feeds()` | The timetable's manifest | The feeds, with each agency's schedule dates |
+| `nearbyStops(point, radiusM)` | The timetable | Boardable stops near a point, with the time to reach them on foot or by bike |
+| `departures(query)` | The timetable | Trips you can reach and board after `time` (forward), each with any transfer rule |
+| `arrivals(query)` | The timetable | Trips you can ride to arrive before `time` (backward) |
+| `trip(tripId, serviceDate)` | The timetable | A trip's stops with times and board/alight flags, and its shape |
+| `lines(direction, trips)` | The timetable | For the map: the part of each listed trip you could ride from its stop (forward) or to it (backward), simplified |
+| `route(mode, origin, destination)` | `POST /api/route` on the Worker | Walk or bike path, distance and duration, with heights along bike routes |
 
-**Deployment.** One Docker image holds everything. The backend serves the built frontend at
-`/` and the API under `/api/`, and `ir-load-gtfs --keep-fresh` runs beside it to keep the
-transit data current. `compose.yml` runs the image, keeps the data in a volume, and optionally
-adds a Cloudflare tunnel (`--profile tunnel`). Settings come from one `.env` at the repository
-root, which Compose and the backend both read.
+Each call takes and gives what the server's endpoint of the same name did until M13, errors
+included, so the rest of the app didn't change.
 
-Times without an offset are read as Bay Area local time, and responses carry the offset
-(`-07:00` or `-08:00`). The UI always shows Bay Area time, whatever time zone your laptop is in.
+**The timetable.** `uv run ir-build-data` (`builder/`, Python) downloads the 511 feed, loads it
+into the full SQLite database, and derives the compact timetable from it:
+`data/timetable-<hash>.sqlite.gz`, named by its contents, and `data/manifest.json`, which names
+it. The page downloads both in a Web Worker (`frontend/src/timetable/`), checks the
+timetable's size and SHA-256, opens it with sql.js and answers the transit calls from it. The
+browser revalidates the manifest on each visit and keeps the timetable until a new one is
+published.
 
-**Why this shape.** SQLite needs no database server, and departure queries hit a
-`(stop_id, departure_s)` index, so they should be fast at this scale. The backend does
-the GTFS work, where Python's tooling is strongest. All plan logic is pure TypeScript, so it is
-fast to iterate on and easy to unit-test.
+**The Worker** (`frontend/worker/`) runs only for `/api/*`: walk and bike routes, through the
+provider `ROUTING_PROVIDER` names, with any key as a Worker secret. Everything else is a
+static file, served without it; a path with no file is a 404.
+
+**Deployment.** `frontend/wrangler.jsonc` describes the site, and `npm run deploy` builds and
+deploys it. The Deploy workflow (`.github/workflows/deploy.yml`) does that on every push to
+`main`, every Monday at 12:23 UTC and by hand: it runs the checks (CI), builds the timetable
+from that day's feed (with the `API_511_KEY` secret) and deploys with the
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. A run that fails deploys nothing,
+so the site keeps its last timetable; one deploy runs at a time. CI runs the same checks on
+every push and pull request. Locally, `npm run dev` serves the app with Vite and answers
+`/api/*` with the Worker's own code (a Vite plugin), and `npm run preview` runs the production
+build under `wrangler dev`.
+
+Times without an offset are read as Bay Area local time (the manifest's `default_timezone`),
+and answers carry the offset (`-07:00` or `-08:00`). The UI always shows Bay Area time,
+whatever time zone your laptop is in.
+
+**Why this shape** (decision 22). The whole timetable fits in a download, 8.6 MB gzipped, and
+sql.js runs the server's queries on it in a few milliseconds, so the transit questions need no
+server. That leaves only walk and bike routing, which needs a router and perhaps its key: one
+small Worker. The site costs nothing to host, has no machine to keep running or patching, and
+its data is refreshed by a scheduled build rather than by a process beside a server. The
+builder stays in Python, where the GTFS tooling is strongest, and runs only at build time. All
+plan logic is pure TypeScript, so it is fast to iterate on and easy to unit-test.
 
 ## 7. Key algorithms
 
-**Departures near a point** (`GtfsStore.departures`):
+**Departures near a point** (`departures` in `frontend/src/timetable/timetable.ts`, ported in
+M13 from the server's `GtfsStore.departures`):
 
 1. Find boardable stops within the radius: a bounding box from an index, then exact
    distance.
 2. For each feed, and for service days *yesterday* and *today*: work out the active
-   `service_id`s, then run a time-window query on stop times.
+   `service_id`s, then find the trips calling at those stops within the time window (in the
+   compact timetable, each trip's start plus its pattern's time at the stop).
 3. Drop departures you can't reach in time: straight-line distance × 1.3 detour factor, at
    1.3 m/s on foot or 4.5 m/s by bike, rounded up to whole minutes.
 4. Keep one entry per trip, at its nearest stop, sorted by time. With `per_route`, keep only
@@ -278,16 +316,17 @@ fast to iterate on and easy to unit-test.
 Arrivals are the mirror image: alighting allowed, arriving at least the access time before the
 query time.
 
-**Choosing where to get off:** `/api/trip` returns every stop with absolute times. The UI lists
+**Choosing where to get off:** `trip()` returns every stop with absolute times. The UI lists
 stops after the boarding stop where `can_alight` is true (forward), or stops before the alighting
 stop where `can_board` is true (backward).
 
-**Line previews** (`GtfsStore.lines`): for each line in the list, the UI sends the trip it
-stands for (the next departure, or the last arrival when planning backwards) and its stop. The
-backend cuts that trip's shape from the stop to the trip's last stop (forward), or from its
-first stop to the stop (backward). It matches stops to the shape as `/api/trip` does, and runs
-stop to stop when the shape can't be used. Each path is then simplified to within 10 m
-(Douglas–Peucker), which keeps 60 lines to about 40 KB.
+**Line previews** (`lines()`): for each line in the list, the UI asks for the trip it stands
+for (the next departure, or the last arrival when planning backwards) and its stop. The
+timetable cuts that trip's shape from the stop to the trip's last stop (forward), or from its
+first stop to the stop (backward). Stops are placed on the shape as for `trip()` (worked out
+when the timetable is built), and the path runs stop to stop when the shape can't be used.
+Each path is then simplified to within 10 m (Douglas–Peucker), which keeps 60 lines to about
+40 KB.
 
 **Connector walks:** when a picked trip's stop isn't at the frontier, the UI requests a walk or
 bike route from the frontier to the stop straight away, and `missedTrip` checks that it makes
@@ -315,11 +354,91 @@ fix them automatically.
 | M5 ✅ | Output and persistence | A final itinerary table (leg, mode, from, depart, to, arrive, duration). Print view. Export to JSON, CSV and calendar (ICS). Autosave and import. |
 | M6 ✅ | Refinements from testing | Bike to and from stops, and switch walk ↔ bike later. Edit departure and arrival times. 511 regional feed. Transit lines from `shapes.txt`. Rename places. A map in the summary and printout. Transfer warnings from `transfers.txt`. Departures listed by line. |
 | M7 ✅ | Simplify and finish | 511 is the only transit source. Valhalla is the router, and its times are used as they are. Hilly bike rides show a height profile. The plan is brought up to date. |
-| M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. |
+| M8 ✅ | Docker and sharing | One image serves the whole app and keeps its data fresh. Compose runs it at home or on a friend's machine, with an optional Cloudflare tunnel. MIT licence. Replaced by M13. |
 | M9 ✅ | Line previews | While you choose a ride, the map shows every line in the list, faded in its own colour, with the stop to catch it. Pointing at a row highlights and frames its line, and pointing at a line marks its row. Lines, and the stop to get off at (or on), can be picked on the map. |
 | M10 ✅ | Fewer clicks | The departure (or arrival) list loads by itself. A right-click on the map adds a walk or bike leg there straight away. |
 | M11 ✅ | Merge legs | Where two walks, two bike rides or two waits meet, a button between them joins them into one leg. |
 | M12 ✅ | Smoother flow | A click on the map opens the walk and bike menu, and the start pin can be dragged. Undo stays in reach, names its step and survives a reload. Legs can be removed mid-trip, and places renamed where they're shown. The list can be filtered and says what it searched, a picked trip is checked against the walk to its stop, and on phones the map stays in view. |
+| M13 ✅ | A free static site | The browser downloads the whole timetable, in a compact file, and searches it itself; one Cloudflare Worker gives walk and bike routes. Anyone with the address can use it, with no logins. GitHub Actions tests every push and deploys `main`, with a fresh timetable every Monday. The server and Docker are gone, and the example trips come out as before. |
+
+### M13 notes
+
+- **Why** (decision 22). To run the app for free, open to anyone, with no logins and no
+  machine to keep running. The server's only real work was answering transit questions from
+  its database; with the timetable small enough to download, the browser can answer them, and
+  only walk and bike routes need a server: one small Cloudflare Worker.
+- **The compact timetable** (`builder/`, `uv run ir-build-data`).
+  - The full database is built from the feed as before (636 MB, or 607 MiB, on the November
+    feed), and the timetable derived from it: 28.4 MB, 8.6 MB gzipped.
+  - Where a trip goes (its shape, and its stops with their `stop_sequence`, pickup and
+    drop-off types and shape distances) is stored once, as a *path*, and its running times
+    along that path once, as a *pattern*. Each trip is its pattern and a start time. On the
+    511 feed that's 93,174 trips over 2,506 paths and 13,445 patterns, in place of 3,191,827
+    stop times.
+  - Shapes are simplified to 5 m (Douglas–Peucker) and packed into one blob each, keeping
+    252,614 of 1,340,496 points. The points the stops are placed at are always kept, with
+    their index: simplified away, a stop would be placed at the nearest point left, which on a
+    straight stretch can be kilometres off.
+  - Before anything is written, the build checks that the timetable gives back every table
+    the server read, all the stop times included, and that the shapes' ends and distances
+    there match.
+  - `manifest.json` names the file (`timetable-<hash>.sqlite.gz`, a new name whenever the data
+    changes), with its sizes and SHA-256s, the schema version and each agency's dates. The
+    browser checks the manifest on every visit and keeps the timetable until the name changes.
+- **The queries, in the browser** (`frontend/src/timetable/`, with sql.js).
+  - The server's queries were ported to TypeScript to give the same answers, field for field,
+    ties included: its row order, yesterday's service day first, stable sorts, Python's way of
+    comparing clock times on the night the clocks go back, and FastAPI's checks and error
+    messages. `api.ts` calls them as it called the endpoints, so the rest of the app didn't
+    change.
+  - A differential test against the server, on the real data, found them all equal: 2,419
+    randomized departure and arrival searches (39,912 calls), 3,670 trips, 9,157 line paths
+    and 38,352 nearby stops. Only geometry differed, as simplified: trips' shapes within 5 m
+    of the server's, and line previews, simplified again to 10 m from fewer points, at most
+    about 16 m. A few `distance_m` values differed in the last bit (JavaScript's `Math.cos`
+    isn't the C library's).
+  - Departures take about 2 ms (13 ms at the 95th percentile) as the app asks for them.
+  - The tests read a fixture built from the builder's synthetic feed, plus trips where order
+    decides, and replay 100 requests the server answered on it (`expected.json`, recorded at
+    commit 1c15be0 and frozen).
+- **In a Web Worker.** At 3 km around Embarcadero, the departures and the paths of their lines
+  took 110–167 ms, and held up the page that long when run in it. So the timetable is
+  downloaded, opened and queried in a Web Worker (`timetable/worker.ts`, `remote.ts`). While
+  it loads, the panel says how much has come ("Loading the timetable… 3.1 of 8.6 MB"); the map
+  and the start point work meanwhile, and the departures appear by themselves. A failed
+  download says why, with *Try again*.
+- **One Cloudflare Worker** (`frontend/worker/`, `frontend/wrangler.jsonc`).
+  - The site's files are static assets, served without running it. The Worker answers
+    `POST /api/route` (walk and bike routes, through the server's routing providers, ported:
+    Valhalla, ORS or a straight line) and `GET /api/info` (which router, for the footer). It
+    takes and gives what the server did, and refuses what it refused with the same errors
+    (`worker/fixtures/route.json`, recorded from the server and frozen).
+  - The settings are its vars; keys are its secrets, and never in the page or a log.
+  - A path with no file is a 404, as with the server, so a missing timetable is reported as
+    missing rather than read as the page.
+  - `npm run dev` answers `/api/*` with the Worker's own code through a Vite plugin;
+    `npm run preview` runs the production build under `wrangler dev`.
+- **Built and deployed by GitHub Actions** (`.github/workflows/`).
+  - CI runs the builder's tests and lint and the frontend's tests, type checks and build, and
+    bundles the Worker, on every push and pull request. It needs no secrets.
+  - Deploy runs CI, builds the timetable from that day's feed and runs `npm run deploy`: on
+    every push to `main`, every Monday at 12:23 UTC (4:23 a.m. in the Bay Area in winter) and
+    by hand. If the build fails, nothing is deployed and the site keeps its timetable. One
+    deploy runs at a time.
+- **Removed.** The FastAPI server (its endpoints, models and `routing/` package), the Docker
+  image, Compose file and start script, and `ir-load-gtfs` with its `--keep-fresh` refresher.
+  The rest of the Python, which only builds the timetable now, moved from `backend/` to
+  `builder/`.
+- **Checked.**
+  - The six example trips, built in the app by script as they had been with the server, came
+    out the same, leg for leg: the same trips, stops, times, walks and rides. Transit legs'
+    lines are within 5 m of the server's.
+  - After the removals the same six trips came out the same again; the builder's and the
+    frontend's tests, type checks and build passed; and the timetable rebuilt from the same
+    feed was identical but for when it was built (byte for byte, given the old timestamps).
+  - `npm run preview` (the production build under wrangler) loaded the page and the
+    timetable and listed departures; `/api/info` and a walk answered; a missing file in
+    `data/` was a 404; no page errors.
 
 ### M12 notes
 
@@ -592,6 +711,9 @@ fix them automatically.
 
 ### M8 notes
 
+The Docker setup was retired in M13, when the app became a static site; these notes are a
+record of it.
+
 - **One process.** The backend serves the built frontend (`IR_STATIC_DIR`, by default
   `frontend/dist`). The API routes come first, so the site can't shadow them.
 - **The image.**
@@ -848,10 +970,12 @@ fix them automatically.
 12. **Plans move as JSON files.** No accounts, saved-plan lists, shareable links or bike
     share. *Save plan (.json)* and *Open plan…* cover keeping a plan and sending it to
     someone.
-13. **Shared from a home server; installable with Docker.** The app runs in Docker on a Linux
-    home server, reached through a Cloudflare tunnel, and Cloudflare Access lets in only the
-    listed email addresses. Technical friends can run the same setup on their own machine,
-    with their own 511 key. The code is MIT-licensed.
+13. **Shared as a public website, with no logins** (revised in M13). The app is a static site
+    on Cloudflare's free plan, on the owner's domain, and anyone with the address can use it.
+    Each person's plans stay in their own browser, and the site stores none of them. Anyone
+    can deploy their own copy, with their own 511 key and Cloudflare account; the code is
+    MIT-licensed. *Until M13:* the app ran in Docker on a Linux home server, reached through
+    a Cloudflare tunnel, and Cloudflare Access let in only the listed email addresses.
 14. **Previews show where each line can take you.** While you choose a ride, each line in the
     list is drawn from its stop to the end of its trip (or, planning backwards, from the start
     of its trip to the stop). Where a line runs both ways along the same streets, its two
@@ -892,19 +1016,34 @@ fix them automatically.
     an automatic wait fills its time. Any other leg in the middle goes with every leg beyond
     it in the planning direction, as one step. The legs that stay keep their times
     (decision 2).
+22. **A static site: the timetable runs in the browser** (M13). The whole timetable is built
+    into one compact file (8.6 MB gzipped), which the browser downloads once, keeps, and
+    searches itself with sql.js, in a Web Worker. Walk and bike routes come from one
+    Cloudflare Worker, which keeps any router key. There is no server, database or container
+    to run: Cloudflare serves the files for free, and a GitHub Actions workflow rebuilds the
+    timetable from 511's feed and redeploys every Monday and on every push to `main`. The
+    browser's queries give the server's answers exactly (but for shapes, simplified to 5 m),
+    and the server is gone. The cost is the first visit's download, and a timetable up to a
+    week older than the feed.
 
 **Risks:**
 
 - **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (VTA's on
-  2026-10-25). The loader and the app flag it, and re-running `ir-load-gtfs` fixes it once the
-  agency has published a new one.
-- **No logins of its own.** The app trusts whoever reaches it. Cloudflare Access is what keeps
-  the shared copy private, and the app listens on the local machine only by default.
-- **Home server uptime.** The shared copy is up only while the home server and its internet
-  connection are.
-- **Free services without an SLA** (511.org, FOSSGIS Valhalla, OpenFreeMap). Their quotas are
-  fine for one user. The provider interface and the style URL make the router and the map
-  swappable.
+  2026-10-25). The build and the app flag it, and the weekly deploy picks up the new schedule
+  once the agency has published it.
+- **Open to anyone.** With no logins, anyone who finds the address can use the site, and so
+  the public Valhalla server through its Worker. A few people are well within fair use; heavy
+  use would need a routing service with a key, or limits on the Worker.
+- **The weekly refresh can stop.** A failed build deploys nothing, so the site keeps a
+  timetable that grows older until a run succeeds; GitHub emails the owner about each
+  failure. In a public repository GitHub also turns schedules off after 60 days without
+  activity.
+- **The first visit downloads 8.6 MB.** On a slow connection the departures take a while to
+  appear the first time (the panel shows the progress). Cloudflare serves files of up to
+  25 MiB, so the timetable has room to grow.
+- **Free services without an SLA** (511.org, FOSSGIS Valhalla, OpenFreeMap, Cloudflare's free
+  plan, GitHub Actions). Their quotas are fine for a few people. The provider interface and
+  the style URL make the router and the map swappable.
 
 ## 10. What's next
 
