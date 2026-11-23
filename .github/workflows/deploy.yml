@@ -1,0 +1,73 @@
+# Deploys the site to Cloudflare: the checks, then a fresh timetable from 511.org's feed, then
+# `npm run deploy` (the app and its Worker, with the timetable, as one Worker with static assets).
+# On every push to main, every Monday morning (so the timetable follows the agencies' schedule
+# changes), and by hand from the Actions tab (Deploy > Run workflow).
+#
+# Repository secrets (Settings > Secrets and variables > Actions), as README.md describes:
+#   API_511_KEY             511.org's free token, to download the feed
+#   CLOUDFLARE_API_TOKEN    an API token from the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account to deploy to
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays at 12:23 UTC: 4:23 a.m. in the Bay Area in winter, 5:23 a.m. in summer.
+    - cron: "23 12 * * 1"
+  workflow_dispatch:
+
+# One deploy at a time: a later one waits for the one under way rather than cancel it.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Build the timetable and deploy
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: builder/uv.lock
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Downloads the feed (about 60 MB) and writes frontend/public/data. If anything fails, so
+      # does the job, and nothing is deployed: the site keeps its last timetable.
+      - name: Build the timetable
+        working-directory: builder
+        env:
+          API_511_KEY: ${{ secrets.API_511_KEY }}
+        run: uv run --frozen ir-build-data
+      - name: Check the timetable is there
+        working-directory: frontend/public/data
+        run: |
+          file=$(jq -er .timetable.file manifest.json)
+          test -s "$file"
+          echo "Deploying $file ($(stat -c %s "$file") bytes)"
+
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Deploy
+        working-directory: frontend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy

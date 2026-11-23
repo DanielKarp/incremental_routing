@@ -1,0 +1,57 @@
+# The checks: the timetable builder's tests and lint, and the frontend's tests, type checks and
+# build. On every push and pull request, and as the first job of the Deploy workflow. They use
+# the synthetic feed in builder/tests, so they need no secrets.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  builder:
+    name: Builder
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: builder
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv stopped publishing major-version tags at v8, so it's pinned to a release.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: builder/uv.lock
+      - name: Test
+        run: uv run --frozen pytest -q
+      - name: Lint
+        run: uv run --frozen ruff check .
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npx vitest run
+      - name: Type-check the app and the Worker
+        run: npx tsc && npx tsc -p worker
+      - name: Build
+        run: npx vite build
+      # wrangler.jsonc and the Worker, bundled as a deploy would, without deploying.
+      - name: Bundle the Worker
+        run: npx wrangler deploy --dry-run --outdir ${{ runner.temp }}/worker
