@@ -29,7 +29,7 @@ built from either end.
 **In scope**
 
 - Anyone with the address, in a browser. It's a static site on Cloudflare's free plan, with
-  no logins (decisions 13 and 22). There are no accounts: each person's plans stay in their
+  no logins (decisions 13, 22 and 23). There are no accounts: each person's plans stay in their
   own browser.
 - Transit schedules for every Bay Area operator, from the **511 SF Bay regional feed** (static
   GTFS; decisions 7 and 9).
@@ -161,8 +161,9 @@ tracked per agency:
 - the build lists agencies whose schedules end within 30 days, and flags expired ones;
 - the UI names any agency whose schedule doesn't cover the day being planned.
 
-The Deploy workflow rebuilds the timetable from the current feed every Monday (§6). In
-October 2026, VTA's schedule ends on 2026-10-25.
+The Deploy workflow rebuilds the timetable from the current feed every Monday (§6). In the
+feed of 2026-11-23, Golden Gate Transit's and Golden Gate Ferry's schedules end first, on
+2026-12-12. (In October, VTA's ended on 2026-10-25, until VTA published the next one.)
 
 Dates come from the service calendars, not from `feed_info.txt`, which publishers forget to
 update. BART's own August 2026 feed still declared an end date of 2026-08-30, while its
@@ -191,7 +192,7 @@ calendar ran to 2027-01-10.
 | --- | --- | --- | --- |
 | **Valhalla, FOSSGIS public server** (used) | Free under a fair-use policy, rate-limited | None | `pedestrian` and `bicycle` costing. Bike speeds follow the road's grade, and routes can come with heights along them. |
 | OpenRouteService | Free plan: 2,000 directions requests/day, 40/min | Free signup | `foot-walking`, `cycling-regular` and others. On the hosted service, hills add distance but don't change bike times. |
-| Stadia Maps (hosted Valhalla) | Free tier for non-commercial use (check current limits) | Yes | Same API as FOSSGIS, so the same provider class works with a different URL and key. |
+| Stadia Maps (hosted Valhalla) | Free tier for non-commercial use (check current limits) | Yes | Same API as FOSSGIS, but its key would be in the page for anyone to read (decision 23). |
 | Google Routes API | Monthly free usage, then pay-as-you-go | Key + billing account | Its terms restrict showing results on non-Google maps and caching them. Poor fit here. |
 | Mapbox Directions | Monthly free allowance | Key + account | Its terms tie results to Mapbox maps. |
 | Self-hosted Valhalla, GraphHopper or OSRM | Unlimited | None | Docker plus a Northern California OSM extract, needing about 2–4 GB RAM. The upgrade path after the MVP. |
@@ -208,8 +209,8 @@ package.
 
 - `valhalla` (the default): the FOSSGIS server, or another Valhalla server that takes requests
   from other sites without a key (`VITE_VALHALLA_ROUTE_URL`).
-- `straight-line`: an estimate for offline development and tests. It is also the fallback when
-  the router fails, labelled "(estimated)".
+- `straight-line`: a straight line, timed from its length, for offline development and tests.
+  When the router fails, the app makes the same estimate itself, labelled "(estimated)".
 
 openrouteservice, and Valhalla servers that need a key (Stadia Maps), went with the Worker in
 M14: a key in the page is a key anyone can read.
@@ -266,7 +267,8 @@ Browser                                      Cloudflare, free plan: static files
 | `route(mode, origin, destination)` | `routing/`, asking the routing server (Valhalla) | Walk or bike path, distance and duration, with heights along bike routes |
 
 Each call takes and gives what the server's endpoint of the same name did until M13, errors
-included, so the rest of the app didn't change.
+included, so the rest of the app didn't change. (Since M14, `route` fails with the router's own
+message, as before, but with no HTTP status.)
 
 **The timetable.** `uv run ir-build-data` (`builder/`, Python) downloads the 511 feed, loads it
 into the full SQLite database, and derives the compact timetable from it:
@@ -283,14 +285,15 @@ requests from any site and needs no key. Everything the site serves is a static 
 path with no file is a 404.
 
 **Deployment.** `frontend/wrangler.jsonc` describes the site (static assets, with no Worker
-script), and `npm run deploy` builds and deploys it. The Deploy workflow (`.github/workflows/deploy.yml`) does that on every push to
-`main`, every Monday at 12:23 UTC and by hand: it runs the checks (CI), builds the timetable
-from that day's feed (with the `API_511_KEY` secret) and deploys with the
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Repository variables of the same
-names can change the routing settings. A run that fails deploys nothing,
-so the site keeps its last timetable; one deploy runs at a time. CI runs the same checks on
-every push and pull request. Locally, `npm run dev` serves the app with Vite, and
-`npm run preview` serves the production build as Cloudflare does, under `wrangler dev`.
+script), and `npm run deploy` builds and deploys it. The Deploy workflow
+(`.github/workflows/deploy.yml`) does that on every push to `main`, every Monday at 12:23 UTC
+and by hand: it runs the checks (CI), builds the timetable from that day's feed (with the
+`API_511_KEY` secret) and deploys with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`
+secrets. Repository variables of the same names can change the routing settings. A run that
+fails deploys nothing, so the site keeps its last timetable; one deploy runs at a time. CI runs
+the same checks on every push and pull request. Locally, `npm run dev` serves the app with
+Vite, and `npm run preview` serves the production build as Cloudflare does, under
+`wrangler dev`. Any other host that serves files can serve the build too (DEPLOY.md).
 
 Times without an offset are read as Bay Area local time (the manifest's `default_timezone`),
 and answers carry the offset (`-07:00` or `-08:00`). The UI always shows Bay Area time,
@@ -299,10 +302,11 @@ whatever time zone your laptop is in.
 **Why this shape** (decision 22). The whole timetable fits in a download, 8.6 MB gzipped, and
 sql.js runs the server's queries on it in a few milliseconds, so the transit questions need no
 server. That left only walk and bike routing, which needed a router and perhaps its key: one
-small Worker, until M14 moved routing into the page too (decision 23). The site costs nothing to host, has no machine to keep running or patching, and
-its data is refreshed by a scheduled build rather than by a process beside a server. The
-builder stays in Python, where the GTFS tooling is strongest, and runs only at build time. All
-plan logic is pure TypeScript, so it is fast to iterate on and easy to unit-test.
+small Worker, until M14 moved routing into the page too (decision 23). The site costs nothing
+to host, has no machine to keep running or patching, and its data is refreshed by a scheduled
+build rather than by a process beside a server. The builder stays in Python, where the GTFS
+tooling is strongest, and runs only at build time. All plan logic is pure TypeScript, so it is
+fast to iterate on and easy to unit-test.
 
 ## 7. Key algorithms
 
@@ -1013,9 +1017,10 @@ record of it.
 13. **Shared as a public website, with no logins** (revised in M13). The app is a static site
     on Cloudflare's free plan, on the owner's domain, and anyone with the address can use it.
     Each person's plans stay in their own browser, and the site stores none of them. Anyone
-    can deploy their own copy, with their own 511 key and Cloudflare account; the code is
-    MIT-licensed. *Until M13:* the app ran in Docker on a Linux home server, reached through
-    a Cloudflare tunnel, and Cloudflare Access let in only the listed email addresses.
+    can deploy their own copy, with their own 511 key, on Cloudflare or any other host that
+    serves files (DEPLOY.md); the code is MIT-licensed. *Until M13:* the app ran in Docker on
+    a Linux home server, reached through a Cloudflare tunnel, and Cloudflare Access let in
+    only the listed email addresses.
 14. **Previews show where each line can take you.** While you choose a ride, each line in the
     list is drawn from its stop to the end of its trip (or, planning backwards, from the start
     of its trip to the stop). Where a line runs both ways along the same streets, its two
@@ -1058,13 +1063,13 @@ record of it.
     (decision 2).
 22. **A static site: the timetable runs in the browser** (M13). The whole timetable is built
     into one compact file (8.6 MB gzipped), which the browser downloads once, keeps, and
-    searches itself with sql.js, in a Web Worker. Walk and bike routes come from one
-    Cloudflare Worker, which keeps any router key. There is no server, database or container
-    to run: Cloudflare serves the files for free, and a GitHub Actions workflow rebuilds the
-    timetable from 511's feed and redeploys every Monday and on every push to `main`. The
-    browser's queries give the server's answers exactly (but for shapes, simplified to 5 m),
-    and the server is gone. The cost is the first visit's download, and a timetable up to a
-    week older than the feed.
+    searches itself with sql.js, in a Web Worker. Walk and bike routes came from one
+    Cloudflare Worker, which kept any router key, until M14 (decision 23). There is no
+    server, database or container to run: Cloudflare serves the files for free, and a GitHub
+    Actions workflow rebuilds the timetable from 511's feed and redeploys every Monday and on
+    every push to `main`. The browser's queries give the server's answers exactly (but for
+    shapes, simplified to 5 m), and the server is gone. The cost is the first visit's
+    download, and a timetable up to a week older than the feed.
 23. **Walk and bike routes come straight from the browser** (M14). The page asks the routing
     server itself, not through a Worker. The public FOSSGIS Valhalla server takes requests from
     any site, so the site is static files only and any host can serve it. Each user's
@@ -1076,9 +1081,9 @@ record of it.
 
 **Risks:**
 
-- **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (VTA's on
-  2026-10-25). The build and the app flag it, and the weekly deploy picks up the new schedule
-  once the agency has published it.
+- **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (Golden
+  Gate Transit's on 2026-12-12, in the feed of 2026-11-23). The build and the app flag it, and
+  the weekly deploy picks up the new schedule once the agency has published it.
 - **Open to anyone.** With no logins, anyone who finds the address can use the site, and with
   it the public Valhalla server, which counts each user's requests on their own. A few people
   are well within fair use; heavy use would need a routing service with a key, which users

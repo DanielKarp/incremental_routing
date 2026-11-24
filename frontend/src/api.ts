@@ -143,7 +143,7 @@ export interface CallQuery {
   limit?: number;
 }
 
-/** The part of a trip you could ride from (or to) a stop, from /api/lines. */
+/** The part of a trip you could ride from (or to) a stop, from api.lines(). */
 export interface LinePath {
   trip_id: string;
   stop_sequence: number;

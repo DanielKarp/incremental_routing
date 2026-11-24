@@ -29,7 +29,7 @@ export function lineCall(group: CallGroup, direction: 'departures' | 'arrivals')
   return direction === 'departures' ? group.calls[0] : group.calls[group.calls.length - 1];
 }
 
-/** Each line in the list, with its path from /api/lines once that has arrived. */
+/** Each line in the list, with its path from api.lines() once that has arrived. */
 export function linePreviews(
   groups: CallGroup[],
   direction: 'departures' | 'arrivals',

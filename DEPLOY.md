@@ -64,8 +64,8 @@ Which server it asks is set when the site is built, from these environment varia
 
 - `VITE_ROUTING_PROVIDER` is `valhalla` (the default) or `straight-line`. Valhalla's bike times
   already allow for hills, and its bike routes come with heights for the height profile.
-  `straight-line` needs no routing service: each walk and bike leg is an estimate from the
-  distance, and the app says so.
+  `straight-line` needs no routing service: each walk and bike leg is a straight line, timed
+  from its length, and the page's footer says *Routing: straight-line*.
 - `VITE_VALHALLA_ROUTE_URL` is the public FOSSGIS server by default,
   `https://valhalla1.openstreetmap.de/route`. Another Valhalla server works too, such as one
   you run yourself, if it needs no key and takes requests from pages on other sites (CORS).
