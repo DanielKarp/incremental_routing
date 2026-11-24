@@ -1,15 +1,94 @@
 # Deploying and developing
 
-How to run your own copy of Incremental Routing on Cloudflare, and how to work on it on your
-own machine. [README.md](README.md) describes what the app does and how it works.
+How to run your own copy of Incremental Routing on a web host, with this repository's own
+Cloudflare setup as the example, and how to work on it on your own machine.
+[README.md](README.md) describes what the app does and how it works.
 
-## Deploy it on Cloudflare (free)
+## Host it anywhere
 
-The app is a static site: the page and the timetable, which your browser downloads once and
-searches itself, plus a small Cloudflare Worker that fetches walk and bike routes. Cloudflare's
-free Workers plan serves it on your own domain. A GitHub Actions workflow builds the timetable
-from 511.org's feed and deploys the site whenever `main` changes, and again every Monday
-morning, so the schedules stay current.
+The app is a static site: the page, its scripts and the timetable, which the browser downloads
+once and searches itself. Any host that serves files can serve it. The one thing that isn't a
+file is walk and bike routing: `POST /api/route` passes the two ends of a leg to a routing
+service and returns the route, and `GET /api/info` names that service in the page's footer.
+
+**Build it.** With your 511.org token in `builder/.env` (see
+[Develop locally](#develop-locally)):
+
+```sh
+cd builder && uv run ir-build-data          # the timetable, into frontend/public/data
+cd ../frontend && npm ci && npm run build   # the site, into frontend/dist
+```
+
+Then upload everything in `frontend/dist`: `index.html`, `assets/`, `data/` (`manifest.json`
+and the timetable, `timetable-<hash>.sqlite.gz`) and `_headers`. The largest file is the
+timetable, at about 9 MB.
+
+**What the host has to get right:**
+
+- **Caching.** `data/manifest.json` names the current timetable, so browsers must check it on
+  every visit (`Cache-Control: no-cache`). Every other file has a hash in its name and can be
+  kept for good (`Cache-Control: public, max-age=31536000, immutable`). `_headers` sets this
+  for hosts that read it, such as Cloudflare and Netlify. Elsewhere, set the same headers in
+  the host's own settings. A host that can't set headers works too. Browsers then keep the
+  manifest for as long as the host's default (10 minutes on GitHub Pages), so a new timetable
+  can take that long to reach them. They also check the timetable for changes now and then,
+  which is a quick request, not a new download.
+- **Compression.** The timetable is already gzipped, so serve it as it is. A host that also
+  sends it with `Content-Encoding: gzip` works too: the app looks at the data it receives, not
+  the headers.
+- **The address.** The site expects to be at the root of a domain or subdomain, such as
+  `trips.example.com`. To serve it from a path, such as
+  `example.github.io/incremental_routing/`, build with
+  `npm run build -- --base /incremental_routing/`. The page, scripts and timetable then load
+  from that path. The app still asks for `/api/route` and `/api/info` at the root, so routing
+  then needs the second or third option below, or a change to
+  [frontend/src/api.ts](frontend/src/api.ts).
+- **A weekly rebuild.** Agencies change their schedules, and 511.org's feed follows, so build
+  and upload the site again every week. The Deploy workflow
+  ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)) does this for Cloudflare. For
+  another host, replace its last step, `npm run deploy`, with `npm run build` and the host's
+  own upload step.
+
+**Walk and bike routing**, three ways:
+
+1. **A function on the host, as the example below does.**
+   - `handleApi(request, env)` in [frontend/worker/api.ts](frontend/worker/api.ts) takes a
+     standard `Request` and returns a `Response`. Hosts with serverless functions that use the
+     same types, such as Vercel, Netlify and Deno Deploy, can run it with a few lines of
+     wrapper.
+   - Map `/api/*` to the function, and pass it the settings described under
+     [Walk and bike routing](#walk-and-bike-routing) as `env` (for example `process.env`).
+   - This is the only option that keeps a routing service's key secret.
+2. **Straight from the browser to the router.** The public FOSSGIS Valhalla server accepts
+   requests from pages on any site, so the page could call it directly, with nothing running
+   on the host. This needs a small code change that hasn't been made yet:
+   [api.ts](frontend/src/api.ts) would run the routing code in `frontend/worker/routing.ts`
+   itself, instead of asking `/api/route` and `/api/info`. It only suits a router without a
+   key, since anyone can read a key in the page.
+3. **No routing.** Without `/api/route`, each walk and bike leg is a straight-line estimate,
+   and the app says so when the leg is added. It also shows "Walk and bike routing is
+   unreachable" when the page opens, because the footer can't get `/api/info`.
+
+**Some hosts:**
+
+- **Cloudflare:** free. It sets the headers from `_headers` and runs the routing function as
+  a Worker. This is the example below, and what this repository uses.
+- **Netlify:** reads `_headers`, and runs the routing function as a Netlify Function.
+- **Vercel:** headers go in its own `vercel.json`, and it runs the routing function as a Vercel
+  Function.
+- **GitHub Pages:**
+  - free for public repositories only; a private one needs a paid plan;
+  - it can't set headers or run functions, so routing would have to be the second or third
+    option above;
+  - it serves from a path unless you give it your own domain.
+
+## Example: Cloudflare (free)
+
+This is how this repository is deployed. The site's files are the static assets of a
+Cloudflare Worker, and the Worker itself ([frontend/worker](frontend/worker)) answers `/api/*`:
+the first routing option above. Cloudflare's free Workers plan serves it on your own domain. A
+GitHub Actions workflow builds the timetable from 511.org's feed and deploys the site whenever
+`main` changes, and again every Monday morning, so the schedules stay current.
 
 Anyone with the address can use it: there are no logins. Each person's plans stay in their own
 browser (they can save them as JSON files to keep or share), and the site stores none of them.
