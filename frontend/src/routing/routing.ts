@@ -1,5 +1,6 @@
-// Walk and bike routing behind one interface, so providers can be swapped by config: the
-// server's routing/ package (until commit 1c15be0), ported. Each provider
+// Walk and bike routing behind one interface, so providers can be swapped by the build's
+// settings. The page asks the router itself (decision 23): this ran in the site's Worker until
+// M14, and was the server's routing/ package (until commit 1c15be0) before that. Each provider
 // asks the same of its router and gives back the same RouteResult as the server's.
 
 import { DETOUR_FACTOR, SPEEDS_MPS, decodePolyline, haversineM, pyRound } from './geo';
@@ -40,40 +41,30 @@ export interface RoutingProvider {
   route(mode: PathMode, origin: LatLon, destination: LatLon): Promise<RouteResult>;
 }
 
-const USER_AGENT = 'incremental-routing/0.1 (personal trip planner)';
 const TIMEOUT_MS = 20_000;
 
 /** A router's answer that isn't what it should be: a TypeError from reading it, say. */
 class Unexpected extends Error {}
 
-interface PostOptions {
-  /** Query parameters, added to (or replacing) any in the URL. */
-  params?: Record<string, string>;
-  headers?: Record<string, string>;
-}
-
 /** Base for providers that call a web API. Pass `fetch` to stand in for the network. */
 abstract class HttpRoutingProvider implements RoutingProvider {
   abstract readonly name: string;
 
-  constructor(private readonly get: typeof fetch = fetch) {}
+  // The page's fetch as it is when asked, so that a stand-in set later is the one used.
+  constructor(private readonly get: typeof fetch = (input, init) => fetch(input, init)) {}
 
   abstract route(mode: PathMode, origin: LatLon, destination: LatLon): Promise<RouteResult>;
 
-  protected async postJson(
-    url: string,
-    body: unknown,
-    { params = {}, headers = {} }: PostOptions = {},
-  ): Promise<unknown> {
-    // Called on its own: the runtime's fetch won't be called as a method of something else.
+  protected async postJson(url: string, body: unknown): Promise<unknown> {
+    // Called on its own: a browser's fetch won't be called as a method of something else.
     const get = this.get;
     let res: Response;
     try {
-      const withParams = new URL(url);
-      for (const [name, value] of Object.entries(params)) withParams.searchParams.set(name, value);
-      res = await get(withParams.href, {
+      res = await get(new URL(url).href, {
         method: 'POST',
-        headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', ...headers },
+        // Only Content-Type: a page can't set User-Agent, and the FOSSGIS server's CORS rules
+        // let a page send no other header but X-Client-Id.
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         // As the server's client did: a redirect is an answer, not a route.
         redirect: 'manual',
@@ -123,7 +114,8 @@ function failure(e: unknown): string {
   // Whatever the runtime's DOMException is made of.
   if (error?.name === 'TimeoutError' || error?.name === 'AbortError') return 'timed out';
   const message = String(error?.message ?? e);
-  // Node's fetch says only "fetch failed"; why is in the cause.
+  // Node's fetch says only "fetch failed"; why is in the cause. (A browser keeps why to itself:
+  // "Failed to fetch".)
   const cause = error?.cause?.message;
   return typeof cause === 'string' && cause ? `${message}: ${cause}` : message;
 }
@@ -135,12 +127,6 @@ function number(x: unknown): number {
   throw new Unexpected();
 }
 
-function lonLat(c: unknown): [number, number] {
-  const pair = c as unknown[];
-  if (!Array.isArray(pair) || pair.length < 2) throw new Unexpected();
-  return [number(pair[0]), number(pair[1])];
-}
-
 // --- Valhalla ----------------------------------------------------------------------------------
 
 const COSTING: Record<PathMode, string> = { walk: 'pedestrian', bike: 'bicycle' };
@@ -150,32 +136,27 @@ const ELEVATION_INTERVAL_M = 30;
 // Below any real Bay Area height: a no-data value from the elevation tiles.
 const NO_DATA_BELOW_M = -500;
 
-/** Valhalla /route API: the public FOSSGIS server (no key, fair use) or Stadia Maps (key). */
+/** Valhalla /route API: the public FOSSGIS server (no key, fair use), or another like it. */
 export class ValhallaProvider extends HttpRoutingProvider {
   readonly name = 'valhalla';
 
   constructor(
     private readonly routeUrl: string,
-    private readonly apiKey: string | null = null,
     get?: typeof fetch,
   ) {
     super(get);
   }
 
   async route(mode: PathMode, origin: LatLon, destination: LatLon): Promise<RouteResult> {
-    const data = (await this.postJson(
-      this.routeUrl,
-      {
-        locations: [
-          { lat: origin.lat, lon: origin.lon },
-          { lat: destination.lat, lon: destination.lon },
-        ],
-        costing: COSTING[mode],
-        units: 'kilometers',
-        ...(mode === 'bike' && { elevation_interval: ELEVATION_INTERVAL_M }),
-      },
-      { params: this.apiKey ? { api_key: this.apiKey } : {} },
-    )) as any;
+    const data = (await this.postJson(this.routeUrl, {
+      locations: [
+        { lat: origin.lat, lon: origin.lon },
+        { lat: destination.lat, lon: destination.lon },
+      ],
+      costing: COSTING[mode],
+      units: 'kilometers',
+      ...(mode === 'bike' && { elevation_interval: ELEVATION_INTERVAL_M }),
+    })) as any;
     return this.read(() => {
       const trip = data.trip;
       const legs = trip.legs;
@@ -223,61 +204,6 @@ function elevationOf(legs: any[]): number[] | null {
   return heights.map((h) => pyRound(Number(h), 1));
 }
 
-// --- OpenRouteService ----------------------------------------------------------------------------
-
-const ORS_DIRECTIONS_URL = 'https://api.openrouteservice.org/v2/directions/{profile}/geojson';
-
-// Other useful profiles: cycling-road, cycling-electric, cycling-mountain, foot-hiking.
-const PROFILES: Record<PathMode, string> = { walk: 'foot-walking', bike: 'cycling-regular' };
-
-/** OpenRouteService directions (free API key; 2,000 directions requests/day on the free plan). */
-export class OrsProvider extends HttpRoutingProvider {
-  readonly name = 'ors';
-
-  constructor(
-    private readonly apiKey: string,
-    get?: typeof fetch,
-  ) {
-    super(get);
-  }
-
-  async route(mode: PathMode, origin: LatLon, destination: LatLon): Promise<RouteResult> {
-    const data = (await this.postJson(
-      ORS_DIRECTIONS_URL.replace('{profile}', PROFILES[mode]),
-      {
-        coordinates: [
-          [origin.lon, origin.lat],
-          [destination.lon, destination.lat],
-        ],
-      },
-      { headers: { Authorization: this.apiKey } },
-    )) as any;
-    return this.read(() => {
-      const feature = data.features[0];
-      // ORS omits summary fields when origin and destination coincide.
-      const properties = feature.properties;
-      if (!isObject(properties)) throw new Unexpected();
-      const summary = 'summary' in properties ? properties.summary : {};
-      if (!isObject(summary)) throw new Unexpected();
-      const coordinates = feature.geometry.coordinates;
-      if (!Array.isArray(coordinates)) throw new Unexpected();
-      return {
-        mode,
-        provider: this.name,
-        distance_m: 'distance' in summary ? number(summary.distance) : 0,
-        duration_s: 'duration' in summary ? number(summary.duration) : 0,
-        geometry: coordinates.map(lonLat),
-        elevation_m: null,
-        elevation_interval_m: null,
-      };
-    });
-  }
-}
-
-function isObject(x: unknown): x is Record<string, unknown> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
-
 // --- Straight line -------------------------------------------------------------------------------
 
 /** Offline fallback: straight-line distance with a detour factor. Useful for tests and dev. */
@@ -304,16 +230,15 @@ export class StraightLineProvider implements RoutingProvider {
 
 // --- Choosing one --------------------------------------------------------------------------------
 
-/** The Worker's settings (wrangler.jsonc's vars, and its secrets), as the server's config.py. */
-export interface RoutingEnv {
-  /** "valhalla" (the default), "ors" or "straight-line". */
-  ROUTING_PROVIDER?: string;
-  /** Any Valhalla-compatible /route endpoint; the public FOSSGIS server by default. */
-  VALHALLA_ROUTE_URL?: string;
-  /** A secret: for a Valhalla server that wants one (Stadia Maps). */
-  VALHALLA_API_KEY?: string;
-  /** A secret: only for ROUTING_PROVIDER=ors. */
-  ORS_API_KEY?: string;
+/**
+ * The build's settings, from VITE_ROUTING_PROVIDER and VITE_VALHALLA_ROUTE_URL (DEPLOY.md). A
+ * page can keep no secret, so there are no keys.
+ */
+export interface RoutingSettings {
+  /** "valhalla" (the default) or "straight-line". */
+  provider?: string;
+  /** Any Valhalla /route endpoint that takes requests from other sites; FOSSGIS's by default. */
+  valhallaRouteUrl?: string;
 }
 
 export const DEFAULT_VALHALLA_ROUTE_URL = 'https://valhalla1.openstreetmap.de/route';
@@ -323,29 +248,18 @@ function setting(value: string | undefined): string | null {
   return value?.trim() || null;
 }
 
-/** The keys in the settings, which nothing the Worker sends back may contain. */
-export function secrets(env: RoutingEnv): string[] {
-  return [env.VALHALLA_API_KEY, env.ORS_API_KEY].flatMap((key) => setting(key) ?? []);
-}
-
-/** The settings can't make a provider (the server would not have started). */
+/** The settings can't make a provider. */
 export class ConfigError extends Error {}
 
-/** Valhalla (the public FOSSGIS server by default) unless ROUTING_PROVIDER says otherwise. */
-export function makeProvider(env: RoutingEnv, get?: typeof fetch): RoutingProvider {
-  const choice = (setting(env.ROUTING_PROVIDER) ?? 'valhalla').toLowerCase();
-  if (choice === 'ors') {
-    const key = setting(env.ORS_API_KEY);
-    if (!key) throw new ConfigError('ROUTING_PROVIDER=ors requires ORS_API_KEY');
-    return new OrsProvider(key, get);
-  }
+/** Valhalla (the public FOSSGIS server by default) unless the settings say otherwise. */
+export function makeProvider(settings: RoutingSettings, get?: typeof fetch): RoutingProvider {
+  const choice = (setting(settings.provider) ?? 'valhalla').toLowerCase();
   if (choice === 'valhalla') {
     return new ValhallaProvider(
-      setting(env.VALHALLA_ROUTE_URL) ?? DEFAULT_VALHALLA_ROUTE_URL,
-      setting(env.VALHALLA_API_KEY),
+      setting(settings.valhallaRouteUrl) ?? DEFAULT_VALHALLA_ROUTE_URL,
       get,
     );
   }
   if (choice === 'straight-line') return new StraightLineProvider();
-  throw new ConfigError(`Unknown ROUTING_PROVIDER '${choice}'`);
+  throw new ConfigError(`Unknown VITE_ROUTING_PROVIDER '${choice}'`);
 }
