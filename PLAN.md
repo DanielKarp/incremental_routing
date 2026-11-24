@@ -134,7 +134,7 @@ The real definitions are in `frontend/src/plan/types.ts`.
 
 **Where state lives.** The plan lives in the browser: React state, autosaved to localStorage
 with the direction and the undo history (decision 19), and exportable as JSON. The timetable
-(in the browser too) and the site's Worker only answer facts ("what departs from here?", "how
+(in the browser too) and the routing server only answer facts ("what departs from here?", "how
 long is this ride?") and keep nothing. This keeps the site static and makes the plan rules pure
 functions that are easy to test.
 
@@ -201,20 +201,25 @@ and speed up on descents, so they are used as they are. Bike routes are requeste
 `elevation_interval` = 30 m, and Valhalla returns the heights along the route for the height
 profile, interpolated across bridges and tunnels.
 
-All providers sit behind one `RoutingProvider` interface (`frontend/worker/routing.ts`, the
-site's Worker; until M13 the server's `routing/` package), selected by `ROUTING_PROVIDER`:
+Both providers sit behind one `RoutingProvider` interface (`frontend/src/routing/routing.ts`),
+selected by the build setting `VITE_ROUTING_PROVIDER`. The page has run it itself since M14
+(decision 23); before that it ran in the site's Worker, and until M13 in the server's `routing/`
+package.
 
-- `valhalla` (the default): the FOSSGIS server, or any Valhalla endpoint such as Stadia Maps.
-- `ors` (needs `ORS_API_KEY`): openrouteservice. Its hosted bike times ignore hills, and it
-  returns no heights, so there are no profiles.
+- `valhalla` (the default): the FOSSGIS server, or another Valhalla server that takes requests
+  from other sites without a key (`VITE_VALHALLA_ROUTE_URL`).
 - `straight-line`: an estimate for offline development and tests. It is also the fallback when
   the router fails, labelled "(estimated)".
+
+openrouteservice, and Valhalla servers that need a key (Stadia Maps), went with the Worker in
+M14: a key in the page is a key anyone can read.
 
 One user makes a request or two per leg: one per walk or bike leg (another if you switch it
 between Walk and Bike before adding it), and one per trip picked whose stop needs a walk or
 ride, reused when you choose where to get off. A few people planning at a time are well within
 fair use. Since M13 the site is open to anyone, so heavy use would call for a routing service
-with a key (DEPLOY.md) or self-hosted routing, which is on hold (§10).
+with a key, which each user would bring themselves (decision 23), or self-hosted routing, which
+is on hold (§10).
 
 Router speeds are generic. Typical defaults are about 5 km/h walking and roughly 15–20 km/h cycling.
 That's one reason duration overrides are a core feature rather than an extra.
@@ -233,33 +238,32 @@ stations, and Photon or Nominatim (fair use) could cover addresses.
 ## 6. Architecture
 
 ```
-Browser                                     Cloudflare, free plan: one Worker with assets
-┌──────────────────────────────────┐        ┌──────────────────────────────────────┐
-│ React + MapLibre                 │  POST  │ worker/ (the Worker)                 │
-│ plan/  pure plan rules (TS)      │───────▶│   /api/route ─▶ Valhalla, ORS or     │
-│ components/  map, lists, leg     │        │     a straight line                  │
-│   builder, itinerary             │        │   /api/info: which router            │
-│ localStorage + JSON export       │        │                                      │
-│                                  │        │ static assets (dist/)                │
-│ Web Worker: timetable/ (sql.js)  │  GET   │   the built app                      │
-│   stops, departures, arrivals,   │◀───────│   data/manifest.json                 │
-│   trips, lines                   │        │   data/timetable-<hash>.sqlite.gz    │
-└──────────────────────────────────┘        └──────────────────────────────────────┘
-                                                                ▲ npm run deploy
-GitHub Actions, Deploy (push to main, Mondays, by hand):        │
-  511.org feed ─▶ builder/: ir-build-data ─▶ frontend/public/data
+Browser                                      Cloudflare, free plan: static files
+┌──────────────────────────────────┐   GET   ┌──────────────────────────────────────┐
+│ React + MapLibre                 │◀────────│ the built app (dist/)                │
+│ plan/  pure plan rules (TS)      │         │ data/manifest.json                   │
+│ components/  map, lists, leg     │         │ data/timetable-<hash>.sqlite.gz      │
+│   builder, itinerary             │         └──────────────────────────────────────┘
+│ localStorage + JSON export       │                            ▲ npm run deploy
+│                                  │         GitHub Actions, Deploy (push to main,
+│ Web Worker: timetable/ (sql.js)  │         Mondays, by hand): 511.org feed ─▶
+│   stops, departures, arrivals,   │         builder/ ir-build-data ─▶ public/data
+│   trips, lines                   │
+│                                  │  POST   ┌──────────────────────────────────────┐
+│ routing/  walk and bike routes   │────────▶│ Valhalla: the FOSSGIS public server  │
+└──────────────────────────────────┘         └──────────────────────────────────────┘
 ```
 
 | Call in `api.ts` | Answered by | Gives |
 | --- | --- | --- |
-| `health()` | The timetable, and `GET /api/info` on the Worker | Whether the timetable is loaded (and if not, why), and the routing provider |
+| `health()` | The timetable, and the build's routing setting | Whether the timetable is loaded (and if not, why), and the routing provider |
 | `feeds()` | The timetable's manifest | The feeds, with each agency's schedule dates |
 | `nearbyStops(point, radiusM)` | The timetable | Boardable stops near a point, with the time to reach them on foot or by bike |
 | `departures(query)` | The timetable | Trips you can reach and board after `time` (forward), each with any transfer rule |
 | `arrivals(query)` | The timetable | Trips you can ride to arrive before `time` (backward) |
 | `trip(tripId, serviceDate)` | The timetable | A trip's stops with times and board/alight flags, and its shape |
 | `lines(direction, trips)` | The timetable | For the map: the part of each listed trip you could ride from its stop (forward) or to it (backward), simplified |
-| `route(mode, origin, destination)` | `POST /api/route` on the Worker | Walk or bike path, distance and duration, with heights along bike routes |
+| `route(mode, origin, destination)` | `routing/`, asking the routing server (Valhalla) | Walk or bike path, distance and duration, with heights along bike routes |
 
 Each call takes and gives what the server's endpoint of the same name did until M13, errors
 included, so the rest of the app didn't change.
@@ -272,19 +276,21 @@ timetable's size and SHA-256, opens it with sql.js and answers the transit calls
 browser revalidates the manifest on each visit and keeps the timetable until a new one is
 published.
 
-**The Worker** (`frontend/worker/`) runs only for `/api/*`: walk and bike routes, through the
-provider `ROUTING_PROVIDER` names, with any key as a Worker secret. Everything else is a
-static file, served without it; a path with no file is a 404.
+**Walk and bike routes** (`frontend/src/routing/`) are asked of the routing server straight
+from the page (decision 23). The build settings `VITE_ROUTING_PROVIDER` and
+`VITE_VALHALLA_ROUTE_URL` name it; by default it's the public FOSSGIS server, which takes
+requests from any site and needs no key. Everything the site serves is a static file, and a
+path with no file is a 404.
 
-**Deployment.** `frontend/wrangler.jsonc` describes the site, and `npm run deploy` builds and
-deploys it. The Deploy workflow (`.github/workflows/deploy.yml`) does that on every push to
+**Deployment.** `frontend/wrangler.jsonc` describes the site (static assets, with no Worker
+script), and `npm run deploy` builds and deploys it. The Deploy workflow (`.github/workflows/deploy.yml`) does that on every push to
 `main`, every Monday at 12:23 UTC and by hand: it runs the checks (CI), builds the timetable
 from that day's feed (with the `API_511_KEY` secret) and deploys with the
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. A run that fails deploys nothing,
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Repository variables of the same
+names can change the routing settings. A run that fails deploys nothing,
 so the site keeps its last timetable; one deploy runs at a time. CI runs the same checks on
-every push and pull request. Locally, `npm run dev` serves the app with Vite and answers
-`/api/*` with the Worker's own code (a Vite plugin), and `npm run preview` runs the production
-build under `wrangler dev`.
+every push and pull request. Locally, `npm run dev` serves the app with Vite, and
+`npm run preview` serves the production build as Cloudflare does, under `wrangler dev`.
 
 Times without an offset are read as Bay Area local time (the manifest's `default_timezone`),
 and answers carry the offset (`-07:00` or `-08:00`). The UI always shows Bay Area time,
@@ -292,8 +298,8 @@ whatever time zone your laptop is in.
 
 **Why this shape** (decision 22). The whole timetable fits in a download, 8.6 MB gzipped, and
 sql.js runs the server's queries on it in a few milliseconds, so the transit questions need no
-server. That leaves only walk and bike routing, which needs a router and perhaps its key: one
-small Worker. The site costs nothing to host, has no machine to keep running or patching, and
+server. That left only walk and bike routing, which needed a router and perhaps its key: one
+small Worker, until M14 moved routing into the page too (decision 23). The site costs nothing to host, has no machine to keep running or patching, and
 its data is refreshed by a scheduled build rather than by a process beside a server. The
 builder stays in Python, where the GTFS tooling is strongest, and runs only at build time. All
 plan logic is pure TypeScript, so it is fast to iterate on and easy to unit-test.
@@ -360,6 +366,40 @@ fix them automatically.
 | M11 ✅ | Merge legs | Where two walks, two bike rides or two waits meet, a button between them joins them into one leg. |
 | M12 ✅ | Smoother flow | A click on the map opens the walk and bike menu, and the start pin can be dragged. Undo stays in reach, names its step and survives a reload. Legs can be removed mid-trip, and places renamed where they're shown. The list can be filtered and says what it searched, a picked trip is checked against the walk to its stop, and on phones the map stays in view. |
 | M13 ✅ | A free static site | The browser downloads the whole timetable, in a compact file, and searches it itself; one Cloudflare Worker gives walk and bike routes. Anyone with the address can use it, with no logins. GitHub Actions tests every push and deploys `main`, with a fresh timetable every Monday. The server and Docker are gone, and the example trips come out as before. |
+| M14 ✅ | No Worker | The browser asks Valhalla for walk and bike routes itself, so the site is static files only and any host can serve it. Routers that need a key (openrouteservice, Stadia Maps) are gone until users can bring their own. |
+
+### M14 notes
+
+- **Why** (decision 23). The Worker only passed each leg's two ends on to the public Valhalla
+  server, which takes requests from pages on any site. Without it the site is static files
+  only, so any host can serve it, and nobody else can use its `/api/route`.
+- **What moved.** The routing code (`routing.ts` and `geo.ts`, with their tests and the frozen
+  Valhalla answers in `fixtures/route.json`) moved from `frontend/worker/` to
+  `frontend/src/routing/`, and `api.ts` runs it in the page. It reads Valhalla's answers as
+  before, so routes come out the same.
+- **Settings at build time.** `VITE_ROUTING_PROVIDER` (`valhalla` or `straight-line`) and
+  `VITE_VALHALLA_ROUTE_URL`, from the environment or `frontend/.env`. The Deploy workflow
+  takes them from repository variables of the same names, if they're set. An unknown provider
+  is reported when the page opens, and every leg is then an estimate.
+- **What the browser can't do.** It can't set `User-Agent` (and the FOSSGIS server's CORS
+  rules would refuse a request that tried), so the server knows the site by the `Origin` and
+  `Referer` the browser sends. The server also sees each user's IP address with the ends of
+  each leg, where before it saw Cloudflare's.
+- **Removed.** The Worker (`worker/index.ts`), `/api/route` and `/api/info` with their request
+  checks and errors, the Vite plugin that answered them in `npm run dev`, router keys and
+  their redaction, and openrouteservice, which can't work without a key.
+  `frontend/wrangler.jsonc` now describes static assets only, and CI checks it with
+  `wrangler deploy --dry-run`.
+- **Checked.**
+  - The six example trips, built in the app by script with the Worker and then without it,
+    came out the same: the same legs, times and places, and the same routes to the metre for
+    all 17 walk and bike legs (4 with heights).
+  - The production build under `wrangler dev` served every file with its caching headers, and
+    a 404 for a missing file and for `/api/route`. In Chromium the page listed departures and
+    asked the FOSSGIS server for the walk to the stop itself, with no estimate, alert or page
+    error.
+  - The frontend's 432 tests (the 49 others were the Worker's request checks and
+    openrouteservice's), type check and build passed.
 
 ### M13 notes
 
@@ -1025,15 +1065,24 @@ record of it.
     browser's queries give the server's answers exactly (but for shapes, simplified to 5 m),
     and the server is gone. The cost is the first visit's download, and a timetable up to a
     week older than the feed.
+23. **Walk and bike routes come straight from the browser** (M14). The page asks the routing
+    server itself, not through a Worker. The public FOSSGIS Valhalla server takes requests from
+    any site, so the site is static files only and any host can serve it. Each user's
+    requests count against the server's fair-use limits on their own, not all together from
+    Cloudflare's addresses, and there's no `/api/route` for others to use. The costs: no key
+    can be kept secret, so only routers without one work (if one with a key is ever needed,
+    each user would bring their own); the routing server sees each user's IP address with the
+    ends of each leg; and changing the router means a rebuild.
 
 **Risks:**
 
 - **Schedules run out.** Each agency's schedule in the 511 feed ends on its own date (VTA's on
   2026-10-25). The build and the app flag it, and the weekly deploy picks up the new schedule
   once the agency has published it.
-- **Open to anyone.** With no logins, anyone who finds the address can use the site, and so
-  the public Valhalla server through its Worker. A few people are well within fair use; heavy
-  use would need a routing service with a key, or limits on the Worker.
+- **Open to anyone.** With no logins, anyone who finds the address can use the site, and with
+  it the public Valhalla server, which counts each user's requests on their own. A few people
+  are well within fair use; heavy use would need a routing service with a key, which users
+  would bring themselves (decision 23).
 - **The weekly refresh can stop.** A failed build deploys nothing, so the site keeps a
   timetable that grows older until a run succeeds; GitHub emails the owner about each
   failure. In a public repository GitHub also turns schedules off after 60 days without

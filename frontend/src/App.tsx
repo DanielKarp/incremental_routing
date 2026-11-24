@@ -211,7 +211,7 @@ export function App() {
       .health()
       .then(setHealth)
       .catch((e: Error) =>
-        setAlert({ text: `Walk and bike routing is unreachable: ${e.message}`, tone: 'error' }),
+        setAlert({ text: `Walk and bike routing isn't set up: ${e.message}`, tone: 'error' }),
       );
   }, []);
   // Each feed's dates come with the timetable, once it's in (perhaps only after Try again).

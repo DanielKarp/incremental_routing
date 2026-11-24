@@ -1,38 +1,22 @@
-// The site on Cloudflare: the built app (dist/, with the timetable in dist/data/) as static
-// assets, and one Worker (worker/index.ts) for walk and bike routes under /api/*.
+// The site on Cloudflare: the built app (dist/, with the timetable in dist/data/) as a Worker's
+// static assets, with no Worker code. Every request is for a file; walk and bike routes come
+// from the routing server the browser asks itself (DEPLOY.md).
 //
-//   npm run preview   builds, then runs it all locally with `wrangler dev` (http://localhost:8787)
+//   npm run preview   builds, then serves it locally with `wrangler dev` (http://localhost:8787)
 //   npm run deploy    builds, then `wrangler deploy` (`npx wrangler login` first, once)
 //
-// Build the timetable before either: `cd ../builder && uv run ir-build-data`.
+// Build the timetable before either: `cd ../builder && uv run ir-build-data`. public/_headers
+// sets how long browsers keep each file.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "incremental-routing",
-  "main": "worker/index.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
     "directory": "./dist",
-    "binding": "ASSETS",
     // A path without a file is a 404, as it was with the server: a file missing from data/
     // above all, so the app can say there's no timetable rather than read the page as one.
     // The app is at /, and reads its state from the browser, not the URL.
-    "not_found_handling": "none",
-    // /api/* runs the Worker; files are served without it (public/_headers sets the caching).
-    "run_worker_first": ["/api/*"]
-  },
-  // Walk and bike routing, as the server's settings were (see worker/routing.ts): "valhalla",
-  // "ors" or "straight-line" (offline estimates). Valhalla's bike times allow for hills, and its
-  // bike routes come with heights for the profile. Any Valhalla-compatible /route endpoint will
-  // do; the default is the public FOSSGIS server (fair use, no key). Stadia Maps works too:
-  // https://api.stadiamaps.com/route/v1, with its key as the secret VALHALLA_API_KEY.
-  //
-  // Keys are secrets, never vars: `npx wrangler secret put VALHALLA_API_KEY` (or ORS_API_KEY,
-  // for ROUTING_PROVIDER "ors"; free from https://openrouteservice.org/dev/#/signup). For
-  // `npm run dev` and `npm run preview`, put them in .dev.vars here instead (never committed):
-  // VALHALLA_API_KEY=...
-  "vars": {
-    "ROUTING_PROVIDER": "valhalla",
-    "VALHALLA_ROUTE_URL": "https://valhalla1.openstreetmap.de/route"
+    "not_found_handling": "none"
   }
   // To serve the site on your own domain (one on Cloudflare): in the dashboard, Workers & Pages
   // > incremental-routing > Settings > Domains & Routes > Add > Custom domain. Or here, and

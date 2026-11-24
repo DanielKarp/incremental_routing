@@ -1,5 +1,5 @@
 # Deploys the site to Cloudflare: the checks, then a fresh timetable from 511.org's feed, then
-# `npm run deploy` (the app and its Worker, with the timetable, as one Worker with static assets).
+# `npm run deploy` (the built app, with the timetable, as a Cloudflare Worker's static assets).
 # On every push to main, every Monday morning (so the timetable follows the agencies' schedule
 # changes), and by hand from the Actions tab (Deploy > Run workflow).
 #
@@ -7,6 +7,8 @@
 #   API_511_KEY             511.org's free token, to download the feed
 #   CLOUDFLARE_API_TOKEN    an API token from the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account to deploy to
+# and, if set, the repository variables VITE_ROUTING_PROVIDER and VITE_VALHALLA_ROUTE_URL (walk
+# and bike routing; the defaults need neither).
 name: Deploy
 
 on:
@@ -70,4 +72,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Built into the page; empty (the default router) unless set as repository variables.
+          VITE_ROUTING_PROVIDER: ${{ vars.VITE_ROUTING_PROVIDER }}
+          VITE_VALHALLA_ROUTE_URL: ${{ vars.VITE_VALHALLA_ROUTE_URL }}
         run: npm run deploy

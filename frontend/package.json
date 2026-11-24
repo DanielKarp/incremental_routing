@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && tsc -p worker && vite build",
-    "typecheck": "tsc && tsc -p worker",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
     "test": "vitest run",
     "preview": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy"
@@ -19,7 +19,6 @@
     "sql.js": "^1.17.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261123.1",
     "@types/geojson": "^7946.0.16",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

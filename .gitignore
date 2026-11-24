@@ -10,9 +10,8 @@ builder/data/
 # The static site's timetable (uv run ir-build-data): built, never committed
 frontend/public/data/
 
-# Local secrets (.dev.vars: the Worker's keys for npm run dev and wrangler dev)
+# Local secrets and settings (builder/.env, frontend/.env)
 .env
-.dev.vars*
 
 # Node
 node_modules/

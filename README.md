@@ -180,9 +180,10 @@ north to Milpitas and back south to the airport](docs/screenshots/trip-5-the-lon
 - **Your browser searches it.** The first visit downloads the timetable, and the browser keeps
   it. Departures, arrivals, trips and where each line goes are then looked up on your own
   device, in the background, so the page stays responsive. Transit searches never leave it.
-- **Walk and bike routes** come from Valhalla, an open-source router working on OpenStreetMap,
-  through a small Cloudflare Worker that passes on the two ends of each leg. Bike times allow
-  for hills, and the heights give the hill profile.
+- **Walk and bike routes** come from Valhalla, an open-source router working on OpenStreetMap.
+  Your browser asks the public FOSSGIS server for each walk or bike leg, sending only its two
+  ends. Bike times allow for hills, and the heights give the hill profile. The site itself is
+  nothing but files, with no server of its own.
 - **Your plans stay in your browser.** Each one is saved there as you go, with its undo steps;
   the site stores nothing. Save a plan as a JSON file to keep it or send it to someone.
 - **Schedules end at different times** for different agencies. The app names any agency whose
@@ -199,5 +200,4 @@ below, under their own terms.
 
 - Transit schedules: the 511 SF Bay regional GTFS feed (511.org open data).
 - Map: © OpenStreetMap contributors, tiles by OpenFreeMap. Rendered with MapLibre GL JS.
-- Walk and bike routing and heights: Valhalla (FOSSGIS public server), or openrouteservice
-  (HeiGIT) if you choose it.
+- Walk and bike routing and heights: Valhalla, on the FOSSGIS public server.

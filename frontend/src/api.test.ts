@@ -108,17 +108,9 @@ class StandInWorker extends EventTarget {
   }
 }
 
-// For the test timetable's file, which is a data: URL.
-const realFetch = globalThis.fetch;
-
-/** A fresh api.ts, with nothing loaded yet; and what /api/info says. */
-async function freshApi(
-  info: () => Response = () => Response.json({ routing_provider: 'valhalla' }),
-) {
+/** A fresh api.ts, with nothing loaded yet, and the build's settings as they are now. */
+async function freshApi() {
   vi.resetModules();
-  const answer = async (url: string, init?: RequestInit) =>
-    url === '/api/info' ? info() : realFetch(url, init);
-  vi.stubGlobal('fetch', vi.fn(answer));
   return import('./api');
 }
 
@@ -253,10 +245,12 @@ describe('health', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
-  it('says the timetable is in, and which router the Worker uses', async () => {
-    const { api } = await freshApi(() => Response.json({ routing_provider: 'straight-line' }));
+  it('says the timetable is in, and which router the build names', async () => {
+    vi.stubEnv('VITE_ROUTING_PROVIDER', 'straight-line');
+    const { api } = await freshApi();
     expect(await api.health()).toEqual({
       status: 'ok',
       gtfs_loaded: true,
@@ -265,38 +259,79 @@ describe('health', () => {
     });
   });
 
-  it("fails as it did when the Worker can't say", async () => {
-    const detail = 'ROUTING_PROVIDER=ors requires ORS_API_KEY';
-    const { api, ApiError } = await freshApi(() => Response.json({ detail }, { status: 500 }));
+  it('fails when the build names a router there is none of', async () => {
+    vi.stubEnv('VITE_ROUTING_PROVIDER', 'ors');
+    const { api } = await freshApi();
+    const { ConfigError } = await import('./routing/routing');
     const health = api.health();
-    await expect(health).rejects.toBeInstanceOf(ApiError);
-    await expect(health).rejects.toMatchObject({ status: 500, message: detail });
+    await expect(health).rejects.toBeInstanceOf(ConfigError);
+    await expect(health).rejects.toThrow("Unknown VITE_ROUTING_PROVIDER 'ors'");
   });
 });
 
 describe('route', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
-  it("asks the site's Worker, and says why it refused as the server said it", async () => {
-    const { api } = await import('./api');
-    const get = vi.fn(async () =>
-      Response.json(
-        { detail: [{ type: 'missing', loc: ['body', 'origin', 'lat'], msg: 'Field required' }] },
-        { status: 422 },
-      ),
+  const ORIGIN = { lat: 37.4, lon: -122.1 };
+  const DEST = { lat: 37.41, lon: -122.1 };
+  // Google's example polyline, read at Valhalla's precision.
+  const TRIP = { trip: { summary: { length: 1.2, time: 900 }, legs: [{ shape: '_p~iF~ps|U' }] } };
+
+  it('asks the public Valhalla server straight from the page', async () => {
+    const { api } = await freshApi();
+    const get = vi.fn(async (_url: string, _init?: RequestInit) => Response.json(TRIP));
+    vi.stubGlobal('fetch', get);
+    expect(await api.route('walk', ORIGIN, DEST)).toEqual({
+      mode: 'walk',
+      provider: 'valhalla',
+      distance_m: 1200,
+      duration_s: 900,
+      geometry: [[-12.02, 3.85]],
+      elevation_m: null,
+      elevation_interval_m: null,
+    });
+    const [url, init] = get.mock.calls[0];
+    expect(url).toBe('https://valhalla1.openstreetmap.de/route');
+    expect(init).toMatchObject({ method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      locations: [ORIGIN, DEST],
+      costing: 'pedestrian',
+    });
+  });
+
+  it('asks the server the build names, and says why it failed', async () => {
+    vi.stubEnv('VITE_VALHALLA_ROUTE_URL', 'https://valhalla.example.org/route');
+    const { api } = await freshApi();
+    const get = vi.fn(
+      async (_url: string) => new Response('No path could be found', { status: 400 }),
     );
     vi.stubGlobal('fetch', get);
-    const origin = { lat: 37.4, lon: -122.1 };
-    await expect(api.route('walk', origin, origin)).rejects.toMatchObject({
-      status: 422,
-      message: 'Invalid origin.lat: field required.',
-    });
-    expect(get).toHaveBeenCalledWith('/api/route', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'walk', origin, destination: origin }),
-    });
+    await expect(api.route('bike', ORIGIN, DEST)).rejects.toThrow(
+      'valhalla: HTTP 400: No path could be found',
+    );
+    expect(get.mock.calls[0][0]).toBe('https://valhalla.example.org/route');
+  });
+
+  it('gives straight-line estimates when the build says so, asking nothing', async () => {
+    vi.stubEnv('VITE_ROUTING_PROVIDER', 'straight-line');
+    const { api } = await freshApi();
+    const get = vi.fn();
+    vi.stubGlobal('fetch', get);
+    expect((await api.route('walk', ORIGIN, DEST)).provider).toBe('straight-line');
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("fails each time when the build names a router there's none of", async () => {
+    vi.stubEnv('VITE_ROUTING_PROVIDER', 'osrm');
+    const { api } = await freshApi();
+    await expect(api.route('walk', ORIGIN, DEST)).rejects.toThrow(
+      "Unknown VITE_ROUTING_PROVIDER 'osrm'",
+    );
+    await expect(api.route('walk', ORIGIN, DEST)).rejects.toThrow(
+      "Unknown VITE_ROUTING_PROVIDER 'osrm'",
+    );
   });
 });

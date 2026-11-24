@@ -1,8 +1,9 @@
 // The app's data, in the shapes the FastAPI server's endpoints gave it until commit 1c15be0
 // (its models.py): the transit queries are answered here in the browser, from the timetable
 // (./timetable), downloaded once and kept in a Web Worker; walk and bike routes come from the
-// site's Cloudflare Worker (worker/api.ts), which holds any router key.
+// router the build names (./routing), which the page asks itself.
 
+import { type RoutingProvider, makeProvider } from './routing/routing';
 import type { LoadProgress } from './timetable/load';
 import { TimetableError } from './timetable/params';
 import {
@@ -161,7 +162,7 @@ export class ApiError extends Error {
 
 /**
  * An error's `detail` as text: a message, or for a request that can't be accepted (422) a list
- * of the fields at fault, as FastAPI sent them and the timetable and the Worker still do:
+ * of the fields at fault, as FastAPI sent them and the timetable still does:
  * "Invalid time: input should be a valid datetime or date."
  */
 export function errorDetail(detail: unknown): string {
@@ -177,21 +178,6 @@ export function errorDetail(detail: unknown): string {
       })
     : [];
   return fields.length ? fields.join(' ') : JSON.stringify(detail);
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      if (body?.detail !== undefined) detail = errorDetail(body.detail);
-    } catch {
-      // Not JSON; keep the status text.
-    }
-    throw new ApiError(res.status, detail);
-  }
-  return res.json() as Promise<T>;
 }
 
 /** How getting the timetable is going, for the panel to say. */
@@ -272,22 +258,29 @@ export const timetableState = {
   },
 };
 
-/** What /api/info says: which walk and bike router the Worker uses. */
-interface Info {
-  routing_provider: string;
+let router: RoutingProvider | null = null;
+
+/**
+ * The walk and bike router the build's settings name (DEPLOY.md), made the first time it's
+ * needed. Settings that name none throw a ConfigError, each time.
+ */
+function routing(): RoutingProvider {
+  router ??= makeProvider({
+    provider: import.meta.env.VITE_ROUTING_PROVIDER,
+    valhallaRouteUrl: import.meta.env.VITE_VALHALLA_ROUTE_URL,
+  });
+  return router;
 }
 
 export const api = {
   health: async (): Promise<Health> => {
-    const [transit, info] = await Promise.all([
-      query('health').catch((e: Error) => ({
-        status: 'ok',
-        gtfs_loaded: false,
-        gtfs_problem: e.message,
-      })),
-      request<Info>('/api/info'),
-    ]);
-    return { ...transit, routing_provider: info.routing_provider };
+    const routing_provider = routing().name;
+    const transit = await query('health').catch((e: Error) => ({
+      status: 'ok',
+      gtfs_loaded: false,
+      gtfs_problem: e.message,
+    }));
+    return { ...transit, routing_provider };
   },
   feeds: () => query('feeds'),
   nearbyStops: (point: LatLon, radiusM: number) => query('nearbyStops', point, radiusM),
@@ -298,10 +291,7 @@ export const api = {
     direction: 'forward' | 'backward',
     trips: { trip_id: string; stop_sequence: number }[],
   ) => query('lines', direction, trips),
-  route: (mode: PathMode, origin: LatLon, destination: LatLon) =>
-    request<RouteResult>('/api/route', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, origin, destination }),
-    }),
+  /** A route from the router, or a RoutingError (or ConfigError) saying why there's none. */
+  route: async (mode: PathMode, origin: LatLon, destination: LatLon): Promise<RouteResult> =>
+    routing().route(mode, origin, destination),
 };

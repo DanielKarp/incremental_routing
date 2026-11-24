@@ -7,9 +7,8 @@ Cloudflare setup as the example, and how to work on it on your own machine.
 ## Host it anywhere
 
 The app is a static site: the page, its scripts and the timetable, which the browser downloads
-once and searches itself. Any host that serves files can serve it. The one thing that isn't a
-file is walk and bike routing: `POST /api/route` passes the two ends of a leg to a routing
-service and returns the route, and `GET /api/info` names that service in the page's footer.
+once and searches itself. Walk and bike routes come from a routing server that the browser asks
+directly, so nothing runs on the host. Any host that serves files can serve it.
 
 **Build it.** With your 511.org token in `builder/.env` (see
 [Develop locally](#develop-locally)):
@@ -36,65 +35,61 @@ timetable, at about 9 MB.
 - **Compression.** The timetable is already gzipped, so serve it as it is. A host that also
   sends it with `Content-Encoding: gzip` works too: the app looks at the data it receives, not
   the headers.
-- **The address.** The site expects to be at the root of a domain or subdomain, such as
-  `trips.example.com`. To serve it from a path, such as
-  `example.github.io/incremental_routing/`, build with
-  `npm run build -- --base /incremental_routing/`. The page, scripts and timetable then load
-  from that path. The app still asks for `/api/route` and `/api/info` at the root, so routing
-  then needs the second or third option below, or a change to
-  [frontend/src/api.ts](frontend/src/api.ts).
+- **The address.** The site can be at the root of a domain or subdomain, such as
+  `trips.example.com`, or under a path, such as `example.github.io/incremental_routing/`. For
+  a path, build it for that path: `npm run build -- --base /incremental_routing/`.
 - **A weekly rebuild.** Agencies change their schedules, and 511.org's feed follows, so build
   and upload the site again every week. The Deploy workflow
   ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)) does this for Cloudflare. For
   another host, replace its last step, `npm run deploy`, with `npm run build` and the host's
   own upload step.
 
-**Walk and bike routing**, three ways:
-
-1. **A function on the host, as the example below does.**
-   - `handleApi(request, env)` in [frontend/worker/api.ts](frontend/worker/api.ts) takes a
-     standard `Request` and returns a `Response`. Hosts with serverless functions that use the
-     same types, such as Vercel, Netlify and Deno Deploy, can run it with a few lines of
-     wrapper.
-   - Map `/api/*` to the function, and pass it the settings described under
-     [Walk and bike routing](#walk-and-bike-routing) as `env` (for example `process.env`).
-   - This is the only option that keeps a routing service's key secret.
-2. **Straight from the browser to the router.** The public FOSSGIS Valhalla server accepts
-   requests from pages on any site, so the page could call it directly, with nothing running
-   on the host. This needs a small code change that hasn't been made yet:
-   [api.ts](frontend/src/api.ts) would run the routing code in `frontend/worker/routing.ts`
-   itself, instead of asking `/api/route` and `/api/info`. It only suits a router without a
-   key, since anyone can read a key in the page.
-3. **No routing.** Without `/api/route`, each walk and bike leg is a straight-line estimate,
-   and the app says so when the leg is added. It also shows "Walk and bike routing is
-   unreachable" when the page opens, because the footer can't get `/api/info`.
-
 **Some hosts:**
 
-- **Cloudflare:** free. It sets the headers from `_headers` and runs the routing function as
-  a Worker. This is the example below, and what this repository uses.
-- **Netlify:** reads `_headers`, and runs the routing function as a Netlify Function.
-- **Vercel:** headers go in its own `vercel.json`, and it runs the routing function as a Vercel
-  Function.
+- **Cloudflare:** free, and it reads `_headers`. This is the example below, and what this
+  repository uses.
+- **Netlify:** reads `_headers`.
+- **Vercel:** the headers go in its own `vercel.json`.
 - **GitHub Pages:**
   - free for public repositories only; a private one needs a paid plan;
-  - it can't set headers or run functions, so routing would have to be the second or third
-    option above;
-  - it serves from a path unless you give it your own domain.
+  - it can't set headers;
+  - it serves the site from a path (`<user>.github.io/<repository>/`) unless you give it your
+    own domain.
+
+### Walk and bike routing
+
+The browser asks the routing server for each walk or bike leg, sending only its two ends.
+Which server it asks is set when the site is built, from these environment variables (or a
+`frontend/.env` file, never committed):
+
+- `VITE_ROUTING_PROVIDER` is `valhalla` (the default) or `straight-line`. Valhalla's bike times
+  already allow for hills, and its bike routes come with heights for the height profile.
+  `straight-line` needs no routing service: each walk and bike leg is an estimate from the
+  distance, and the app says so.
+- `VITE_VALHALLA_ROUTE_URL` is the public FOSSGIS server by default,
+  `https://valhalla1.openstreetmap.de/route`. Another Valhalla server works too, such as one
+  you run yourself, if it needs no key and takes requests from pages on other sites (CORS).
+
+For example, `VITE_ROUTING_PROVIDER=straight-line npm run build`.
+
+The FOSSGIS server is free under a fair-use policy: fine for a few friends planning trips, not
+for heavy use. Since each person's browser asks it, it sees their IP address and the ends of
+each walk or bike leg, and it counts each person's requests separately. A routing service that
+needs a key can't be used yet: anyone can read what's built into the page, so it would have to
+be each person's own key, and the app has no way to take one.
 
 ## Example: Cloudflare (free)
 
 This is how this repository is deployed. The site's files are the static assets of a
-Cloudflare Worker, and the Worker itself ([frontend/worker](frontend/worker)) answers `/api/*`:
-the first routing option above. Cloudflare's free Workers plan serves it on your own domain. A
-GitHub Actions workflow builds the timetable from 511.org's feed and deploys the site whenever
-`main` changes, and again every Monday morning, so the schedules stay current.
+Cloudflare Worker with no code of its own ([frontend/wrangler.jsonc](frontend/wrangler.jsonc)),
+which Cloudflare's free plan serves on your own domain. A GitHub Actions workflow builds the
+timetable from 511.org's feed and deploys the site whenever `main` changes, and again every
+Monday morning, so the schedules stay current.
 
 Anyone with the address can use it: there are no logins. Each person's plans stay in their own
 browser (they can save them as JSON files to keep or share), and the site stores none of them.
-Walk and bike routes come from the public FOSSGIS Valhalla server, which is free under a
-fair-use policy: fine for a few friends planning trips, not for heavy use. If you share the
-address widely, use a routing service with a key (below).
+Walk and bike routes come from the public FOSSGIS Valhalla server, free under a fair-use policy
+([Walk and bike routing](#walk-and-bike-routing), above).
 
 You need:
 
@@ -120,8 +115,8 @@ One-time setup:
    - `API_511_KEY`: your 511.org token.
 4. **The first deploy.** In the repository's *Actions* tab, choose *Deploy*, then *Run
    workflow* on `main`. It runs the tests, downloads the feed and builds the timetable (a
-   couple of minutes), and deploys the Worker `incremental-routing`. The site is then up at
-   the `workers.dev` address at the end of the deploy step's log.
+   couple of minutes), and deploys the site as the Worker `incremental-routing`. The site is
+   then up at the `workers.dev` address at the end of the deploy step's log.
 5. **Your domain.** In the dashboard, go to *Workers & Pages →* `incremental-routing` *→
    Settings → Domains & Routes → Add → Custom domain*, and enter a name on your domain, such
    as `trips.example.com`. Cloudflare adds the DNS record and the certificate, and the site is
@@ -134,33 +129,10 @@ After that:
   timetable it has, and GitHub emails you. *Run workflow* tries again.
 - In a public repository, GitHub turns off scheduled workflows after 60 days without
   activity. If the Monday runs stop, turn *Deploy* back on in the *Actions* tab.
-- The page and the timetable are static files, which Cloudflare serves free without limit.
-  The Worker runs only for walk and bike routes, well within the free plan's 100,000
-  requests a day.
-
-### Walk and bike routing
-
-The Worker's settings are vars in
-[frontend/wrangler.jsonc](frontend/wrangler.jsonc); change them there rather than in the
-dashboard, since each deploy sets them from the file.
-
-- `ROUTING_PROVIDER` is `valhalla` (the default), `ors` or `straight-line`. Valhalla's bike
-  times already allow for hills. `straight-line` works without any routing service. `ors`
-  (openrouteservice) needs `ORS_API_KEY`; its bike times ignore hills, and it gives no height
-  profiles.
-- `VALHALLA_ROUTE_URL` is the public FOSSGIS server by default. Any Valhalla-compatible
-  `/route` endpoint works, such as Stadia Maps (`https://api.stadiamaps.com/route/v1`) with
-  its key as `VALHALLA_API_KEY`.
-
-Keys are secrets, set once and kept across deploys. From `frontend/`, after
-`npx wrangler login`:
-
-```sh
-npx wrangler secret put VALHALLA_API_KEY    # or ORS_API_KEY
-```
-
-They can also be added in the dashboard: the Worker's *Settings → Variables and Secrets*, as
-type *Secret*.
+- To change the routing settings, add them as repository variables, named as above
+  (`VITE_ROUTING_PROVIDER`, `VITE_VALHALLA_ROUTE_URL`): *Settings → Secrets and variables →
+  Actions → Variables*. The next deploy builds with them.
+- Every request is for a static file, which Cloudflare serves free without limit.
 
 ## Develop locally
 
@@ -178,10 +150,10 @@ npm install
 npm run dev                 # http://localhost:5173
 ```
 
-- `npm run dev` answers `/api/*` with the Worker's own code. Its settings come from
-  `wrangler.jsonc`, then `frontend/.dev.vars` (for keys, never committed), then the
-  environment: `ROUTING_PROVIDER=straight-line npm run dev` needs no routing service.
-- `npm run preview` builds the site and runs it as Cloudflare does, with `wrangler dev`, at
+- `npm run dev` asks the same routing server as the site.
+  `VITE_ROUTING_PROVIDER=straight-line npm run dev` needs none (see
+  [Walk and bike routing](#walk-and-bike-routing)).
+- `npm run preview` builds the site and serves it as Cloudflare does, with `wrangler dev`, at
   <http://localhost:8787>.
 - `npm run deploy` deploys from your machine (`npx wrangler login` first), as the workflow
   does.

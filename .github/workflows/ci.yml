@@ -50,10 +50,10 @@ jobs:
         run: npm ci
       - name: Test
         run: npx vitest run
-      - name: Type-check the app and the Worker
-        run: npx tsc && npx tsc -p worker
+      - name: Type-check
+        run: npx tsc
       - name: Build
         run: npx vite build
-      # wrangler.jsonc and the Worker, bundled as a deploy would, without deploying.
-      - name: Bundle the Worker
-        run: npx wrangler deploy --dry-run --outdir ${{ runner.temp }}/worker
+      # wrangler.jsonc and the built site, checked as a deploy would, without deploying.
+      - name: Check the Cloudflare settings
+        run: npx wrangler deploy --dry-run
