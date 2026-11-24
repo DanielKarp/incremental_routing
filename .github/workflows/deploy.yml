@@ -3,7 +3,7 @@
 # On every push to main, every Monday morning (so the timetable follows the agencies' schedule
 # changes), and by hand from the Actions tab (Deploy > Run workflow).
 #
-# Repository secrets (Settings > Secrets and variables > Actions), as README.md describes:
+# Repository secrets (Settings > Secrets and variables > Actions), as DEPLOY.md describes:
 #   API_511_KEY             511.org's free token, to download the feed
 #   CLOUDFLARE_API_TOKEN    an API token from the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID   the Cloudflare account to deploy to

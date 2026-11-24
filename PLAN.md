@@ -214,7 +214,7 @@ One user makes a request or two per leg: one per walk or bike leg (another if yo
 between Walk and Bike before adding it), and one per trip picked whose stop needs a walk or
 ride, reused when you choose where to get off. A few people planning at a time are well within
 fair use. Since M13 the site is open to anyone, so heavy use would call for a routing service
-with a key (README) or self-hosted routing, which is on hold (§10).
+with a key (DEPLOY.md) or self-hosted routing, which is on hold (§10).
 
 Router speeds are generic. Typical defaults are about 5 km/h walking and roughly 15–20 km/h cycling.
 That's one reason duration overrides are a core feature rather than an extra.
